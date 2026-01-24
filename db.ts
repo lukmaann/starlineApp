@@ -67,6 +67,11 @@ export class Database {
     return await this.query<T>(`SELECT * FROM ${table}`);
   }
 
+  static async getCount(table: string): Promise<number> {
+    const result = await this.query<{ count: number }>(`SELECT COUNT(*) as count FROM ${table}`);
+    return result[0]?.count || 0;
+  }
+
   static async addBattery(battery: Battery): Promise<void> {
     await this.run(
       `INSERT INTO batteries (

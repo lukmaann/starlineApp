@@ -37,8 +37,7 @@
     "appId": "com.starline.registry",
     "productName": "Starline Registry",
     "win": {
-      "target": "portable",
-      "icon": "assets/icon.ico"
+      "target": "portable"
     },
     "files": [
       "dist/**/*",
