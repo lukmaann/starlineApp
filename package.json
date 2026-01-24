@@ -1,0 +1,50 @@
+{
+  "name": "starline-enterprise-registry",
+  "version": "1.0.0",
+  "description": "Professional hardware-driven warranty management system for Starline Batteries.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:3100 && electron .\"",
+    "build": "tsc && vite build && electron-builder",
+    "preview": "vite preview",
+    "start": "electron ."
+  },
+  "keywords": [],
+  "author": "Starline Power Architectures",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "lucide-react": "^0.344.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "recharts": "^2.12.2",
+    "sql.js": "^1.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.9",
+    "@types/react": "^18.2.64",
+    "@types/react-dom": "^18.2.21",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.4.2",
+    "vite": "^5.1.5",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.starline.registry",
+    "productName": "Starline Registry",
+    "win": {
+      "target": "portable",
+      "icon": "assets/icon.ico"
+    },
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.js",
+      "package.json"
+    ]
+  }
+}

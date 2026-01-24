@@ -1,0 +1,633 @@
+
+import React, { useState, useMemo, useEffect } from 'react';
+import { Database } from '../db';
+import { Dealer, Battery, Replacement, BatteryStatus, BatteryModel } from '../types';
+import {
+  Plus, X, Search, MapPin, Phone, Store,
+  User, ShieldCheck, ChevronRight, RefreshCw,
+  ArrowLeft, ChevronLeft, ShoppingBag,
+  Landmark, Filter, Users, Box, Info,
+  Trash2, ShieldAlert, ClipboardCheck,
+  UserCheck, ExternalLink, Globe, ListFilter,
+  CheckCircle2, FileSignature, MapPinned,
+  Building2, Loader2, ArrowRight, Settings, ShieldQuestion,
+  Trophy, Activity, PieChart as IconPieChart, TrendingUp, Zap, QrCode,
+  Fingerprint, CreditCard, FileCheck, Map, ChevronDown,
+  Building, Hash, Navigation, LocateFixed, Package,
+  TrendingDown, AlertTriangle, FileText, Download, Printer,
+  LayoutGrid, Mail, Building as BuildingIcon
+} from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, AreaChart, Area
+} from 'recharts';
+
+interface DealersProps {
+  onNavigateToHub?: (serial: string) => void;
+}
+
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: string }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: '' };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error: error.toString() };
+  }
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("Dealer Error:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-10 text-rose-600">
+          <h2 className="text-xl font-bold">Something went wrong</h2>
+          <pre className="mt-4 bg-slate-100 p-4 rounded text-xs font-mono">{this.state.error}</pre>
+          <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-slate-900 text-white rounded">Reload</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
+  const [dealers, setDealers] = useState<Dealer[]>([]);
+  const [totalDealers, setTotalDealers] = useState(0);
+  const [page, setPage] = useState(1);
+  const [models, setModels] = useState<BatteryModel[]>([]);
+
+  // VIEW MODES: 'LIST' | 'DETAIL' | 'WIZARD'
+  const [viewMode, setViewMode] = useState<'LIST' | 'DETAIL' | 'WIZARD'>('LIST');
+  const [wizardStep, setWizardStep] = useState(0);
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [generatedId, setGeneratedId] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
+  const [allDealerUnits, setAllDealerUnits] = useState<Battery[]>([]);
+  const [dealerReplacements, setDealerReplacements] = useState<Replacement[]>([]);
+  const [dealerStock, setDealerStock] = useState<Battery[]>([]);
+
+  // TABS
+  const [activeLogTab, setActiveLogTab] = useState<'WAREHOUSE' | 'ACTIVE' | 'EXPIRED' | 'EXCHANGES'>('WAREHOUSE');
+  const [logSearchQuery, setLogSearchQuery] = useState('');
+
+  const [unitPage, setUnitPage] = useState(0);
+  const unitsLimit = 10;
+
+  const [formData, setFormData] = useState({
+    name: '',
+    owner: '',
+    address: '',
+    contact: '',
+    city: '',
+    state: '',
+    pincode: ''
+  });
+
+  const loadData = async () => {
+    // Enterprise Scalability: Fetch paginated dealers
+    const [dResult, m] = await Promise.all([
+      Database.getPaginated<Dealer>('dealers', page, 50),
+      Database.getAll<BatteryModel>('models')
+    ]);
+
+    setDealers(prev => page === 1 ? dResult.data : [...prev, ...dResult.data]);
+    setTotalDealers(dResult.total);
+    setModels(m); // Models are small enough to load all
+  };
+
+  useEffect(() => { loadData(); }, [page]); // Reload when page changes
+
+  // --- FILTER & CALCULATIONS ---
+  const filteredDealers = useMemo(() => {
+    return dealers.filter(d => {
+      const matchesSearch =
+        d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        d.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        d.location.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesSearch;
+    });
+  }, [dealers, searchTerm]);
+
+  const isBatteryExpired = (b: Battery) => b.warrantyExpiry ? new Date() > new Date(b.warrantyExpiry) : false;
+
+  const activeUnits = useMemo(() => allDealerUnits.filter(u => !isBatteryExpired(u) && u.id.toUpperCase().includes(logSearchQuery.toUpperCase())), [allDealerUnits, logSearchQuery]);
+  const expiredUnits = useMemo(() => allDealerUnits.filter(u => isBatteryExpired(u) && u.id.toUpperCase().includes(logSearchQuery.toUpperCase())), [allDealerUnits, logSearchQuery]);
+  const filteredStock = useMemo(() => dealerStock.filter(u => u.id.toUpperCase().includes(logSearchQuery.toUpperCase())), [dealerStock, logSearchQuery]);
+  const filteredExchanges = useMemo(() => dealerReplacements.filter(r => r.newBatteryId.toUpperCase().includes(logSearchQuery.toUpperCase()) || r.oldBatteryId.toUpperCase().includes(logSearchQuery.toUpperCase())), [dealerReplacements, logSearchQuery]);
+
+  const getDataForTab = () => {
+    switch (activeLogTab) {
+      case 'WAREHOUSE': return filteredStock;
+      case 'ACTIVE': return activeUnits;
+      case 'EXPIRED': return expiredUnits;
+      case 'EXCHANGES': return filteredExchanges;
+      default: return [];
+    }
+  };
+
+  const paginatedData = getDataForTab().slice(unitPage * unitsLimit, (unitPage + 1) * unitsLimit);
+
+  // --- ACTIONS ---
+
+  const handleStartWizard = (existing?: Dealer) => {
+    if (existing) {
+      setGeneratedId(existing.id);
+      const locParts = (existing.location || "").split(/, | - /);
+      setFormData({
+        name: existing.name,
+        owner: existing.ownerName,
+        address: existing.address,
+        contact: existing.contact,
+        city: locParts[0] || "",
+        state: locParts[1] || "",
+        pincode: locParts[2] || ""
+      });
+      setSelectedDealer(existing); // keep selected for update context if needed
+    } else {
+      setGeneratedId(`DL-${Math.floor(100000 + Math.random() * 899999)}`);
+      setFormData({ name: '', owner: '', address: '', contact: '', city: '', state: '', pincode: '' });
+      setSelectedDealer(null);
+    }
+    setWizardStep(0);
+    setViewMode('WIZARD');
+  };
+
+  const handleAddOrUpdate = async () => {
+    setIsSubmitting(true);
+    const locationString = `${formData.city}, ${formData.state} - ${formData.pincode}`.toUpperCase();
+    await Database.addDealer({
+      id: generatedId,
+      name: formData.name.toUpperCase(),
+      ownerName: formData.owner.toUpperCase(),
+      address: formData.address.toUpperCase(),
+      contact: formData.contact,
+      location: locationString
+    });
+
+    setIsSubmitting(false);
+
+    await loadData();
+    setViewMode('LIST');
+    window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: 'Partner enrollment complete' } }));
+  };
+
+  const loadDealerDetail = async (dealer: Dealer) => {
+    const [allReps, units] = await Promise.all([
+      Database.getDealerReplacements(dealer.id),
+      Database.getDealerBatteries(dealer.id)
+    ]);
+    // const units = allBatts.filter(b => b.dealerId === dealer.id && b.status !== BatteryStatus.MANUFACTURED); // OLD: Client-side filter
+    const dealerStock = units.filter(b => b.status === BatteryStatus.MANUFACTURED);
+    const soldUnits = units.filter(b => b.status !== BatteryStatus.MANUFACTURED);
+
+    // const reps = allReps.filter(r => r.dealerId === dealer.id); // Optimized query used above
+    setAllDealerUnits(soldUnits); // "Units" in UI refers to sold/active/returned history
+    setDealerReplacements(allReps);
+    setDealerStock(dealerStock);
+    setSelectedDealer(dealer);
+    setLogSearchQuery('');
+    setUnitPage(0);
+    setActiveLogTab('WAREHOUSE');
+    setViewMode('DETAIL');
+  };
+
+  const getStockAge = (dateStr?: string) => {
+    if (!dateStr) return { days: 0, status: 'FRESH', color: 'bg-emerald-50 text-emerald-600 border-emerald-100' };
+    const days = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24));
+    if (days > 90) return { days, status: 'STAGNANT', color: 'bg-rose-50 text-rose-600 border-rose-100' };
+    if (days > 60) return { days, status: 'SLOW', color: 'bg-amber-50 text-amber-600 border-amber-100' };
+    return { days, status: 'FRESH', color: 'bg-emerald-50 text-emerald-600 border-emerald-100' };
+  };
+
+  const handleDeleteDealer = async (dealerId: string) => {
+    if (!dealerId) return;
+
+    // Safety Check: Active Units
+    const activeUnitCount = allDealerUnits.filter(u => u.status === BatteryStatus.ACTIVE).length;
+
+    if (activeUnitCount > 0) {
+      if (!window.confirm(`WARNING: This partner has ${activeUnitCount} active warranty units.\n\nDeleting them will orphan these records but keep the warranty data valid.\n\nAre you sure you want to proceed?`)) {
+        return;
+      }
+    } else {
+      if (!window.confirm(`Delete partner ${selectedDealer?.name} permanently?\n\nThis action cannot be undone.`)) {
+        return;
+      }
+    }
+
+    await Database.deleteDealer(dealerId);
+    window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: 'Partner deleted successfully' } }));
+    setViewMode('LIST');
+    loadData();
+  };
+
+  // --- KPI ---
+  const kpiData = useMemo(() => {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 30));
+    const last30Sales = allDealerUnits.filter(u => new Date(u.activationDate || '2000-01-01') > thirtyDaysAgo).length;
+    const totalSales = allDealerUnits.length;
+    const totalClaims = dealerReplacements.length;
+    const claimRatio = totalSales > 0 ? (totalClaims / totalSales) * 100 : 0;
+    const stockCount = dealerStock.length;
+    const stockStatus = stockCount < 10 ? 'CRITICAL' : stockCount < 30 ? 'LOW' : 'HEALTHY';
+    return { last30Sales, claimRatio: claimRatio.toFixed(1), stockCount, stockStatus };
+  }, [allDealerUnits, dealerReplacements, dealerStock]);
+
+  const stockDistributionData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    dealerStock.forEach(u => counts[u.model] = (counts[u.model] || 0) + 1);
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [dealerStock]);
+
+  const salesTrendData = useMemo(() => {
+    const last6Months: Record<string, number> = {};
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const key = d.toLocaleString('default', { month: 'short' });
+      last6Months[key] = 0;
+    }
+    allDealerUnits.forEach(u => {
+      if (!u.activationDate) return;
+      const d = new Date(u.activationDate);
+      if (isNaN(d.getTime())) return;
+      try {
+        const key = d.toLocaleString('default', { month: 'short' });
+        if (last6Months[key] !== undefined) last6Months[key]++;
+      } catch (e) { return; }
+    });
+    return Object.entries(last6Months).map(([name, sales]) => ({ name, sales }));
+  }, [allDealerUnits]);
+
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+
+  // --- RENDER ---
+  if (viewMode === 'DETAIL' && selectedDealer) {
+    // --- DETAIL VIEW ---
+    return (
+      <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 pb-20 text-slate-900">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setViewMode('LIST')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-slate-500 hover:text-slate-900 shadow-sm"><ArrowLeft size={20} /></button>
+            <div>
+              <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">{selectedDealer.name}</h1>
+              <div className="flex items-center gap-3 mt-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500"><Store size={14} className="text-blue-500" /> {selectedDealer.id}</div>
+                <div className="w-1 h-1 rounded-full bg-slate-300" />
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500"><MapPin size={14} className="text-emerald-500" /> {selectedDealer.location}</div>
+                <div className="w-1 h-1 rounded-full bg-slate-300" />
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500"><Phone size={14} className="text-purple-500" /> {selectedDealer.contact}</div>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => handleStartWizard(selectedDealer)} className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase hover:bg-slate-50 flex items-center gap-2 transition-all shadow-sm"><Settings size={16} /> Manage Partner</button>
+          </div>
+        </div>
+
+        {/* Intelligence Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* KPI Cards */}
+          <div className="space-y-4 lg:col-span-1">
+            <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm hover:shadow-md transition-all">
+              <div className="flex justify-between items-start mb-2">
+                <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><Zap size={20} /></div>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Velocity (30d)</span>
+              </div>
+              <p className="text-3xl font-black text-slate-900">{kpiData.last30Sales} <span className="text-xs font-bold text-slate-400">UNITS</span></p>
+            </div>
+            <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm hover:shadow-md transition-all">
+              <div className="flex justify-between items-start mb-2">
+                <div className={`p-3 rounded-xl ${Number(kpiData.claimRatio) > 5 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}><TrendingDown size={20} /></div>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Claim Ratio</span>
+              </div>
+              <p className={`text-3xl font-black ${Number(kpiData.claimRatio) > 5 ? 'text-rose-600' : 'text-emerald-600'}`}>{kpiData.claimRatio}%</p>
+            </div>
+            <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm hover:shadow-md transition-all">
+              <div className="flex justify-between items-start mb-2">
+                <div className="p-3 bg-slate-50 text-slate-600 rounded-xl"><Package size={20} /></div>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Stock Health</span>
+              </div>
+              <p className={`text-xl font-black ${kpiData.stockStatus === 'CRITICAL' ? 'text-rose-600' : kpiData.stockStatus === 'LOW' ? 'text-amber-600' : 'text-blue-600'}`}>{kpiData.stockStatus} ({kpiData.stockCount})</p>
+            </div>
+          </div>
+
+          {/* Charts */}
+          <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm flex flex-col h-[380px]">
+              <h4 className="text-xs font-bold text-slate-900 uppercase flex items-center gap-2 mb-6"><TrendingUp size={16} className="text-blue-500" /> Sales Trend</h4>
+              <div className="flex-1 w-full"><ResponsiveContainer width="100%" height="100%"><AreaChart data={salesTrendData}><defs><linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }} /><Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#1e293b', fontWeight: 'bold', fontSize: '12px' }} /><Area type="monotone" dataKey="sales" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" /></AreaChart></ResponsiveContainer></div>
+            </div>
+            <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm flex flex-col h-[380px]">
+              <h4 className="text-xs font-bold text-slate-900 uppercase flex items-center gap-2 mb-6"><IconPieChart size={16} className="text-emerald-500" /> Stock Mix</h4>
+              <div className="flex-1 w-full relative">
+                <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={stockDistributionData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">{stockDistributionData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />))}</Pie><Tooltip /></PieChart></ResponsiveContainer>
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col"><span className="text-3xl font-black text-slate-900">{kpiData.stockCount}</span><span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Items</span></div>
+              </div>
+              <div className="flex flex-wrap gap-3 justify-center mt-2">{stockDistributionData.slice(0, 4).map((entry, index) => (<div key={entry.name} className="flex items-center gap-2 text-[10px] font-bold text-slate-500"><div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />{entry.name}</div>))}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Data Table */}
+        <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden min-h-[500px] flex flex-col">
+          <div className="flex flex-col lg:flex-row justify-between items-center border-b border-slate-50 px-8 py-5 bg-slate-50/30 gap-6">
+            <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+              <button onClick={() => { setActiveLogTab('WAREHOUSE'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'WAREHOUSE' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50'}`}>Stock ({filteredStock.length})</button>
+              <button onClick={() => { setActiveLogTab('ACTIVE'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'ACTIVE' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}>Active ({activeUnits.length})</button>
+              <button onClick={() => { setActiveLogTab('EXCHANGES'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'EXCHANGES' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}>Exchanges ({filteredExchanges.length})</button>
+              <button onClick={() => { setActiveLogTab('EXPIRED'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'EXPIRED' ? 'bg-rose-500 text-white shadow-md' : 'text-slate-500 hover:text-rose-600 hover:bg-rose-50'}`}>Expired ({expiredUnits.length})</button>
+            </div>
+            <div className="relative">
+              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input placeholder="Search records..." className="pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-blue-500 uppercase transition-all w-64 shadow-sm" value={logSearchQuery} onChange={e => { setLogSearchQuery(e.target.value); setUnitPage(0); }} />
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-black border-b border-slate-100 uppercase tracking-widest">
+                  <th className="px-8 py-5 pl-10">Identifier</th>
+                  <th className="px-8 py-5">Product Model</th>
+                  <th className="px-8 py-5">Status Info</th>
+                  <th className="px-8 py-5">{activeLogTab === 'EXCHANGES' ? 'Reason' : activeLogTab === 'WAREHOUSE' ? '-' : 'Customer'}</th>
+                  <th className="px-8 py-5 text-right pr-10">{activeLogTab === 'EXCHANGES' ? 'Date' : activeLogTab === 'WAREHOUSE' ? 'Added' : 'Timeline'}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {paginatedData.map((item: any) => (
+                  <tr key={item.id} onClick={() => onNavigateToHub && onNavigateToHub(item.id || item.newBatteryId)} className="hover:bg-blue-50/30 transition-all cursor-pointer group">
+                    <td className="px-8 py-5 pl-10 font-bold text-slate-900 text-xs uppercase">
+                      {activeLogTab === 'EXCHANGES' ? (<div className="flex items-center gap-2"><span className="text-slate-400 line-through">{item.oldBatteryId}</span><ArrowRight size={14} className="text-slate-300" /><span className="text-blue-600">{item.newBatteryId}</span></div>) : item.id}
+                    </td>
+                    <td className="px-8 py-5 font-bold text-slate-500 text-xs uppercase">{activeLogTab === 'EXCHANGES' ? '-' : item.model}</td>
+                    <td className="px-8 py-5">
+                      {activeLogTab === 'WAREHOUSE' && (() => { const aging = getStockAge(item.manufactureDate); return (<div className="flex items-center gap-2"><span className={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-widest border ${aging.color}`}>{aging.status}</span><span className="text-[9px] font-bold text-slate-400">({aging.days}d)</span></div>); })()}
+                      {activeLogTab === 'ACTIVE' && <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded text-[9px] font-black uppercase tracking-widest border border-emerald-100">Active</span>}
+                      {activeLogTab === 'EXPIRED' && <span className="px-2 py-1 bg-rose-50 text-rose-600 rounded text-[9px] font-black uppercase tracking-widest border border-rose-100">Expired</span>}
+                      {activeLogTab === 'EXCHANGES' && <span className="px-2 py-1 bg-amber-50 text-amber-600 rounded text-[9px] font-black uppercase tracking-widest border border-amber-100">Swapped</span>}
+                    </td>
+                    <td className="px-8 py-5">
+                      {activeLogTab === 'EXCHANGES' && <span className="font-bold text-xs text-slate-700">{item.reason}</span>}
+                      {activeLogTab === 'WAREHOUSE' && <span className="text-slate-300">-</span>}
+                      {(activeLogTab === 'ACTIVE' || activeLogTab === 'EXPIRED') && <div className="space-y-0.5"><p className="font-bold text-xs text-slate-900">{item.customerName}</p></div>}
+                    </td>
+                    <td className="px-8 py-5 text-right pr-10 font-mono text-[10px] text-slate-500 font-bold">
+                      {activeLogTab === 'EXCHANGES' && item.replacementDate}
+                      {activeLogTab === 'WAREHOUSE' && item.manufactureDate}
+                      {(activeLogTab === 'ACTIVE' || activeLogTab === 'EXPIRED') && <div><span className="text-slate-900">{item.activationDate}</span><span className="text-slate-300 mx-2">→</span><span className="text-rose-600">{item.warrantyExpiry}</span></div>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {paginatedData.length === 0 && <div className="py-24 flex flex-col items-center justify-center opacity-40"><Box size={48} className="mb-4 text-slate-300" /><p className="text-xs font-black uppercase tracking-widest text-slate-400">No records found</p></div>}
+          </div>
+
+          {/* Pagination */}
+          <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            <span>Total: {getDataForTab().length} Records</span>
+            <div className="flex gap-2">
+              <button disabled={unitPage === 0} onClick={() => setUnitPage(p => p - 1)} className="p-2 bg-white border border-slate-200 rounded-lg hover:border-blue-400 disabled:opacity-30 transition-all"><ChevronLeft size={16} /></button>
+              <button disabled={getDataForTab().length <= (unitPage + 1) * unitsLimit} onClick={() => setUnitPage(p => p + 1)} className="p-2 bg-white border border-slate-200 rounded-lg hover:border-blue-400 disabled:opacity-30 transition-all"><ChevronRight size={16} /></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  } else if (viewMode === 'WIZARD') {
+    // --- WIZARD VIEW (Modal-Free) ---
+    return (
+      <div className="max-w-4xl mx-auto py-8 animate-in slide-in-from-right-4 duration-500">
+        <div className="mb-8 flex items-center gap-4">
+          <button onClick={() => setViewMode('LIST')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500 hover:text-slate-900 transition-all shadow-sm"><ArrowLeft size={20} /></button>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Enrollment Wizard</h1>
+            <p className="text-sm font-medium text-slate-500">Register a new authorized partner in 3 steps</p>
+          </div>
+        </div>
+
+        {/* Stepper */}
+        <div className="mb-10 flex items-center justify-between relative px-8">
+          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-slate-200 -z-10" />
+          {[
+            { id: 0, label: 'Identity', icon: Store },
+            { id: 1, label: 'Location', icon: MapPin },
+            { id: 2, label: 'Confirm', icon: CheckCircle2 }
+          ].map((step, idx) => (
+            <div key={idx} className={`flex flex-col items-center gap-2 bg-white px-2 ${idx <= wizardStep ? 'text-blue-600' : 'text-slate-400'}`}>
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all ${idx <= wizardStep ? 'bg-blue-50 border-blue-600 scale-110' : 'bg-white border-slate-200'}`}>
+                <step.icon size={20} className={idx <= wizardStep ? 'text-blue-600' : 'text-slate-300'} />
+              </div>
+              <span className="text-xs font-bold uppercase tracking-wider bg-white px-1">{step.label}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Form Card */}
+        <div className="bg-white border border-slate-200 rounded-3xl p-10 shadow-xl shadow-slate-200/50 min-h-[500px] flex flex-col justify-between">
+
+          <div className="flex-1">
+            {wizardStep === 0 && (
+              <div className="space-y-8 animate-in fade-in slide-in-from-left-4 duration-300">
+                <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-2xl text-blue-700 mb-8 border border-blue-100">
+                  <Info size={24} className="shrink-0" />
+                  <p className="text-sm font-medium leading-relaxed">Please ensure the business name matches the legal registration documents. This ID will be used for all warranty claims.</p>
+                </div>
+
+                <div className="space-y-6 max-w-lg mx-auto">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Business Name</label>
+                    <div className="relative group">
+                      <Store className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" />
+                      <input autoFocus className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-all uppercase placeholder:text-slate-300" placeholder="e.g. STAR BATTERIES" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Owner Full Name</label>
+                    <div className="relative group">
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" />
+                      <input className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-base outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="e.g. JOHN DOE" value={formData.owner} onChange={e => setFormData({ ...formData, owner: e.target.value })} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Contact Number</label>
+                    <div className="relative group">
+                      <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" />
+                      <input className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-base outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="e.g. 9876543210" value={formData.contact} onChange={e => setFormData({ ...formData, contact: e.target.value })} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {wizardStep === 1 && (
+              <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="text-center mb-8">
+                  <h3 className="text-xl font-bold text-slate-900">Where are they located?</h3>
+                  <p className="text-sm text-slate-400 mt-1">Accurate location data helps in logistics planning</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+                  <div className="space-y-2 col-span-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Street Address</label>
+                    <textarea rows={2} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="SHOP NO, STREET, AREA" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">City</label>
+                    <input className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="CITY NAME" value={formData.city} onChange={e => setFormData({ ...formData, city: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">State</label>
+                    <input className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="STATE" value={formData.state} onChange={e => setFormData({ ...formData, state: e.target.value })} />
+                  </div>
+                  <div className="space-y-2 col-span-2 md:col-span-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Pincode</label>
+                    <input className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="000000" value={formData.pincode} onChange={e => setFormData({ ...formData, pincode: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {wizardStep === 2 && (
+              <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300 max-w-lg mx-auto text-center">
+                <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <ShieldCheck size={40} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-slate-900">Ready to Enroll?</h3>
+                  <p className="text-slate-500 mt-2">Please review the details below before confirming.</p>
+                </div>
+
+                <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 text-left space-y-4">
+                  <div className="flex justify-between border-b border-slate-200 pb-4">
+                    <span className="text-xs font-bold text-slate-400 uppercase">Partner ID</span>
+                    <span className="text-sm font-black text-slate-700">{generatedId}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-200 pb-4">
+                    <span className="text-xs font-bold text-slate-400 uppercase">Business</span>
+                    <span className="text-sm font-bold text-slate-900">{formData.name}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-200 pb-4">
+                    <span className="text-xs font-bold text-slate-400 uppercase">Owner</span>
+                    <span className="text-sm font-bold text-slate-700">{formData.owner}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase">Location</span>
+                    <span className="text-sm font-bold text-slate-700 text-right">{formData.city}, {formData.state}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer Nav */}
+          <div className="flex justify-between pt-8 border-t border-slate-100 mt-8">
+            <button
+              onClick={() => {
+                if (wizardStep > 0) setWizardStep(s => s - 1);
+                else setViewMode('LIST');
+                setError('');
+              }}
+              className="px-6 py-3 text-slate-500 font-bold text-sm hover:bg-slate-50 rounded-xl transition-all"
+            >
+              {wizardStep === 0 ? 'Cancel' : 'Back'}
+            </button>
+
+            <div className="flex flex-col items-end gap-2">
+              {error && <span className="text-xs font-bold text-rose-500 animate-pulse">{error}</span>}
+              <button
+                onClick={() => {
+                  setError('');
+                  if (wizardStep === 0) {
+                    const isDuplicate = dealers.some(d =>
+                      d.name.trim().toUpperCase() === formData.name.trim().toUpperCase() &&
+                      d.id !== generatedId
+                    );
+                    if (isDuplicate) {
+                      setError('Partner name already exists in registry');
+                      return;
+                    }
+                  }
+
+                  if (wizardStep < 2) setWizardStep(s => s + 1);
+                  else handleAddOrUpdate();
+                }}
+                disabled={
+                  (wizardStep === 0 && (!formData.name || !formData.contact)) ||
+                  (wizardStep === 1 && (!formData.city || !formData.state)) ||
+                  isSubmitting
+                }
+                className="px-10 py-3 bg-slate-900 text-white font-bold text-sm rounded-xl shadow-lg hover:bg-black transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                {wizardStep === 2 ? (isSubmitting ? 'Enrolling...' : 'Confirm Enrollment') : 'Continue'}
+                {!isSubmitting && wizardStep < 2 && <ArrowRight size={16} />}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  } else {
+    // --- LIST VIEW (Default) ---
+    return (
+      <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 pb-20 text-slate-900">
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm space-y-6">
+          <div className="flex justify-between items-center">
+            <div><h2 className="text-2xl font-bold text-slate-900">Partner Network</h2><p className="text-sm font-medium text-slate-500 mt-1">Authorized Dealers & Distributors</p></div>
+          </div>
+
+          <div className="flex flex-col md:flex-row items-center gap-6">
+            <div className="shrink-0"><div className="bg-blue-600/10 text-blue-600 p-4 rounded-2xl"><Users size={32} /></div></div>
+            <div className="flex-1 w-full relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+              <input placeholder="Search partners..." className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-lg outline-none text-slate-900 focus:bg-white focus:border-blue-500 transition-all uppercase tracking-widest mono" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            </div>
+            <button onClick={() => handleStartWizard()} className="px-8 py-4 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-black transition-all shadow-lg active:scale-95 flex items-center gap-3">
+              <Plus size={18} />
+              <span>Enroll Partner</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {filteredDealers.map(dealer => (
+            <div key={dealer.id} onClick={() => loadDealerDetail(dealer)} className="bg-white border border-slate-200 rounded-[2rem] p-8 hover:border-blue-300 hover:shadow-xl hover:shadow-blue-500/5 hover:-translate-y-1 transition-all cursor-pointer group relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-12 opacity-[0.02] text-slate-900 rotate-12 pointer-events-none group-hover:scale-110 transition-transform"><Store size={180} /></div>
+              <div className="relative z-10 space-y-6">
+                <div className="flex justify-between items-start">
+                  <div className="p-3 bg-slate-50 rounded-2xl text-slate-400 group-hover:text-blue-600 group-hover:bg-blue-50 transition-colors"><Building2 size={24} /></div>
+                  <div className="bg-blue-50 px-3 py-1 rounded-lg text-[10px] font-black text-blue-600 uppercase tracking-widest">{dealer.id}</div>
+                </div>
+                <div><h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter leading-tight mb-1 truncate">{dealer.name}</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1"><User size={12} /> {dealer.ownerName}</p></div>
+                <div className="pt-6 border-t border-slate-100 flex flex-col gap-3">
+                  <div className="flex items-center gap-3 text-xs font-bold text-slate-600"><div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center shrink-0"><MapPin size={14} /></div><span className="uppercase truncate">{dealer.location}</span></div>
+                  <div className="flex items-center gap-3 text-xs font-bold text-slate-600"><div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center shrink-0"><Phone size={14} /></div><span className="font-mono tracking-wide">{dealer.contact}</span></div>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filteredDealers.length === 0 && <div className="col-span-full py-20 flex flex-col items-center justify-center opacity-40"><Store size={64} className="text-slate-300 mb-4" /><p className="text-sm font-black text-slate-400 uppercase tracking-widest">No partners found matching criteria</p></div>}
+        </div>
+      </div>
+    );
+  }
+};
+
+const Dealers: React.FC<DealersProps> = (props) => (
+  <ErrorBoundary>
+    <DealersContent {...props} />
+  </ErrorBoundary>
+);
+
+export default Dealers;
