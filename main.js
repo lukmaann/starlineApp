@@ -92,6 +92,15 @@ function initDatabase() {
         warrantyExpiry TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS app_config (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+
+      /* Seed Default Credentials */
+      INSERT OR IGNORE INTO app_config (key, value) VALUES ('starline_admin_user', 'admin');
+      INSERT OR IGNORE INTO app_config (key, value) VALUES ('starline_admin_pass', 'starline@2025');
+
       /* IDENTIFIED MISSING INDEXES FOR SCALABILITY */
       CREATE INDEX IF NOT EXISTS idx_sales_batteryId ON sales(batteryId);
       CREATE INDEX IF NOT EXISTS idx_replacements_oldBatteryId ON replacements(oldBatteryId);

@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Zap, Lock, User, ArrowRight, ShieldAlert, ShieldCheck, Fingerprint, Loader2, Cpu, Globe, Server, Activity } from 'lucide-react';
+import { Database } from '../db';
 
 interface LoginProps {
   onLogin: () => void;
@@ -18,10 +19,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
 
     // Authentication Protocol Logic
-    setTimeout(() => {
-      const storedUser = localStorage.getItem('starline_admin_user') || 'admin';
-      const storedPass = localStorage.getItem('starline_admin_pass') || 'starline@2025';
-      
+    setTimeout(async () => {
+      const storedUser = await Database.getConfig('starline_admin_user') || 'admin';
+      const storedPass = await Database.getConfig('starline_admin_pass') || 'starline@2025';
+
       if (username.trim().toLowerCase() === storedUser.toLowerCase() && password === storedPass) {
         localStorage.setItem('starline_auth', 'true');
         onLogin();
@@ -35,13 +36,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   return (
     <div className="min-h-screen bg-[#f1f5f9] flex items-center justify-center p-4 antialiased selection:bg-blue-100">
       <div className="max-w-[850px] w-full flex flex-col md:flex-row bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-500">
-        
+
         {/* Technical Side Panel */}
         <div className="md:w-[320px] bg-[#0f172a] p-8 flex flex-col justify-between relative overflow-hidden text-white shrink-0">
           <div className="absolute top-0 right-0 p-8 opacity-[0.05] pointer-events-none">
             <Cpu size={240} />
           </div>
-          
+
           <div className="relative z-10 space-y-8">
             <div className="flex items-center space-x-3">
               <div className="bg-blue-600 p-2 rounded-lg shadow-lg">
@@ -148,9 +149,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">Encryption Active</p>
               <div className="h-px bg-slate-300 flex-1" />
             </div>
-            
+
             <p className="text-center text-[9px] text-slate-400 font-medium">
-              Authorized personnel only. Sessions are logged.<br/>
+              Authorized personnel only. Sessions are logged.<br />
               © 2025 Starline Power Architectures.
             </p>
           </div>

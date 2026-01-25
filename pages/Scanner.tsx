@@ -491,13 +491,16 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
               </div>
             )}
 
-            <div className={`border rounded-2xl shadow-sm overflow-hidden no-print transition-colors duration-500 ${getCardColor()}`}>
+            <div className={`border rounded-2xl shadow-sm overflow-hidden transition-colors duration-500 ${getCardColor()}`}>
               <div className="p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-slate-100">
                 <div className="space-y-1">
                   <div className="flex items-center space-x-4"><h1 className="text-4xl font-black tracking-tight text-slate-900 mono uppercase">{activeAsset.battery.id}</h1><span className={`px-3 py-1 text-[10px] font-bold border rounded-full uppercase tracking-widest ${getStatusBadge(activeAsset.battery.status, isExpired)}`}>{isExpired ? 'EXPIRED' : (activeAsset.battery.status === 'Manufactured' && activeAsset.battery.dealerId ? 'ASSIGNED STOCK' : activeAsset.battery.status)}</span></div>
                   <p className="text-slate-500 font-bold text-lg uppercase">{activeAsset.battery.model} • {activeAsset.battery.capacity}</p>
                 </div>
-                <button onClick={handlePrintReport} className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all border border-slate-100"><Printer size={20} /></button>
+                <button onClick={handlePrintReport} className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all border border-slate-100 no-print flex items-center gap-2">
+                  <Printer size={20} />
+                  <span className="text-xs font-bold uppercase">Print Details</span>
+                </button>
               </div>
               <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div className="space-y-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Ownership record</p><div className="flex items-center space-x-3">{activeAsset.battery.customerName ? <><div className="p-2 bg-slate-50 rounded-lg"><User size={18} /></div><span className="font-bold text-slate-900 uppercase">{activeAsset.battery.customerName}</span></> : <p className="text-sm font-bold text-slate-300 italic">Inventory Stock</p>}</div></div>

@@ -17,7 +17,7 @@ const Settings: React.FC = () => {
 
   // Access Control State
   const [formData, setFormData] = useState({
-    username: localStorage.getItem('starline_admin_user') || 'ADMIN',
+    username: 'ADMIN',
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
@@ -57,6 +57,11 @@ const Settings: React.FC = () => {
   // Initial Data Load
   useEffect(() => {
     loadModelData();
+    const loadConfig = async () => {
+      const user = await Database.getConfig('starline_admin_user');
+      if (user) setFormData(prev => ({ ...prev, username: user }));
+    };
+    loadConfig();
   }, []);
 
   const handleUpdateCredentials = async (e: React.FormEvent) => {
@@ -99,9 +104,9 @@ const Settings: React.FC = () => {
     await new Promise(r => setTimeout(r, 1200)); // Simulate network request
 
     // Commit changes
-    localStorage.setItem('starline_admin_user', formData.username);
+    await Database.setConfig('starline_admin_user', formData.username);
     if (formData.newPassword) {
-      localStorage.setItem('starline_admin_pass', formData.newPassword);
+      await Database.setConfig('starline_admin_pass', formData.newPassword);
     }
 
     notify('Security settings updated successfully');
@@ -495,13 +500,13 @@ const Settings: React.FC = () => {
                   <input
                     type="password"
                     autoFocus
-                    placeholder="Enter Key"
+                    placeholder="Password"
                     className="w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-center text-base text-slate-900 outline-none focus:bg-white focus:border-slate-900 focus:ring-4 focus:ring-slate-900/5 transition-all placeholder:text-slate-300 tracking-widest"
                     value={accessPassword}
                     onChange={e => setAccessPassword(e.target.value)}
-                    onKeyDown={e => {
+                    onKeyDown={async e => {
                       if (e.key === 'Enter') {
-                        const stored = localStorage.getItem('starline_admin_pass') || 'starline@2025';
+                        const stored = await Database.getConfig('starline_admin_pass') || 'starline@2025';
                         if (accessPassword === stored) setAccessUnlocked(true);
                         else notify('Access Denied: Invalid Password', 'error');
                       }
@@ -510,8 +515,8 @@ const Settings: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => {
-                    const stored = localStorage.getItem('starline_admin_pass') || 'starline@2025';
+                  onClick={async () => {
+                    const stored = await Database.getConfig('starline_admin_pass') || 'starline@2025';
                     if (accessPassword === stored) setAccessUnlocked(true);
                     else notify('Access Denied: Invalid Password', 'error');
                   }}

@@ -13,8 +13,8 @@ const NavItem: React.FC<NavItemProps> = ({ icon: Icon, label, active, onClick })
   <button
     onClick={onClick}
     className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 group relative ${active
-        ? 'bg-blue-50 text-blue-700'
-        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+      ? 'bg-blue-50 text-blue-700'
+      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
       }`}
   >
     <div className={`${active ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'}`}>
@@ -37,7 +37,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
   ];
 
   return (
-    <div className="w-60 bg-white h-screen flex flex-col shrink-0 z-50 border-r border-slate-200 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
+    <div className="w-60 bg-white h-screen flex flex-col shrink-0 z-50 border-r border-slate-200 shadow-[1px_0_0_0_rgba(0,0,0,0.05)] no-print">
       <div className="p-6">
         <div className="flex items-center space-x-2.5 mb-8">
           <div className="bg-blue-600 p-1.5 rounded-lg text-white shadow-lg shadow-blue-500/30">

@@ -110,7 +110,7 @@ const App: React.FC = () => {
           </div>
         )}
 
-        <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+        <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 no-print">
           <div className="flex items-center space-x-3 text-slate-400 text-sm font-medium">
             <span className="hover:text-slate-600 transition-colors cursor-default">Starline</span>
             <span>/</span>

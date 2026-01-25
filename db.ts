@@ -266,6 +266,20 @@ export class Database {
     await this.run('DELETE FROM dealers');
     // Keep models for convenience? No, full reset.
     await this.run('DELETE FROM models');
+    await this.run('DELETE FROM app_config');
+    // Re-seed defaults after reset if needed, but usually reset means blank. 
+    // However, for login we need at least one user. Let's re-seed.
+    await this.run("INSERT OR IGNORE INTO app_config (key, value) VALUES ('starline_admin_user', 'admin')");
+    await this.run("INSERT OR IGNORE INTO app_config (key, value) VALUES ('starline_admin_pass', 'starline@2025')");
+  }
+
+  static async getConfig(key: string): Promise<string | null> {
+    const results = await this.query<{ value: string }>('SELECT value FROM app_config WHERE key = ?', [key]);
+    return results[0]?.value || null;
+  }
+
+  static async setConfig(key: string, value: string): Promise<void> {
+    await this.run('INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)', [key, value]);
   }
 
 
