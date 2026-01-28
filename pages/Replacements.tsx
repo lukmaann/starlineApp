@@ -4,7 +4,8 @@ import { Database } from '../db';
 import { BatteryStatus, Replacement, Battery, Dealer } from '../types';
 import {
   RefreshCw, Search, ShieldAlert, ArrowRight,
-  ClipboardList, Activity, ChevronDown, CheckCircle2, History, X
+  ClipboardList, Activity, ChevronDown, CheckCircle2, History, X, Calendar,
+  ShieldQuestion, Loader2
 } from 'lucide-react';
 import { formatDate } from '../utils';
 import { StatusDisplay } from '../components/StatusDisplay';
@@ -49,9 +50,14 @@ const Replacements: React.FC = () => {
     dealerId: '',
     reason: 'Dead Cell',
     problemDescription: '',
-    cardReturned: false
+    cardReturned: false,
+    soldDate: '',
+    paidInAccount: false
   });
 
+  const [step, setStep] = useState(1);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false);
   const [success, setSuccess] = useState('');
 
   // Enterprise Scale: Only load necessary data (dealers)
@@ -155,11 +161,31 @@ const Replacements: React.FC = () => {
     }
 
     setValidationResult({ battery, sale, originalSale, lineage, replacements, isValid: true });
+    // Default soldDate to when battery was dispatched to dealer (activationDate)
+    setFormData(prev => ({ ...prev, soldDate: battery.activationDate || '' }));
   };
 
   const handleReplacement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validationResult?.isValid || !formData.newBatteryId || !formData.dealerId) return;
+
+    if (step === 1) {
+      setStep(2);
+      return;
+    }
+
+    // Validate soldDate before proceeding to confirmation
+    if (!formData.soldDate || formData.soldDate.trim() === '') {
+      alert('⚠️ Please select the Original Sale Date (Battery Sold by Dealer)');
+      return;
+    }
+
+    setIsConfirming(true);
+  };
+
+  const executeFinalReplacement = async () => {
+    if (!validationResult?.isValid) return;
+    setIsActionLoading(true);
 
     const replacement: Replacement = {
       id: `REP-${Date.now()}`,
@@ -169,17 +195,37 @@ const Replacements: React.FC = () => {
       replacementDate: new Date().toISOString().split('T')[0],
       reason: formData.reason,
       problemDescription: formData.problemDescription,
-      warrantyCardStatus: formData.cardReturned ? 'RECEIVED' : 'NOT_RECEIVED'
+      warrantyCardStatus: formData.cardReturned ? 'RECEIVED' : 'NOT_RECEIVED',
+      paidInAccount: formData.paidInAccount
     };
 
-    await Database.addReplacement(replacement);
+    const sourceSale = validationResult.originalSale || validationResult.sale;
+
+    // Calculate new expiry based on soldDate
+    let finalExpiry = validationResult.originalSale?.warrantyExpiry || validationResult.sale?.warrantyExpiry;
+    if (formData.soldDate) {
+      const months = validationResult.battery.warrantyMonths || 24;
+      const newExp = new Date(formData.soldDate);
+      newExp.setMonth(newExp.getMonth() + months);
+      finalExpiry = newExp.toISOString().split('T')[0];
+    }
+
+    await Database.addReplacement(replacement, {
+      customerName: sourceSale?.customerName,
+      customerPhone: sourceSale?.customerPhone,
+      warrantyExpiry: finalExpiry,
+      correctedOriginalSaleDate: formData.soldDate
+    });
     setSuccess(`New unit ${formData.newBatteryId} issued successfully.`);
     setValidationResult(null);
     setSearchId('');
-    setFormData({ ...formData, newBatteryId: '', dealerId: '', problemDescription: '', reason: 'Dead Cell' });
+    setFormData({ ...formData, newBatteryId: '', dealerId: '', problemDescription: '', reason: 'Dead Cell', soldDate: '', paidInAccount: false });
     setNewSerialSearch('');
     setDealerSearch('');
     setReasonSearch('Dead Cell');
+    setStep(1);
+    setIsConfirming(false);
+    setIsActionLoading(false);
   };
 
   return (
@@ -268,101 +314,199 @@ const Replacements: React.FC = () => {
               </div>
 
               <form onSubmit={handleReplacement} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="relative" ref={serialRef}>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Replacement Unit</label>
-                    <div className="relative mt-1.5">
-                      <input
-                        required
-                        placeholder="SEARCH STOCK..."
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl outline-none font-bold text-sm uppercase focus:border-blue-500 transition-all pr-10"
-                        value={newSerialSearch}
-                        onFocus={() => setShowNewSerialDropdown(true)}
-                        onChange={(e) => { setNewSerialSearch(e.target.value); setShowNewSerialDropdown(true); }}
-                      />
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    </div>
-                    {showNewSerialDropdown && (
-                      <div className="absolute z-50 left-0 right-0 mt-2 bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden max-h-48 overflow-y-auto animate-in slide-in-from-top-1">
-                        {stockResults.length > 0 ? stockResults.map(b => (
-                          <button key={b.id} type="button" onClick={() => { setFormData({ ...formData, newBatteryId: b.id }); setNewSerialSearch(b.id); setShowNewSerialDropdown(false); }} className="w-full px-4 py-2.5 text-left hover:bg-slate-50 text-[11px] font-bold uppercase border-b border-slate-50 last:border-0">{b.id}</button>
-                        )) : <div className="p-4 text-center text-[9px] font-bold text-slate-400 uppercase">No matching stock found</div>}
+                {step === 1 ? (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="relative" ref={serialRef}>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Replacement Unit Identity</label>
+                        <div className="relative mt-1.5">
+                          <input
+                            required
+                            placeholder="SCAN/TYPE NEW ID..."
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none font-bold text-sm focus:border-blue-500 transition-all pr-10 mono uppercase"
+                            value={newSerialSearch}
+                            onFocus={() => setShowNewSerialDropdown(true)}
+                            onChange={(e) => { setNewSerialSearch(e.target.value.toUpperCase()); setShowNewSerialDropdown(true); }}
+                          />
+                          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        </div>
+                        {showNewSerialDropdown && (
+                          <div className="absolute z-50 left-0 right-0 mt-2 bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden max-h-48 overflow-y-auto animate-in slide-in-from-top-1">
+                            {stockResults.length > 0 ? stockResults.map(b => (
+                              <button key={b.id} type="button" onClick={() => { setFormData({ ...formData, newBatteryId: b.id }); setNewSerialSearch(b.id); setShowNewSerialDropdown(false); }} className="w-full px-4 py-2.5 text-left hover:bg-slate-50 text-[11px] font-bold uppercase border-b border-slate-50 last:border-0">{b.id}</button>
+                            )) : <div className="p-4 text-center text-[9px] font-bold text-slate-400 uppercase">No matching stock found</div>}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  <div className="relative" ref={dealerRef}>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Servicing Dealer</label>
-                    <div className="relative mt-1.5">
-                      <input
-                        required
-                        placeholder="SEARCH DEALER..."
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl outline-none font-bold text-sm focus:border-blue-500 transition-all pr-10"
-                        value={dealerSearch}
-                        onFocus={() => setShowDealerDropdown(true)}
-                        onChange={(e) => { setDealerSearch(e.target.value); setShowDealerDropdown(true); }}
-                      />
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    </div>
-                    {showDealerDropdown && (
-                      <div className="absolute z-50 left-0 right-0 mt-2 bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden max-h-48 overflow-y-auto animate-in slide-in-from-top-1">
-                        {filteredDealers.length > 0 ? filteredDealers.map(d => (
-                          <button key={d.id} type="button" onClick={() => { setFormData({ ...formData, dealerId: d.id }); setDealerSearch(d.name); setShowDealerDropdown(false); }} className="w-full px-4 py-2.5 text-left hover:bg-slate-50 text-[11px] font-bold border-b border-slate-50 last:border-0 uppercase">{d.name}</button>
-                        )) : <div className="p-4 text-center text-[9px] font-bold text-slate-400 uppercase">No Dealer Found</div>}
+                      <div className="relative" ref={dealerRef}>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Servicing Dealer</label>
+                        <div className="relative mt-1.5">
+                          <input
+                            required
+                            placeholder="SEARCH DEALER..."
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl outline-none font-bold text-sm focus:border-blue-500 transition-all pr-10"
+                            value={dealerSearch}
+                            onFocus={() => setShowDealerDropdown(true)}
+                            onChange={(e) => { setDealerSearch(e.target.value); setShowDealerDropdown(true); }}
+                          />
+                          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        </div>
+                        {showDealerDropdown && (
+                          <div className="absolute z-50 left-0 right-0 mt-2 bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden max-h-48 overflow-y-auto animate-in slide-in-from-top-1">
+                            {filteredDealers.length > 0 ? filteredDealers.map(d => (
+                              <button key={d.id} type="button" onClick={() => { setFormData({ ...formData, dealerId: d.id }); setDealerSearch(d.name); setShowDealerDropdown(false); }} className="w-full px-4 py-2.5 text-left hover:bg-slate-50 text-[11px] font-bold border-b border-slate-50 last:border-0 uppercase">{d.name}</button>
+                            )) : <div className="p-4 text-center text-[9px] font-bold text-slate-400 uppercase">No Dealer Found</div>}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="relative" ref={reasonRef}>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Failure Mode</label>
-                    <div className="relative mt-1.5">
-                      <input
-                        required
-                        placeholder="SELECT REASON..."
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl outline-none font-bold text-sm focus:border-blue-500 transition-all pr-10"
-                        value={reasonSearch}
-                        onFocus={() => setShowReasonDropdown(true)}
-                        onChange={(e) => { setReasonSearch(e.target.value); setShowReasonDropdown(true); }}
-                      />
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     </div>
-                    {showReasonDropdown && (
-                      <div className="absolute z-50 left-0 right-0 mt-2 bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden max-h-48 overflow-y-auto animate-in slide-in-from-top-1">
-                        {filteredReasons.length > 0 ? filteredReasons.map(r => (
-                          <button key={r} type="button" onClick={() => { setFormData({ ...formData, reason: r }); setReasonSearch(r); setShowReasonDropdown(false); }} className="w-full px-4 py-2.5 text-left hover:bg-slate-50 text-[11px] font-bold border-b border-slate-50 last:border-0 uppercase">{r}</button>
-                        )) : <div className="p-4 text-center text-[9px] font-bold text-slate-400 uppercase">No Matches</div>}
+                    <button type="submit" disabled={!formData.newBatteryId || !formData.dealerId} className="w-full py-5 bg-slate-950 text-white rounded-xl font-black text-[10px] uppercase tracking-[0.3em] hover:bg-black transition-all disabled:opacity-20 shadow-xl flex items-center justify-center gap-3">Next Protocol Step <ArrowRight size={18} /></button>
+                  </div>
+                ) : (
+                  <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="relative" ref={reasonRef}>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Failure Mode</label>
+                        <div className="relative mt-1.5">
+                          <input
+                            required
+                            placeholder="SELECT REASON..."
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl outline-none font-bold text-sm focus:border-blue-500 transition-all pr-10"
+                            value={reasonSearch}
+                            onFocus={() => setShowReasonDropdown(true)}
+                            onChange={(e) => { setReasonSearch(e.target.value); setShowReasonDropdown(true); }}
+                          />
+                          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        </div>
+                        {showReasonDropdown && (
+                          <div className="absolute z-50 left-0 right-0 mt-2 bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden max-h-48 overflow-y-auto animate-in slide-in-from-top-1">
+                            {filteredReasons.length > 0 ? filteredReasons.map(r => (
+                              <button key={r} type="button" onClick={() => { setFormData({ ...formData, reason: r }); setReasonSearch(r); setShowReasonDropdown(false); }} className="w-full px-4 py-2.5 text-left hover:bg-slate-50 text-[11px] font-bold border-b border-slate-50 last:border-0 uppercase">{r}</button>
+                            )) : <div className="p-4 text-center text-[9px] font-bold text-slate-400 uppercase">No Matches</div>}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Internal Notes</label>
-                    <input className="w-full px-4 py-2.5 mt-1.5 bg-slate-50 border border-slate-100 rounded-xl outline-none font-bold text-sm focus:border-blue-500" placeholder="Technical analysis..." value={formData.problemDescription} onChange={(e) => setFormData({ ...formData, problemDescription: e.target.value })} />
-                  </div>
-                </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Internal Notes</label>
+                        <input className="w-full px-4 py-2.5 mt-1.5 bg-slate-50 border border-slate-100 rounded-xl outline-none font-bold text-sm focus:border-blue-500" placeholder="Technical analysis..." value={formData.problemDescription} onChange={(e) => setFormData({ ...formData, problemDescription: e.target.value })} />
+                      </div>
+                    </div>
 
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-                      checked={formData.cardReturned}
-                      onChange={(e) => setFormData({ ...formData, cardReturned: e.target.checked })}
-                    />
-                    <span className="text-[10px] font-black text-slate-900 uppercase">ORIGINAL WARRANTY CARD COLLECTED</span>
-                  </label>
-                </div>
+                    <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 space-y-6">
+                      <label className="flex items-center space-x-3 cursor-pointer p-2 hover:bg-white rounded-lg transition-all group">
+                        <input
+                          type="checkbox"
+                          className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 transition-all"
+                          checked={formData.cardReturned}
+                          onChange={(e) => setFormData({ ...formData, cardReturned: e.target.checked })}
+                        />
+                        <span className="text-[11px] font-black text-slate-900 uppercase group-hover:text-blue-600">ORIGINAL WARRANTY CARD COLLECTED</span>
+                      </label>
 
-                <button type="submit" disabled={!formData.newBatteryId || !formData.dealerId} className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all disabled:opacity-20 mt-4 shadow-xl shadow-blue-500/20">
-                  Authorize Exchange
-                </button>
+                      <label className="flex items-center space-x-3 cursor-pointer p-2 hover:bg-white rounded-lg transition-all group">
+                        <input
+                          type="checkbox"
+                          className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 transition-all"
+                          checked={formData.paidInAccount}
+                          onChange={(e) => setFormData({ ...formData, paidInAccount: e.target.checked })}
+                        />
+                        <span className="text-[11px] font-black text-slate-900 uppercase group-hover:text-blue-600">PAID IN ACCOUNT</span>
+                      </label>
+
+                      <div className="pt-6 border-t border-slate-200">
+                        <div className="p-6 bg-amber-50 rounded-2xl border border-amber-100 border-dashed">
+                          <div className="flex items-center gap-4 mb-4">
+                            <div className="p-2.5 bg-amber-100 rounded-xl text-amber-600 shadow-sm"><Calendar size={18} /></div>
+                            <div>
+                              <h4 className="text-[11px] font-black text-amber-900 uppercase tracking-widest leading-none">Original Sale Date (From Old Battery) <span className="text-rose-600">*</span></h4>
+                              <p className="text-[9px] font-bold text-amber-600 mt-1 uppercase italic">Verify from warranty card</p>
+                            </div>
+                          </div>
+
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Sale Date <span className="text-rose-600">*</span></label>
+                          <input
+                            required
+                            type="date"
+                            className="w-full px-5 py-3.5 mt-2 bg-white border border-amber-200 rounded-2xl outline-none font-black text-lg focus:border-amber-500 text-amber-700 shadow-xl shadow-amber-900/5 transition-all"
+                            value={formData.soldDate}
+                            onChange={(e) => setFormData({ ...formData, soldDate: e.target.value })}
+                          />
+                          <p className="text-[9px] text-amber-600 font-medium mt-2 uppercase italic">New battery will inherit this date automatically for warranty calculation</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                      <button type="submit" className="w-full py-5 bg-amber-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.3em] hover:bg-amber-700 transition-all shadow-2xl shadow-amber-600/20 active:scale-[0.98]">
+                        Proceed to Authorization
+                      </button>
+                      <button type="button" onClick={() => setStep(1)} className="w-full py-3 text-slate-400 font-bold uppercase tracking-widest text-[9px] hover:text-slate-600 transition-all text-center underline cursor-pointer">Back to Step 1</button>
+                    </div>
+                  </div>
+                )}
               </form>
+
+              {isConfirming && (
+                <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
+                  <div className="bg-slate-900 text-white rounded-[40px] p-12 border-4 border-amber-600 shadow-2xl max-w-2xl w-full animate-in zoom-in-95 duration-500 space-y-12 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-10 opacity-5 -mr-10 -mt-10"><ShieldQuestion size={200} /></div>
+
+                    <div className="flex items-center space-x-6 relative z-10">
+                      <div className="p-5 bg-amber-600 rounded-3xl shadow-2xl shadow-amber-600/20"><ShieldQuestion size={40} /></div>
+                      <div>
+                        <h3 className="text-3xl font-black tracking-tighter uppercase leading-none">Authorization Required</h3>
+                        <p className="text-slate-500 text-[12px] font-black uppercase tracking-[0.4em] mt-3">Final validation before committing to registry.</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-8 relative z-10">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+                        <div className="p-8 bg-white/5 border border-white/10 rounded-3xl flex items-center justify-between shadow-inner">
+                          <div className="space-y-2"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Failed Unit</p><p className="text-2xl font-black mono text-slate-300 tracking-tighter">{validationResult.battery.id}</p></div>
+                          <ArrowRight className="text-slate-700" size={28} />
+                          <div className="space-y-2 text-right"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">New Unit</p><p className="text-2xl font-black mono text-blue-400 tracking-tighter">{formData.newBatteryId}</p></div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6">
+                          <div className="p-5 bg-white/5 border border-white/10 rounded-2xl">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Failure</p>
+                            <p className="text-xs font-black text-amber-500 uppercase">{formData.reason}</p>
+                          </div>
+                          <div className="p-5 bg-white/5 border border-white/10 rounded-2xl">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Dealer</p>
+                            <p className="text-xs font-black text-slate-300 uppercase truncate">{dealerSearch}</p>
+                          </div>
+                          <div className="p-5 bg-white/5 border border-white/10 rounded-2xl">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Evidence</p>
+                            <p className="text-xs font-black text-blue-400 uppercase">{formData.cardReturned ? 'Original Card' : 'No Card'}</p>
+                          </div>
+                          <div className="p-5 bg-white/5 border border-white/10 rounded-2xl">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Paid in Account</p>
+                            <p className="text-xs font-black uppercase" style={{ color: formData.paidInAccount ? '#10b981' : '#ef4444' }}>{formData.paidInAccount ? 'YES' : 'NO'}</p>
+                          </div>
+                          <div className="p-5 bg-amber-900/30 border border-amber-600/30 rounded-2xl">
+                            <p className="text-[10px] font-black text-amber-500/60 uppercase tracking-widest mb-2">Sold Date</p>
+                            <p className="text-xs font-black text-amber-500 mono">{formatDate(formData.soldDate)}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-6">
+                        <button onClick={executeFinalReplacement} disabled={isActionLoading} className="w-full py-7 bg-emerald-600 text-white font-black rounded-3xl hover:bg-emerald-700 transition-all shadow-2xl shadow-emerald-900/20 uppercase tracking-[0.4em] text-sm flex items-center justify-center gap-6 active:scale-95">
+                          {isActionLoading ? <Loader2 className="animate-spin" size={28} /> : <CheckCircle2 size={28} />} Confirm & Authorize
+                        </button>
+                        <button onClick={() => setIsConfirming(false)} className="w-full py-5 bg-white/5 text-slate-500 font-bold rounded-2xl hover:bg-white/10 hover:text-slate-300 uppercase tracking-widest text-[10px] transition-all">Cancel & Edit Details</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        </div>
+          </div >
+        </div >
       )}
-    </div>
+    </div >
   );
 };
 

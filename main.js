@@ -71,7 +71,8 @@ function initDatabase() {
         replacementDate TEXT,
         reason TEXT,
         problemDescription TEXT,
-        warrantyCardStatus TEXT
+        warrantyCardStatus TEXT,
+        paidInAccount INTEGER DEFAULT 0
       );
 
       CREATE TABLE IF NOT EXISTS sales (
@@ -115,6 +116,18 @@ function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_dealers_name ON dealers(name);
     `;
     db.exec(schema);
+
+    // Migration: Add paidInAccount column if it doesn't exist
+    try {
+      db.exec(`ALTER TABLE replacements ADD COLUMN paidInAccount INTEGER DEFAULT 0`);
+      console.log('Migration: Added paidInAccount column to replacements table');
+    } catch (err) {
+      // Column might already exist, ignore error
+      if (!err.message.includes('duplicate column')) {
+        console.error('Migration warning:', err.message);
+      }
+    }
+
     console.log('Database initialized at:', DB_PATH);
   } catch (err) {
     console.error('Failed to initialize database:', err);

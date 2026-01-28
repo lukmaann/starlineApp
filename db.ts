@@ -413,7 +413,7 @@ export class Database {
 
   static async addReplacement(
     rep: Replacement,
-    meta?: { customerName: string; customerPhone: string; warrantyExpiry: string }
+    meta?: { customerName: string; customerPhone: string; warrantyExpiry: string; correctedOriginalSaleDate?: string }
   ): Promise<void> {
     // Transaction-like sequence
 
@@ -430,12 +430,30 @@ export class Database {
     );
 
     // 2. Mark Old Battery as RETURNED
-    await this.run(
-      `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ? WHERE id = ?`,
-      [rep.newBatteryId, rep.oldBatteryId]
-    );
+    // If correctedOriginalSaleDate is provided, we also fix the old battery's records for historical accuracy
+    if (meta?.correctedOriginalSaleDate) {
+      // Fetch battery to get warranty months for recalculation
+      const oldBatt = await this.getBattery(rep.oldBatteryId);
+      const months = oldBatt?.warrantyMonths || 24;
+      const newExpiry = new Date(meta.correctedOriginalSaleDate);
+      newExpiry.setMonth(newExpiry.getMonth() + months);
+      const newExpiryStr = newExpiry.toISOString().split('T')[0];
+
+      await this.run(
+        `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ?, activationDate = ?, warrantyExpiry = ? WHERE id = ?`,
+        [rep.newBatteryId, meta.correctedOriginalSaleDate, newExpiryStr, rep.oldBatteryId]
+      );
+    } else {
+      await this.run(
+        `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ? WHERE id = ?`,
+        [rep.newBatteryId, rep.oldBatteryId]
+      );
+    }
 
     // 3. Activate New Battery (REPLACEMENT status)
+    // If correctedOriginalSaleDate is provided, use it for activation. Else use replacementDate.
+    const activationDate = meta?.correctedOriginalSaleDate || rep.replacementDate;
+
     await this.run(
       `UPDATE batteries SET 
           status = 'REPLACEMENT', 
@@ -447,7 +465,7 @@ export class Database {
           warrantyExpiry = ?
         WHERE id = ?`,
       [
-        rep.oldBatteryId, rep.replacementDate, rep.dealerId || 'CENTRAL',
+        rep.oldBatteryId, activationDate, rep.dealerId || 'CENTRAL',
         meta?.customerName || null, meta?.customerPhone || null, meta?.warrantyExpiry || null,
         rep.newBatteryId
       ]
@@ -470,6 +488,50 @@ export class Database {
 
   static async deleteDealer(id: string): Promise<void> {
     await this.run('DELETE FROM dealers WHERE id = ?', [id]);
+  }
+
+  static async updateReplacementPaidStatus(replacementId: string, paidInAccount: boolean): Promise<void> {
+    await this.run(
+      `UPDATE replacements SET paidInAccount = ? WHERE id = ?`,
+      [paidInAccount ? 1 : 0, replacementId]
+    );
+    window.dispatchEvent(new CustomEvent('db-synced'));
+  }
+
+  static async getPaginatedReplacements(dealerId: string, page: number, limit: number, searchQuery?: string): Promise<{ data: any[], total: number }> {
+    const offset = (page - 1) * limit;
+    let where = 'WHERE r.dealerId = ?';
+    let params: any[] = [dealerId];
+
+    if (searchQuery) {
+      where += ' AND (r.oldBatteryId LIKE ? OR r.newBatteryId LIKE ?)';
+      params.push(`%${searchQuery}%`, `%${searchQuery}%`);
+    }
+
+    const [data, countResult] = await Promise.all([
+      this.query<any>(`
+        SELECT 
+          r.*,
+          s.warrantyStartDate as soldDate,
+          b.model as batteryModel
+        FROM replacements r
+        LEFT JOIN sales s ON s.batteryId = r.oldBatteryId
+        LEFT JOIN batteries b ON b.id = r.oldBatteryId
+        ${where}
+        ORDER BY r.rowid DESC
+        LIMIT ? OFFSET ?
+      `, [...params, limit, offset]),
+      this.query<{ count: number }>(`
+        SELECT COUNT(*) as count 
+        FROM replacements r 
+        ${where}
+      `, params)
+    ]);
+
+    return {
+      data,
+      total: countResult[0]?.count || 0
+    };
   }
 
   static async addModel(model: BatteryModel): Promise<void> {

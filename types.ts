@@ -75,6 +75,7 @@ export interface Replacement {
   reason: string;
   problemDescription: string;
   warrantyCardStatus: WarrantyCardStatus;
+  paidInAccount: boolean;
 }
 
 export interface Sale {

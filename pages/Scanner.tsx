@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { formatDate } from '../utils';
 import { StatusDisplay } from '../components/StatusDisplay';
-import { BatteryStatus, Dealer, Battery, WarrantyCardStatus, BatteryModel } from '../types';
+import { BatteryStatus, type Battery, type Dealer, WarrantyCardStatus, type Sale, Replacement, BatteryModel } from '../types';
 
 interface ScannerProps {
   initialSearch?: string | null;
@@ -53,14 +53,17 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
 
 
   const [isReplacing, setIsReplacing] = useState(false);
+  const [replacementStep, setReplacementStep] = useState(1);
   const [isConfirmingReplacement, setIsConfirmingReplacement] = useState(false);
   const [replacementData, setReplacementData] = useState({
     newBatteryId: '',
-    dealerId: '',
+    dealerId: dealers[0]?.id || '',
     reason: 'DEAD CELL',
     problemDescription: '',
+    warrantyCardStatus: 'RECEIVED' as WarrantyCardStatus,
     replacementDate: new Date().toISOString().split('T')[0],
-    warrantyCardStatus: 'RECEIVED' as WarrantyCardStatus
+    soldDate: '',
+    paidInAccount: false
   });
 
   // Name Validation State
@@ -166,9 +169,12 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
       const data = await Database.searchBattery(cleanId);
       if (data && data.battery) {
         setActiveAsset(data);
-        if (data.battery.dealerId) {
-          // Auto-fill registration form is no longer needed as units are auto-activated
-        }
+        // Default soldDate to when battery was dispatched to dealer (activationDate)
+        // not when it was sold to customer (warrantyStartDate)
+        setReplacementData(prev => ({
+          ...prev,
+          soldDate: data.battery.activationDate || ''
+        }));
         notify(`${cleanId} traced successfully`);
       } else {
         setMissingSerial(cleanId);
@@ -199,21 +205,34 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
     e.preventDefault();
     if (!activeAsset) return;
 
-    const newUnitId = replacementData.newBatteryId.toUpperCase().trim();
+    if (replacementStep === 1) {
+      const newUnitId = replacementData.newBatteryId.toUpperCase().trim();
+      if (!newUnitId) {
+        notify('Please scan new unit', 'error');
+        return;
+      }
 
-    // Check for empty
-    if (!newUnitId) return;
+      if (newUnitId === activeAsset.battery.id) {
+        notify('Cannot replace with same unit', 'error');
+        return;
+      }
 
-    // Check if the unit exists (Should NOT exist for fresh replacement)
-    const newUnitCheck = await Database.searchBattery(newUnitId);
+      // Check if the unit exists (Should NOT exist for fresh replacement)
+      const newUnitCheck = await Database.searchBattery(newUnitId);
+      if (newUnitCheck && newUnitCheck.battery) {
+        notify(`Stock Conflict: ID ${newUnitId} is already registered. Use a fresh stamp.`, 'error');
+        return;
+      }
 
-    if (newUnitCheck && newUnitCheck.battery) {
-      notify(`Stock Conflict: ID ${newUnitId} is already registered. Use a fresh stamp.`, 'error');
+      setReplacementStep(2);
       return;
     }
 
-    // 3. LOGIC: Model validation (e.g., SL30 to SL30 only) - This check is no longer needed here as the new unit doesn't exist yet.
-    // The new unit will be created with the same model as the old unit.
+    // Validate soldDate before proceeding to confirmation
+    if (!replacementData.soldDate || replacementData.soldDate.trim() === '') {
+      notify('Please select the Original Sale Date (Battery Sold by Dealer)', 'error');
+      return;
+    }
 
     setIsConfirmingReplacement(true);
   };
@@ -239,31 +258,47 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
       });
 
       // 2. Execute the official Swap Protocol
-      await Database.addReplacement({
+      // Calculate new expiry based on soldDate
+      let finalExpiry = activeAsset.sale?.warrantyExpiry || activeAsset.battery.warrantyExpiry;
+      if (replacementData.soldDate) {
+        const months = activeAsset.battery.warrantyMonths || 24;
+        const newExp = new Date(replacementData.soldDate);
+        newExp.setMonth(newExp.getMonth() + months);
+        finalExpiry = newExp.toISOString().split('T')[0];
+      }
+
+      const replacement: Replacement = {
         id: `REP-${Date.now()}`,
         oldBatteryId: activeAsset.battery.id,
-        newBatteryId: newUnitId,
-        dealerId: activeAsset.battery.dealerId || 'CENTRAL',
+        newBatteryId: replacementData.newBatteryId,
+        dealerId: replacementData.dealerId,
         replacementDate: replacementData.replacementDate,
         reason: replacementData.reason,
-        problemDescription: '',
-        warrantyCardStatus: replacementData.warrantyCardStatus
-      }, {
-        customerName: activeAsset.battery.customerName,
-        customerPhone: activeAsset.battery.customerPhone,
-        warrantyExpiry: activeAsset.battery.warrantyExpiry
+        problemDescription: replacementData.problemDescription,
+        warrantyCardStatus: replacementData.warrantyCardStatus,
+        paidInAccount: replacementData.paidInAccount
+      };
+      await Database.addReplacement(replacement, {
+        customerName: activeAsset.sale?.customerName || null,
+        customerPhone: activeAsset.sale?.customerPhone || null,
+        warrantyExpiry: finalExpiry,
+        correctedOriginalSaleDate: replacementData.soldDate
       });
 
       notify('Exchange Sequence Complete. New Unit Active.', 'success');
       setReplacementData({
         newBatteryId: '',
-        dealerId: '',
+        dealerId: dealers[0]?.id || '',
         reason: 'DEAD CELL',
         problemDescription: '',
         replacementDate: new Date().toISOString().split('T')[0],
-        warrantyCardStatus: 'RECEIVED' as WarrantyCardStatus
+        warrantyCardStatus: 'RECEIVED',
+        soldDate: '',
+        paidInAccount: false
       });
       setIsReplacing(false);
+      setReplacementStep(1);
+      setIsConfirmingReplacement(false);
 
       // Reload to show the new state
       handleSearch(activeAsset.battery.id);
@@ -487,43 +522,114 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
               ) : !isExpired && activeAsset.battery.status !== BatteryStatus.RETURNED ? (
                 <div className="space-y-6">
                   {!isReplacing && !isConfirmingReplacement && (
-                    <button onClick={() => setIsReplacing(true)} className="w-full py-5 bg-slate-950 text-white rounded-2xl font-bold flex items-center justify-center space-x-3 hover:bg-black transition-all shadow-2xl active:scale-[0.98] uppercase tracking-widest"><RefreshCw size={20} /><span>Initialize warranty exchange</span></button>
+                    <button onClick={() => { setIsReplacing(true); setReplacementStep(1); }} className="w-full py-5 bg-slate-950 text-white rounded-2xl font-bold flex items-center justify-center space-x-3 hover:bg-black transition-all shadow-2xl active:scale-[0.98] uppercase tracking-widest"><RefreshCw size={20} /><span>Initialize warranty exchange</span></button>
                   )}
 
                   {isReplacing && !isConfirmingReplacement && (
-                    <div className="bg-white border-2 border-amber-100 rounded-2xl p-8 shadow-2xl animate-in slide-in-from-top-4 space-y-8">
+                    <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm animate-in slide-in-from-top-2 space-y-6">
                       <div className="flex justify-between items-center">
                         <div>
-                          <h3 className="text-lg font-bold text-slate-900">Exchange Protocol</h3>
-                          <p className="text-[10px] font-bold text-amber-600 uppercase">Swapping {activeAsset.battery.model} Identity</p>
+                          <h3 className="text-sm font-bold text-slate-900 uppercase">Exchange Protocol</h3>
+                          <p className="text-[9px] font-bold text-amber-600 uppercase mt-0.5">Swapping {activeAsset.battery.model}</p>
                         </div>
-                        <div className="px-4 py-2 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-2">
-                          <Store size={14} className="text-slate-400" />
-                          <span className="text-[10px] font-bold text-slate-500 uppercase">Assigning to: <span className="text-slate-900">{dealers.find(d => d.id === replacementData.dealerId)?.name || 'Central Stock'}</span></span>
-                        </div>
-                        <button onClick={() => setIsReplacing(false)}><X size={24} className="text-slate-300 hover:text-slate-900" /></button>
+                        <button onClick={() => { setIsReplacing(false); setReplacementStep(1); }} className="p-1.5 hover:bg-slate-100 rounded-lg transition-all text-slate-400 hover:text-slate-900"><X size={18} /></button>
                       </div>
-                      <form onSubmit={handleReplacementRequest} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">New Unit ID</label>
-                          <input ref={replacementInputRef} required placeholder="Serial ID" className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm outline-none focus:border-blue-600 uppercase mono" value={replacementData.newBatteryId} onChange={e => setReplacementData({ ...replacementData, newBatteryId: e.target.value.toUpperCase() })} />
+
+                      {replacementStep === 1 ? (
+                        <form onSubmit={handleReplacementRequest} className="space-y-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Scan New Replacement Unit</label>
+                            <div className="relative">
+                              <Barcode size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500" />
+                              <input
+                                ref={replacementInputRef}
+                                required
+                                autoFocus
+                                placeholder="SCAN OR TYPE SERIAL..."
+                                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none focus:border-blue-500 focus:bg-white uppercase transition-all mono"
+                                value={replacementData.newBatteryId}
+                                onChange={e => setReplacementData({ ...replacementData, newBatteryId: e.target.value.toUpperCase() })}
+                              />
+                            </div>
+                          </div>
+                          <button type="submit" className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-black transition-all uppercase text-[10px] tracking-widest flex items-center justify-center gap-2">Validate & Continue <ArrowRight size={16} /></button>
+                        </form>
+                      ) : (
+                        <div className="space-y-6">
+                          {/* Battery Comparison */}
+                          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between">
+                            <div className="space-y-1">
+                              <p className="text-[9px] font-bold text-slate-400 uppercase">Old Battery</p>
+                              <p className="text-sm font-black mono text-rose-600">{activeAsset.battery.id}</p>
+                            </div>
+                            <ArrowRight className="text-slate-400" size={20} />
+                            <div className="space-y-1 text-right">
+                              <p className="text-[9px] font-bold text-slate-400 uppercase">New Battery</p>
+                              <p className="text-sm font-black mono text-emerald-600">{replacementData.newBatteryId}</p>
+                            </div>
+                          </div>
+
+                          {/* Details Form */}
+                          <form onSubmit={handleReplacementRequest} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="space-y-1.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Failure Reason</label>
+                                <select required className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-xs uppercase outline-none focus:border-amber-500 transition-all cursor-pointer" value={replacementData.reason} onChange={e => setReplacementData({ ...replacementData, reason: e.target.value })}>
+                                  <option value="DEAD CELL">Dead Cell</option>
+                                  <option value="INTERNAL SHORT">Internal Short</option>
+                                  <option value="BULGE">Casing Bulge</option>
+                                  <option value="LOW GRAVITY">Low Gravity</option>
+                                  <option value="LEAKAGE">Leakage</option>
+                                </select>
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Evidence Status</label>
+                                <select required className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-xs uppercase outline-none focus:border-amber-500 transition-all cursor-pointer" value={replacementData.warrantyCardStatus} onChange={e => setReplacementData({ ...replacementData, warrantyCardStatus: e.target.value as WarrantyCardStatus })}>
+                                  <option value="RECEIVED">Card Collected</option>
+                                  <option value="XEROX">Xerox Copy</option>
+                                  <option value="WHATSAPP">Digital</option>
+                                </select>
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Exchange Date</label>
+                                <input required type="date" className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-xs outline-none focus:border-amber-500 transition-all" value={replacementData.replacementDate} onChange={e => setReplacementData({ ...replacementData, replacementDate: e.target.value })} />
+                              </div>
+                            </div>
+
+                            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                              <label className="flex items-center gap-3 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                                  checked={replacementData.paidInAccount}
+                                  onChange={e => setReplacementData({ ...replacementData, paidInAccount: e.target.checked })}
+                                />
+                                <span className="text-[10px] font-bold text-blue-900 uppercase">Paid in Account</span>
+                              </label>
+                            </div>
+
+                            <div className="p-4 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
+                              <div className="flex items-center gap-2">
+                                <Calendar size={14} className="text-amber-600" />
+                                <h4 className="text-[10px] font-black text-amber-900 uppercase tracking-wider">Original Sale Date (From Old Battery) <span className="text-rose-600">*</span></h4>
+                              </div>
+                              <input
+                                required
+                                type="date"
+                                className="w-full px-3 py-2.5 bg-white border-2 border-amber-400 rounded-lg outline-none font-bold text-sm focus:border-rose-500 text-amber-900 focus:ring-2 focus:ring-rose-200"
+                                value={replacementData.soldDate}
+                                onChange={(e) => setReplacementData({ ...replacementData, soldDate: e.target.value })}
+                              />
+                              <p className="text-[9px] text-amber-700 font-medium uppercase italic">New battery will inherit this date automatically for warranty calculation</p>
+                            </div>
+
+                            <div className="flex gap-3">
+                              <button type="button" onClick={() => setReplacementStep(1)} className="px-4 py-2.5 text-slate-500 font-bold uppercase tracking-wider text-[9px] hover:text-slate-700 transition-all underline">Back</button>
+                              <button type="submit" className="flex-1 bg-amber-600 text-white font-bold py-3 rounded-lg hover:bg-amber-700 transition-all uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-amber-600/20">Authorize Exchange <ArrowRight size={16} /></button>
+                            </div>
+                          </form>
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Failure Mode</label>
-                          <select required className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm uppercase" value={replacementData.reason} onChange={e => setReplacementData({ ...replacementData, reason: e.target.value })}><option value="DEAD CELL">Dead Cell</option><option value="INTERNAL SHORT">Internal Short</option><option value="BULGE">Casing Bulge</option></select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Evidence Status</label>
-                          <select required className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm uppercase" value={replacementData.warrantyCardStatus} onChange={e => setReplacementData({ ...replacementData, warrantyCardStatus: e.target.value as WarrantyCardStatus })}><option value="RECEIVED">Original card collected</option><option value="XEROX">Xerox copy</option><option value="WHATSAPP">Digital evidence</option></select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Exchange Date</label>
-                          <input required type="date" className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm" value={replacementData.replacementDate} onChange={e => setReplacementData({ ...replacementData, replacementDate: e.target.value })} />
-                        </div>
-                        <div className="flex items-end">
-                          <button type="submit" className="w-full bg-amber-600 text-white font-bold py-4 rounded-xl hover:bg-amber-700 transition-all uppercase text-xs tracking-widest flex items-center justify-center gap-2">Verify <ArrowRight size={16} /></button>
-                        </div>
-                      </form>
+                      )}
                     </div>
                   )}
 
@@ -531,14 +637,40 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                     <div className="bg-slate-900 text-white rounded-3xl p-10 border-4 border-amber-600 shadow-2xl animate-in zoom-in-95 duration-300 space-y-10">
                       <div className="flex items-center space-x-5 border-b border-white/10 pb-8"><div className="p-4 bg-amber-600 rounded-2xl"><ShieldQuestion size={32} /></div><div><h3 className="text-2xl font-black tracking-tighter uppercase leading-none">Authorization Required</h3><p className="text-slate-500 text-[11px] font-black uppercase tracking-[0.3em] mt-2">Validate asset mapping before committing to registry.</p></div></div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                        <div className="p-6 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-between">
-                          <div className="space-y-1"><p className="text-[10px] font-bold text-slate-500 uppercase">Old Serial ({activeAsset.battery.model})</p><p className="text-xl font-black mono text-slate-300">{activeAsset.battery.id}</p></div>
-                          <ArrowRight className="text-slate-700" size={24} />
-                          <div className="space-y-1 text-right"><p className="text-[10px] font-bold text-slate-500 uppercase">New Serial ({activeAsset.battery.model})</p><p className="text-xl font-black mono text-blue-400">{replacementData.newBatteryId}</p></div>
+                        <div className="space-y-6">
+                          <div className="p-6 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-between">
+                            <div className="space-y-1"><p className="text-[10px] font-bold text-slate-500 uppercase">Old Serial ({activeAsset.battery.model})</p><p className="text-xl font-black mono text-slate-300">{activeAsset.battery.id}</p></div>
+                            <ArrowRight className="text-slate-700" size={24} />
+                            <div className="space-y-1 text-right"><p className="text-[10px] font-bold text-slate-500 uppercase">New Serial ({activeAsset.battery.model})</p><p className="text-xl font-black mono text-blue-400">{replacementData.newBatteryId}</p></div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
+                              <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Failure Reason</p>
+                              <p className="text-xs font-black text-amber-500 uppercase tracking-wide">{replacementData.reason}</p>
+                            </div>
+                            <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
+                              <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Exchange Date</p>
+                              <p className="text-xs font-black text-slate-300 mono">{formatDate(replacementData.replacementDate)}</p>
+                            </div>
+                            <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
+                              <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Evidence Status</p>
+                              <p className="text-xs font-black text-blue-400 uppercase tracking-wide">{replacementData.warrantyCardStatus.replace('_', ' ')}</p>
+                            </div>
+                            <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
+                              <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Paid in Account</p>
+                              <p className="text-xs font-black uppercase tracking-wide" style={{ color: replacementData.paidInAccount ? '#10b981' : '#ef4444' }}>{replacementData.paidInAccount ? 'YES' : 'NO'}</p>
+                            </div>
+                            <div className="p-4 bg-amber-900/20 border border-amber-600/30 rounded-xl">
+                              <p className="text-[9px] font-bold text-amber-500/60 uppercase mb-1">Verified Sale Date</p>
+                              <p className="text-xs font-black text-amber-500 mono">{formatDate(replacementData.soldDate)}</p>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex gap-4 items-center">
-                          <button onClick={() => setIsConfirmingReplacement(false)} className="flex-1 py-5 bg-white/5 text-slate-400 font-bold rounded-xl hover:bg-white/10 uppercase tracking-widest text-xs">Back</button>
-                          <button onClick={executeReplacement} disabled={isActionLoading} className="flex-[2] py-5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-xl uppercase tracking-widest text-xs flex items-center justify-center gap-3">{isActionLoading ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />} Finalize Swap</button>
+
+                        <div className="flex flex-col gap-4 justify-center">
+                          <button onClick={executeReplacement} disabled={isActionLoading} className="w-full py-6 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-all shadow-2xl shadow-emerald-900/20 uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-4">{isActionLoading ? <Loader2 className="animate-spin" size={24} /> : <CheckCircle2 size={24} />} Confirm & Finalize Swap</button>
+                          <button onClick={() => setIsConfirmingReplacement(false)} className="w-full py-5 bg-white/5 text-slate-500 font-bold rounded-2xl hover:bg-white/10 hover:text-slate-300 uppercase tracking-widest text-xs transition-all">Cancel & Edit Details</button>
                         </div>
                       </div>
                     </div>
@@ -572,6 +704,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                               <div className="text-xs font-bold text-amber-700 flex items-center gap-1 uppercase"><AlertCircle size={14} /> FAILED: {next.reason}</div>
                               <div className="text-[10px] font-bold text-slate-500 flex items-center gap-1 uppercase pl-5"><ArrowRight size={10} className="text-blue-500" /> Replaced by: <span className="font-mono text-blue-600 cursor-pointer hover:underline" onClick={(e) => { e.stopPropagation(); handleSearch(next.newBatteryId); }}>{next.newBatteryId}</span></div>
                               <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1 uppercase pl-5"><FileText size={10} /> Doc: {formatReference(next.warrantyCardStatus)}</div>
+                              <div className="text-[10px] font-bold flex items-center gap-1 uppercase pl-5" style={{ color: next.paidInAccount ? '#10b981' : '#ef4444' }}>💰 Paid: {next.paidInAccount ? 'YES' : 'NO'}</div>
                             </div>
                           ) : item.status === BatteryStatus.ACTIVE ? (
                             itemExpired ? (

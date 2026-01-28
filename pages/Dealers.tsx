@@ -119,31 +119,34 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
   const fetchTabData = async () => {
     if (!selectedDealer) return;
 
-    let where = `dealerId = ?`;
-    let params: any[] = [selectedDealer.id];
-    let table = 'batteries';
+    if (activeLogTab === 'EXCHANGES') {
+      const result = await Database.getPaginatedReplacements(
+        selectedDealer.id,
+        unitPage + 1,
+        unitsLimit,
+        logSearchQuery || undefined
+      );
+      setPaginatedData(result.data);
+      setTotalItems(result.total);
+    } else {
+      let where = `dealerId = ?`;
+      let params: any[] = [selectedDealer.id];
 
-    if (activeLogTab === 'ACTIVE') {
-      where += ` AND (status = 'ACTIVE' OR status = 'REPLACEMENT') AND datetime(warrantyExpiry) >= datetime('now')`;
-    } else if (activeLogTab === 'EXPIRED') {
-      where += ` AND (status = 'EXPIRED' OR datetime(warrantyExpiry) < datetime('now'))`;
-    } else if (activeLogTab === 'EXCHANGES') {
-      table = 'replacements';
-    }
+      if (activeLogTab === 'ACTIVE') {
+        where += ` AND (status = 'ACTIVE' OR status = 'REPLACEMENT') AND datetime(warrantyExpiry) >= datetime('now')`;
+      } else if (activeLogTab === 'EXPIRED') {
+        where += ` AND (status = 'EXPIRED' OR datetime(warrantyExpiry) < datetime('now'))`;
+      }
 
-    if (logSearchQuery) {
-      if (activeLogTab === 'EXCHANGES') {
-        where += ` AND (oldBatteryId LIKE ? OR newBatteryId LIKE ?)`;
-        params.push(`%${logSearchQuery}%`, `%${logSearchQuery}%`);
-      } else {
+      if (logSearchQuery) {
         where += ` AND id LIKE ?`;
         params.push(`%${logSearchQuery}%`);
       }
-    }
 
-    const result = await Database.getPaginated<any>(table, unitPage + 1, unitsLimit, where, params);
-    setPaginatedData(result.data);
-    setTotalItems(result.total);
+      const result = await Database.getPaginated<any>('batteries', unitPage + 1, unitsLimit, where, params);
+      setPaginatedData(result.data);
+      setTotalItems(result.total);
+    }
   };
 
   useEffect(() => {
@@ -290,40 +293,86 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-black border-b border-slate-100 uppercase tracking-widest">
-                  <th className="px-8 py-5 pl-10">Identifier</th>
-                  <th className="px-8 py-5">Product Model</th>
-                  <th className="px-8 py-5">Status Info</th>
-                  <th className="px-8 py-5">{activeLogTab === 'EXCHANGES' ? 'Reason' : 'Customer'}</th>
-                  <th className="px-8 py-5 text-right pr-10">{activeLogTab === 'EXCHANGES' ? 'Date' : 'Timeline'}</th>
+                  {activeLogTab === 'EXCHANGES' ? (
+                    <>
+                      <th className="px-4 py-5 pl-8">Old Battery</th>
+                      <th className="px-4 py-5">New Battery</th>
+                      <th className="px-4 py-5">Model</th>
+                      <th className="px-4 py-5">Reason</th>
+                      <th className="px-4 py-5">Sale Date</th>
+                      <th className="px-4 py-5">Exchange Date</th>
+                      <th className="px-4 py-5">Card Given</th>
+                      <th className="px-4 py-5">Paid in Account</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-8 py-5 pl-10">Identifier</th>
+                      <th className="px-8 py-5">Product Model</th>
+                      <th className="px-8 py-5">Status Info</th>
+                      <th className="px-8 py-5 text-right pr-10">Timeline</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {paginatedData.map((item: any) => (
-                  <tr key={item.id} onClick={() => onNavigateToHub && onNavigateToHub(item.id || item.newBatteryId)} className="hover:bg-blue-50/30 transition-all cursor-pointer group">
-                    <td className="px-8 py-5 pl-10 font-bold text-slate-900 text-xs uppercase">
-                      {activeLogTab === 'EXCHANGES' ? (<div className="flex items-center gap-2"><span className="text-slate-400 line-through">{item.oldBatteryId}</span><ArrowRight size={14} className="text-slate-300" /><span className="text-blue-600">{item.newBatteryId}</span></div>) : item.id}
-                    </td>
-                    <td className="px-8 py-5 font-bold text-slate-500 text-xs uppercase">{activeLogTab === 'EXCHANGES' ? '-' : item.model}</td>
-                    <td className="px-8 py-5">
-                      {activeLogTab === 'EXCHANGES' ? (
-                        <span className="px-2 py-1 bg-amber-50 text-amber-600 rounded text-[9px] font-black uppercase tracking-widest border border-amber-100">Swapped</span>
-                      ) : (
-                        <StatusDisplay
-                          status={item.status}
-                          isExpired={item.warrantyExpiry ? new Date() > new Date(item.warrantyExpiry) : false}
-                          dealerId={item.dealerId}
-                          variant="badge"
-                        />
-                      )}
-                    </td>
-                    <td className="px-8 py-5">
-                      {activeLogTab === 'EXCHANGES' && <span className="font-bold text-xs text-slate-700">{item.reason}</span>}
-                      {(activeLogTab === 'ACTIVE' || activeLogTab === 'EXPIRED') && <div className="space-y-0.5"><p className="font-bold text-xs text-slate-900">{item.customerName}</p></div>}
-                    </td>
-                    <td className="px-8 py-5 text-right pr-10 font-mono text-[10px] text-slate-500 font-bold">
-                      {activeLogTab === 'EXCHANGES' && formatDate(item.replacementDate)}
-                      {(activeLogTab === 'ACTIVE' || activeLogTab === 'EXPIRED') && <div><span className="text-slate-900">{formatDate(item.activationDate)}</span><span className="text-slate-300 mx-2">→</span><span className="text-rose-600">{formatDate(item.warrantyExpiry)}</span></div>}
-                    </td>
+                  <tr
+                    key={item.id}
+                    onClick={() => onNavigateToHub && onNavigateToHub(activeLogTab === 'EXCHANGES' ? item.newBatteryId : item.id)}
+                    className="hover:bg-blue-50/30 transition-all cursor-pointer group"
+                  >
+                    {activeLogTab === 'EXCHANGES' ? (
+                      <>
+                        <td className="px-4 py-5 pl-8 font-mono text-xs text-slate-500 line-through">{item.oldBatteryId}</td>
+                        <td className="px-4 py-5 font-mono text-xs text-blue-600 font-bold">{item.newBatteryId}</td>
+                        <td className="px-4 py-5 font-bold text-slate-700 text-xs uppercase">
+                          {item.batteryModel || '-'}
+                        </td>
+                        <td className="px-4 py-5 text-xs text-slate-700 font-medium">{item.reason}</td>
+                        <td className="px-4 py-5 font-mono text-[10px] text-slate-600">{item.soldDate ? formatDate(item.soldDate) : '-'}</td>
+                        <td className="px-4 py-5 font-mono text-[10px] text-slate-600">{formatDate(item.replacementDate)}</td>
+                        <td className="px-4 py-5">
+                          <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wide ${item.warrantyCardStatus === 'RECEIVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                            item.warrantyCardStatus === 'XEROX' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                              item.warrantyCardStatus === 'WHATSAPP' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                                'bg-slate-50 text-slate-500 border border-slate-200'
+                            }`}>
+                            {item.warrantyCardStatus === 'RECEIVED' ? 'Original' :
+                              item.warrantyCardStatus === 'XEROX' ? 'Xerox' :
+                                item.warrantyCardStatus === 'WHATSAPP' ? 'Digital' : 'None'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-5" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={async () => {
+                              const newValue = !item.paidInAccount;
+                              await Database.updateReplacementPaidStatus(item.id, newValue);
+                              fetchTabData();
+                            }}
+                            className={`px-3 py-1.5 rounded text-[9px] font-bold uppercase tracking-wide transition-all hover:shadow-md ${item.paidInAccount ? 'bg-emerald-100 text-emerald-800 border-2 border-emerald-300 hover:bg-emerald-200' : 'bg-rose-100 text-rose-800 border-2 border-rose-300 hover:bg-rose-200'
+                              }`}
+                          >
+                            {item.paidInAccount ? '✓ YES' : '✗ NO'}
+                          </button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-8 py-5 pl-10 font-bold text-slate-900 text-xs uppercase">{item.id}</td>
+                        <td className="px-8 py-5 font-bold text-slate-500 text-xs uppercase">{item.model}</td>
+                        <td className="px-8 py-5">
+                          <StatusDisplay
+                            status={item.status}
+                            isExpired={item.warrantyExpiry ? new Date() > new Date(item.warrantyExpiry) : false}
+                            dealerId={item.dealerId}
+                            variant="badge"
+                          />
+                        </td>
+                        <td className="px-8 py-5 text-right pr-10 font-mono text-[10px] text-slate-500 font-bold">
+                          <div><span className="text-slate-900">{formatDate(item.activationDate)}</span><span className="text-slate-300 mx-2">→</span><span className="text-rose-600">{formatDate(item.warrantyExpiry)}</span></div>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
