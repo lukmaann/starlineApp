@@ -37,12 +37,30 @@ export interface BatteryModel {
 
 export type WarrantyCardStatus = 'RECEIVED' | 'XEROX' | 'WHATSAPP' | 'NOT_RECEIVED';
 
+export type DateCorrectionSource = 'WARRANTY_CARD' | 'DEALER_REPORT' | 'MANUAL_OVERRIDE';
+
+export enum WarrantyStatus {
+  VALID = 'VALID',
+  EXPIRED = 'EXPIRED',
+  GRACE_PERIOD = 'GRACE_PERIOD',
+  CORRECTABLE = 'CORRECTABLE'
+}
+
+export interface DateCorrection {
+  correctedAt: string;
+  correctedBy: string;
+  oldDate: string;
+  newDate: string;
+  reason: string;
+  proofDocument?: string;
+}
+
 export interface Battery {
   id: string; // Serial Number
   model: string;
   capacity: string;
   manufactureDate: string;
-  activationDate?: string; // When warranty starts
+  activationDate?: string; // When warranty starts (dealer received)
   warrantyExpiry?: string;
   customerName?: string;
   customerPhone?: string;
@@ -53,8 +71,15 @@ export interface Battery {
   originalBatteryId?: string;
   previousBatteryId?: string;
   nextBatteryId?: string;
-  // Added warrantyCardStatus to Battery interface
   warrantyCardStatus?: WarrantyCardStatus;
+
+  // Warranty Date Management Fields
+  actualSaleDate?: string; // Real customer purchase date (from warranty card)
+  actualSaleDateSource?: DateCorrectionSource;
+  actualSaleDateProof?: string; // File path to warranty card image
+  warrantyCalculationBase?: 'ACTIVATION' | 'ACTUAL_SALE';
+  gracePeriodUsed?: boolean; // Track if grace period was utilized
+  dateCorrections?: DateCorrection[]; // Audit trail for date corrections
 }
 
 export interface Dealer {
@@ -76,6 +101,7 @@ export interface Replacement {
   problemDescription: string;
   warrantyCardStatus: WarrantyCardStatus;
   paidInAccount: boolean;
+  soldDate?: string; // Corrected Original Sale Date
 }
 
 export interface Sale {

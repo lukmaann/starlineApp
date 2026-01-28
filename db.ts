@@ -1,4 +1,5 @@
 import { Battery, Dealer, Replacement, BatteryModel, Sale, WarrantyCardStatus, BatteryStatus } from './types';
+import { validateName, validatePhone } from './utils/validation';
 
 declare global {
   interface Window {
@@ -87,19 +88,32 @@ export class Database {
   }
 
   static async addBattery(battery: Battery): Promise<void> {
-    await this.run(
-      `INSERT INTO batteries (
-        id, model, capacity, manufactureDate, status, 
-        replacementCount, warrantyMonths, dealerId,
-        activationDate, customerName, customerPhone, warrantyExpiry
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        battery.id, battery.model, battery.capacity, battery.manufactureDate,
-        battery.status, battery.replacementCount, battery.warrantyMonths, battery.dealerId || null,
-        battery.activationDate || null, battery.customerName || null,
-        battery.customerPhone || null, battery.warrantyExpiry || null
-      ]
-    );
+    // ✅ Bug #8: Validate warranty months
+    if (battery.warrantyMonths < 1 || battery.warrantyMonths > 120) {
+      throw new Error('Warranty months must be between 1 and 120');
+    }
+
+    try {
+      await this.run(
+        `INSERT INTO batteries (
+          id, model, capacity, manufactureDate, status, 
+          replacementCount, warrantyMonths, dealerId,
+          activationDate, customerName, customerPhone, warrantyExpiry
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          battery.id, battery.model, battery.capacity, battery.manufactureDate,
+          battery.status, battery.replacementCount, battery.warrantyMonths, battery.dealerId || null,
+          battery.activationDate || null, battery.customerName || null,
+          battery.customerPhone || null, battery.warrantyExpiry || null
+        ]
+      );
+    } catch (err: any) {
+      // ✅ Bug #2: Handle duplicate battery ID gracefully
+      if (err.message && err.message.includes('UNIQUE constraint failed')) {
+        throw new Error(`Battery ${battery.id} already exists in the system`);
+      }
+      throw err;
+    }
   }
 
   static async getBattery(id: string): Promise<Battery | undefined> {
@@ -112,44 +126,67 @@ export class Database {
     sale?: Sale;
     originalSale?: Sale;
     lineage: Battery[];
+    lineageSales: Sale[];
     replacements: Replacement[];
   } | null> {
     const battery = await this.getBattery(term);
     if (!battery) return null;
 
-    // Parallel fetch for speed
-    const [sales, replacements] = await Promise.all([
-      this.query<Sale>('SELECT * FROM sales WHERE batteryId = ?', [battery.id]),
-      this.query<Replacement>('SELECT * FROM replacements WHERE oldBatteryId = ? OR newBatteryId = ? ORDER BY rowid DESC', [battery.id, battery.id])
-    ]);
-
-    const sale = sales[0];
-
-    // Lineage Trace (Recursive Query simplified for Async)
-    let lineage: Battery[] = [battery];
-    let originalSale: Sale | undefined = sale;
-
-    // Trace Backwards (Ancestors)
-    let current = battery;
-    while (current.previousBatteryId) {
-      const prev = await this.getBattery(current.previousBatteryId);
+    // ✅ STEP 1: Find the ORIGINAL battery (trace backwards to start of chain)
+    let original = battery;
+    while (original.previousBatteryId) {
+      const prev = await this.getBattery(original.previousBatteryId);
       if (prev) {
-        lineage.unshift(prev);
-        current = prev;
-        // If we find an older sale, that's the warranty origin
-        const prevSales = await this.query<Sale>('SELECT * FROM sales WHERE batteryId = ?', [prev.id]);
-        if (prevSales.length > 0) originalSale = prevSales[0];
+        original = prev;
       } else {
         break;
       }
     }
 
+    // ✅ STEP 2: Build COMPLETE chain from original forward through ALL replacements
+    let lineage: Battery[] = [original];
+    let current = original;
+
+    while (current.nextBatteryId) {
+      const next = await this.getBattery(current.nextBatteryId);
+      if (next) {
+        lineage.push(next);
+        current = next;
+      } else {
+        break;
+      }
+    }
+
+    // ✅ STEP 3: Fetch ALL sales and replacements for entire chain
+    const lineageIds = lineage.map(b => b.id);
+    const placeholders = lineageIds.map(() => '?').join(',');
+
+    const [allSales, allReplacements] = await Promise.all([
+      lineageIds.length > 0
+        ? this.query<Sale>(
+          `SELECT * FROM sales WHERE batteryId IN (${placeholders})`,
+          lineageIds
+        )
+        : Promise.resolve([]),
+      lineageIds.length > 0
+        ? this.query<Replacement>(
+          `SELECT * FROM replacements WHERE oldBatteryId IN (${placeholders}) OR newBatteryId IN (${placeholders}) ORDER BY replacementDate ASC`,
+          [...lineageIds, ...lineageIds]
+        )
+        : Promise.resolve([])
+    ]);
+
+    // Find the original sale (first sale in chain)
+    const originalSale = allSales.find(s => s.batteryId === original.id);
+    const currentSale = allSales.find(s => s.batteryId === battery.id);
+
     return {
       battery,
-      sale,
+      sale: currentSale,
       originalSale,
       lineage,
-      replacements
+      lineageSales: allSales,
+      replacements: allReplacements
     };
   }
 
@@ -373,6 +410,17 @@ export class Database {
   }
 
   static async registerSale(id: string, date: string, customerName: string, customerPhone: string): Promise<void> {
+    // ✅ Bug #9: Validate customer data
+    const nameValidation = validateName(customerName);
+    if (!nameValidation.valid) {
+      throw new Error(nameValidation.error || 'Invalid customer name');
+    }
+
+    const phoneValidation = validatePhone(customerPhone);
+    if (!phoneValidation.valid) {
+      throw new Error(phoneValidation.error || 'Invalid phone number');
+    }
+
     const battery = await this.getBattery(id);
     if (!battery) throw new Error('Battery not found');
 
@@ -392,6 +440,16 @@ export class Database {
   }
 
   static async addSale(sale: Sale): Promise<void> {
+    // ✅ Bug #14: Check for existing sale
+    const existing = await this.query<Sale>(
+      'SELECT * FROM sales WHERE batteryId = ? AND isBilled = 1',
+      [sale.batteryId]
+    );
+
+    if (existing.length > 0) {
+      throw new Error(`Battery ${sale.batteryId} already has an active sale record`);
+    }
+
     // 1. Insert Sale Record
     await this.run(
       `INSERT INTO sales (
@@ -415,17 +473,37 @@ export class Database {
     rep: Replacement,
     meta?: { customerName: string; customerPhone: string; warrantyExpiry: string; correctedOriginalSaleDate?: string }
   ): Promise<void> {
+    // ✅ Bug #13: Check for circular reference
+    let checkId = rep.newBatteryId;
+    const visited = new Set<string>();
+
+    while (checkId) {
+      if (visited.has(checkId)) {
+        throw new Error('Circular reference detected in battery chain');
+      }
+      visited.add(checkId);
+
+      const battery = await this.getBattery(checkId);
+      if (!battery) break;
+      checkId = battery.previousBatteryId || '';
+
+      if (checkId === rep.oldBatteryId) {
+        throw new Error('Invalid replacement: new battery already references old battery in its chain');
+      }
+    }
+
     // Transaction-like sequence
 
     // 1. Insert Replacement Record
     await this.run(
       `INSERT INTO replacements (
         id, oldBatteryId, newBatteryId, dealerId, replacementDate, 
-        reason, problemDescription, warrantyCardStatus
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        reason, problemDescription, warrantyCardStatus, paidInAccount
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         rep.id, rep.oldBatteryId, rep.newBatteryId, rep.dealerId,
-        rep.replacementDate, rep.reason, rep.problemDescription, rep.warrantyCardStatus
+        rep.replacementDate, rep.reason, rep.problemDescription, rep.warrantyCardStatus,
+        rep.paidInAccount ? 1 : 0
       ]
     );
 
@@ -626,4 +704,119 @@ export class Database {
       [date, customerName, customerPhone, expiryDate, dealerId, warrantyCardStatus, id]
     );
   }
+
+  // --- WARRANTY DATE MANAGEMENT ---
+
+  /**
+   * Correct the sale date for a battery with audit trail
+   * ✅ Bug #3: Cascades changes through replacement chain
+   * ✅ Bug #6: Tracks grace period usage
+   */
+  static async correctSaleDate(
+    batteryId: string,
+    actualSaleDate: string,
+    source: 'WARRANTY_CARD' | 'DEALER_REPORT' | 'MANUAL_OVERRIDE',
+    proofPath?: string,
+    reason?: string
+  ): Promise<void> {
+    const battery = await this.getBattery(batteryId);
+    if (!battery) throw new Error('Battery not found');
+
+    // Calculate new expiry date
+    const warrantyMonths = battery.warrantyMonths || 24;
+    const newExpiry = new Date(actualSaleDate);
+    newExpiry.setMonth(newExpiry.getMonth() + warrantyMonths);
+    const newExpiryStr = newExpiry.toISOString().split('T')[0];
+
+    // ✅ Bug #6: Check if we're in grace period
+    const today = new Date();
+    const originalExpiry = new Date(battery.warrantyExpiry || '');
+    const gracePeriodEnd = new Date(originalExpiry);
+    gracePeriodEnd.setDate(gracePeriodEnd.getDate() + 60);
+    const isInGracePeriod = today > originalExpiry && today <= gracePeriodEnd;
+
+    // Update current battery
+    await this.run(
+      `UPDATE batteries SET 
+        actualSaleDate = ?,
+        actualSaleDateSource = ?,
+        actualSaleDateProof = ?,
+        warrantyCalculationBase = 'ACTUAL_SALE',
+        warrantyExpiry = ?,
+        activationDate = ?,
+        gracePeriodUsed = ?
+      WHERE id = ?`,
+      [actualSaleDate, source, proofPath || null, newExpiryStr, actualSaleDate,
+        isInGracePeriod ? 1 : 0, batteryId]
+    );
+
+    // ✅ Bug #3: CASCADE - Update all replacement batteries in the chain
+    let currentBatteryId = battery.nextBatteryId;
+    while (currentBatteryId) {
+      const nextBattery = await this.getBattery(currentBatteryId);
+      if (!nextBattery) break;
+
+      // Get the replacement record to find when this battery was activated
+      const replacementRecord = await this.query<any>(
+        `SELECT replacementDate FROM replacements WHERE newBatteryId = ?`,
+        [currentBatteryId]
+      );
+
+      if (replacementRecord[0]) {
+        // Calculate remaining warranty from the replacement date
+        // Use the corrected sale date as the base, calculate how much warranty was left
+        const replacementDate = new Date(replacementRecord[0].replacementDate);
+        const correctedSaleDate = new Date(actualSaleDate);
+        const originalExpiryFromCorrected = new Date(correctedSaleDate);
+        originalExpiryFromCorrected.setMonth(originalExpiryFromCorrected.getMonth() + warrantyMonths);
+
+        // Calculate remaining months at time of replacement
+        const monthsUsed = Math.floor((replacementDate.getTime() - correctedSaleDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
+        const remainingMonths = Math.max(0, warrantyMonths - monthsUsed);
+
+        // New expiry for replacement battery
+        const newReplacementExpiry = new Date(replacementDate);
+        newReplacementExpiry.setMonth(newReplacementExpiry.getMonth() + remainingMonths);
+
+        await this.run(
+          `UPDATE batteries SET 
+            warrantyExpiry = ?,
+            actualSaleDate = ?,
+            warrantyCalculationBase = 'ACTUAL_SALE',
+            activationDate = ?
+          WHERE id = ?`,
+          [newReplacementExpiry.toISOString().split('T')[0], actualSaleDate,
+          replacementRecord[0].replacementDate, currentBatteryId]
+        );
+      }
+
+      currentBatteryId = nextBattery.nextBatteryId;
+    }
+  }
+
+  /**
+   * Get effective warranty dates for a battery (prioritizes actualSaleDate)
+   */
+  static async getEffectiveWarrantyDates(battery: Battery): Promise<{
+    startDate: string;
+    expiryDate: string;
+    calculationBase: 'ACTIVATION' | 'ACTUAL_SALE';
+  }> {
+    const useActualSale = battery.actualSaleDate && battery.warrantyCalculationBase === 'ACTUAL_SALE';
+
+    if (useActualSale) {
+      return {
+        startDate: battery.actualSaleDate!,
+        expiryDate: battery.warrantyExpiry || '',
+        calculationBase: 'ACTUAL_SALE'
+      };
+    }
+
+    return {
+      startDate: battery.activationDate || battery.manufactureDate,
+      expiryDate: battery.warrantyExpiry || '',
+      calculationBase: 'ACTIVATION'
+    };
+  }
 }
+

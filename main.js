@@ -114,6 +114,9 @@ function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_batteries_dealerId_status ON batteries(dealerId, status);
       CREATE INDEX IF NOT EXISTS idx_batteries_originalBatteryId ON batteries(originalBatteryId);
       CREATE INDEX IF NOT EXISTS idx_dealers_name ON dealers(name);
+      
+      /* ✅ Bug #2: Prevent duplicate battery serial numbers */
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_batteries_id_unique ON batteries(id);
     `;
     db.exec(schema);
 
@@ -127,6 +130,27 @@ function initDatabase() {
         console.error('Migration warning:', err.message);
       }
     }
+
+    // Migration: Add warranty date management columns
+    const warrantyDateColumns = [
+      { name: 'actualSaleDate', type: 'TEXT' },
+      { name: 'actualSaleDateSource', type: 'TEXT' },
+      { name: 'actualSaleDateProof', type: 'TEXT' },
+      { name: 'warrantyCalculationBase', type: 'TEXT' },
+      { name: 'gracePeriodUsed', type: 'INTEGER DEFAULT 0' }
+    ];
+
+    warrantyDateColumns.forEach(col => {
+      try {
+        db.exec(`ALTER TABLE batteries ADD COLUMN ${col.name} ${col.type}`);
+        console.log(`Migration: Added ${col.name} column to batteries table`);
+      } catch (err) {
+        // Column might already exist, ignore error
+        if (!err.message.includes('duplicate column')) {
+          console.error(`Migration warning for ${col.name}:`, err.message);
+        }
+      }
+    });
 
     console.log('Database initialized at:', DB_PATH);
   } catch (err) {
@@ -153,7 +177,7 @@ function createWindow() {
   if (isDev) {
     win.loadURL('http://localhost:3100');
   } else {
-    win.loadFile(path.join(__dirname, 'dist', 'index.html'));
+    win.loadFile(path.join(__dirname, 'out', 'index.html'));
   }
 }
 

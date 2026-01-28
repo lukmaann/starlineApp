@@ -292,7 +292,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
           <div className="flex-1 overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-black border-b border-slate-100 uppercase tracking-widest">
+                <tr className="bg-slate-50/50 text-slate-400 text-xs font-black border-b border-slate-100 uppercase tracking-widest">
                   {activeLogTab === 'EXCHANGES' ? (
                     <>
                       <th className="px-4 py-5 pl-8">Old Battery</th>
@@ -323,16 +323,16 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                   >
                     {activeLogTab === 'EXCHANGES' ? (
                       <>
-                        <td className="px-4 py-5 pl-8 font-mono text-xs text-slate-500 line-through">{item.oldBatteryId}</td>
-                        <td className="px-4 py-5 font-mono text-xs text-blue-600 font-bold">{item.newBatteryId}</td>
-                        <td className="px-4 py-5 font-bold text-slate-700 text-xs uppercase">
+                        <td className="px-4 py-5 pl-8 font-mono text-sm text-slate-500 line-through">{item.oldBatteryId}</td>
+                        <td className="px-4 py-5 font-mono text-sm text-blue-600 font-bold">{item.newBatteryId}</td>
+                        <td className="px-4 py-5 font-bold text-slate-700 text-sm uppercase">
                           {item.batteryModel || '-'}
                         </td>
-                        <td className="px-4 py-5 text-xs text-slate-700 font-medium">{item.reason}</td>
-                        <td className="px-4 py-5 font-mono text-[10px] text-slate-600">{item.soldDate ? formatDate(item.soldDate) : '-'}</td>
-                        <td className="px-4 py-5 font-mono text-[10px] text-slate-600">{formatDate(item.replacementDate)}</td>
+                        <td className="px-4 py-5 text-sm text-slate-700 font-medium">{item.reason}</td>
+                        <td className="px-4 py-5 font-mono text-xs text-slate-600">{item.soldDate ? formatDate(item.soldDate) : '-'}</td>
+                        <td className="px-4 py-5 font-mono text-xs text-slate-600">{formatDate(item.replacementDate)}</td>
                         <td className="px-4 py-5">
-                          <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wide ${item.warrantyCardStatus === 'RECEIVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide ${item.warrantyCardStatus === 'RECEIVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
                             item.warrantyCardStatus === 'XEROX' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
                               item.warrantyCardStatus === 'WHATSAPP' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
                                 'bg-slate-50 text-slate-500 border border-slate-200'
@@ -349,7 +349,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                               await Database.updateReplacementPaidStatus(item.id, newValue);
                               fetchTabData();
                             }}
-                            className={`px-3 py-1.5 rounded text-[9px] font-bold uppercase tracking-wide transition-all hover:shadow-md ${item.paidInAccount ? 'bg-emerald-100 text-emerald-800 border-2 border-emerald-300 hover:bg-emerald-200' : 'bg-rose-100 text-rose-800 border-2 border-rose-300 hover:bg-rose-200'
+                            className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wide transition-all hover:shadow-md ${item.paidInAccount ? 'bg-emerald-100 text-emerald-800 border-2 border-emerald-300 hover:bg-emerald-200' : 'bg-rose-100 text-rose-800 border-2 border-rose-300 hover:bg-rose-200'
                               }`}
                           >
                             {item.paidInAccount ? '✓ YES' : '✗ NO'}
@@ -358,8 +358,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                       </>
                     ) : (
                       <>
-                        <td className="px-8 py-5 pl-10 font-bold text-slate-900 text-xs uppercase">{item.id}</td>
-                        <td className="px-8 py-5 font-bold text-slate-500 text-xs uppercase">{item.model}</td>
+                        <td className="px-8 py-5 pl-10 font-bold text-slate-900 text-sm uppercase">{item.id}</td>
+                        <td className="px-8 py-5 font-bold text-slate-500 text-sm uppercase">{item.model}</td>
                         <td className="px-8 py-5">
                           <StatusDisplay
                             status={item.status}
@@ -368,7 +368,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                             variant="badge"
                           />
                         </td>
-                        <td className="px-8 py-5 text-right pr-10 font-mono text-[10px] text-slate-500 font-bold">
+                        <td className="px-8 py-5 text-right pr-10 font-mono text-xs text-slate-500 font-bold">
                           <div><span className="text-slate-900">{formatDate(item.activationDate)}</span><span className="text-slate-300 mx-2">→</span><span className="text-rose-600">{formatDate(item.warrantyExpiry)}</span></div>
                         </td>
                       </>
