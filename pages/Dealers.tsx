@@ -17,6 +17,7 @@ import {
   TrendingDown, AlertTriangle, FileText, Download, Printer,
   LayoutGrid, Mail, Building as BuildingIcon
 } from 'lucide-react';
+import { formatDate } from '../utils';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area
@@ -381,9 +382,9 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                       {(activeLogTab === 'ACTIVE' || activeLogTab === 'EXPIRED') && <div className="space-y-0.5"><p className="font-bold text-xs text-slate-900">{item.customerName}</p></div>}
                     </td>
                     <td className="px-8 py-5 text-right pr-10 font-mono text-[10px] text-slate-500 font-bold">
-                      {activeLogTab === 'EXCHANGES' && item.replacementDate}
-                      {activeLogTab === 'WAREHOUSE' && item.manufactureDate}
-                      {(activeLogTab === 'ACTIVE' || activeLogTab === 'EXPIRED') && <div><span className="text-slate-900">{item.activationDate}</span><span className="text-slate-300 mx-2">→</span><span className="text-rose-600">{item.warrantyExpiry}</span></div>}
+                      {activeLogTab === 'EXCHANGES' && formatDate(item.replacementDate)}
+                      {activeLogTab === 'WAREHOUSE' && formatDate(item.manufactureDate)}
+                      {(activeLogTab === 'ACTIVE' || activeLogTab === 'EXPIRED') && <div><span className="text-slate-900">{formatDate(item.activationDate)}</span><span className="text-slate-300 mx-2">→</span><span className="text-rose-600">{formatDate(item.warrantyExpiry)}</span></div>}
                     </td>
                   </tr>
                 ))}

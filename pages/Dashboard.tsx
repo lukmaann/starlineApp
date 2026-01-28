@@ -4,6 +4,7 @@ import { Database } from '../db';
 import { BatteryStatus, Battery, Replacement } from '../types';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { ShieldCheck, Battery as BatteryIcon, Activity, RefreshCw, Zap, Users } from 'lucide-react';
+import { formatDate } from '../utils';
 
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<any[]>([]);
@@ -14,11 +15,11 @@ const Dashboard: React.FC = () => {
     const load = async () => {
       const allBatteries = await Database.getAll<Battery>('batteries');
       const allReplacements = await Database.getAll<Replacement>('replacements');
-      
+
       const activeWarranties = allBatteries.filter(b => b.status === BatteryStatus.ACTIVE).length;
       const claimedUnits = allReplacements.length;
       const totalDealers = await Database.getCount('dealers');
-      
+
       setStats([
         { label: 'Active', value: activeWarranties.toLocaleString(), icon: ShieldCheck, color: 'bg-emerald-600', text: 'Live' },
         { label: 'Exchanges', value: claimedUnits.toLocaleString(), icon: RefreshCw, color: 'bg-blue-600', text: 'Done' },
@@ -80,7 +81,7 @@ const Dashboard: React.FC = () => {
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Issue: {claim.reason}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] font-extrabold text-slate-400 uppercase">{new Date(claim.replacementDate).toLocaleDateString()}</p>
+                  <p className="text-[10px] font-extrabold text-slate-400 uppercase">{formatDate(claim.replacementDate)}</p>
                 </div>
               </div>
             ))}

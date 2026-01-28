@@ -11,6 +11,7 @@ import {
   Users, Package, History, ShieldCheck, IndianRupee,
   Trophy, ArrowUpRight, Percent, Building2, MapPin
 } from 'lucide-react';
+import { formatDate } from '../utils';
 
 const formatINR = (value: number) => {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
@@ -99,7 +100,7 @@ const Reports: React.FC = () => {
                 </div>
                 <div className="text-right">
                   <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-0.5">Expires</p>
-                  <p className="text-xs font-black text-slate-600 font-mono">{new Date(s.warrantyExpiry).toLocaleDateString()}</p>
+                  <p className="text-xs font-black text-slate-600 font-mono">{formatDate(s.warrantyExpiry)}</p>
                 </div>
               </div>
             ))}

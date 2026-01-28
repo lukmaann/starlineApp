@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Database } from '../db';
 import { BatteryStatus, Battery, Dealer, WarrantyCardStatus } from '../types';
 import { UserPlus, Search, Calendar, Phone, User, Store, ShieldCheck, Zap, Activity, ChevronRight, Copy, Smartphone, X } from 'lucide-react';
+import { formatDate } from '../utils';
 
 const Registration: React.FC = () => {
   const [db, setDb] = useState<{ batteries: Battery[], dealers: Dealer[] }>({ batteries: [], dealers: [] });
@@ -233,7 +234,7 @@ const Registration: React.FC = () => {
                 <div className="h-px bg-slate-200" />
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-black text-slate-400">DATE</span>
-                  <span className="text-sm font-black text-emerald-600">{confirmationData.date}</span>
+                  <span className="text-sm font-black text-emerald-600">{formatDate(confirmationData.date)}</span>
                 </div>
               </div>
             </div>

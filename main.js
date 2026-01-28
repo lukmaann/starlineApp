@@ -103,12 +103,16 @@ function initDatabase() {
 
       /* IDENTIFIED MISSING INDEXES FOR SCALABILITY */
       CREATE INDEX IF NOT EXISTS idx_sales_batteryId ON sales(batteryId);
+      CREATE INDEX IF NOT EXISTS idx_sales_dealerId ON sales(dealerId);
+      CREATE INDEX IF NOT EXISTS idx_sales_warrantyExpiry ON sales(warrantyExpiry);
       CREATE INDEX IF NOT EXISTS idx_replacements_oldBatteryId ON replacements(oldBatteryId);
       CREATE INDEX IF NOT EXISTS idx_replacements_newBatteryId ON replacements(newBatteryId);
       CREATE INDEX IF NOT EXISTS idx_replacements_dealerId ON replacements(dealerId);
       CREATE INDEX IF NOT EXISTS idx_batteries_dealerId ON batteries(dealerId);
       CREATE INDEX IF NOT EXISTS idx_batteries_status ON batteries(status);
+      CREATE INDEX IF NOT EXISTS idx_batteries_dealerId_status ON batteries(dealerId, status);
       CREATE INDEX IF NOT EXISTS idx_batteries_originalBatteryId ON batteries(originalBatteryId);
+      CREATE INDEX IF NOT EXISTS idx_dealers_name ON dealers(name);
     `;
     db.exec(schema);
     console.log('Database initialized at:', DB_PATH);

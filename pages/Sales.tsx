@@ -8,6 +8,7 @@ import {
   FileText, Activity, ShieldCheck, ChevronRight, Calendar,
   Printer, Shield, Hash, MapPin, BadgeCheck, Receipt
 } from 'lucide-react';
+import { formatDate } from '../utils';
 
 const formatINR = (v: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(v);
 
@@ -56,7 +57,7 @@ const Invoice: React.FC<{ sale: Sale; dealer: Dealer | null; battery: Battery | 
             <h2 className="text-4xl font-black text-slate-900 mb-3 border-b-2 border-slate-100 pb-2">TAX INVOICE</h2>
             <div className="space-y-1.5 text-xs">
               <p className="flex justify-end items-center"><span className="text-slate-400 font-black mr-3">INVOICE NO:</span> <span className="font-black text-slate-900">{sale.id}</span></p>
-              <p className="flex justify-end items-center"><span className="text-slate-400 font-black mr-3">DATE:</span> <span className="font-black text-slate-900">{new Date(sale.saleDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</span></p>
+              <p className="flex justify-end items-center"><span className="text-slate-400 font-black mr-3">DATE:</span> <span className="font-black text-slate-900">{formatDate(sale.saleDate)}</span></p>
               <p className="flex justify-end items-center"><span className="text-slate-400 font-black mr-3">PLACE OF SUPPLY:</span> <span className="font-black text-slate-900">MAHARASHTRA (27)</span></p>
             </div>
           </div>
@@ -130,7 +131,7 @@ const Invoice: React.FC<{ sale: Sale; dealer: Dealer | null; battery: Battery | 
                 <Shield size={16} className="mr-2 text-blue-600" /> TERMS & WARRANTY PROTOCOL
               </h4>
               <ul className="space-y-3 text-[10px] font-bold text-slate-600 list-disc pl-5 leading-relaxed">
-                <li>WARRANTY VALID FROM <span className="text-slate-900 font-black underline">{new Date(sale.warrantyStartDate).toLocaleDateString('en-IN')}</span> UNTIL <span className="text-rose-600 font-black underline">{new Date(sale.warrantyExpiry).toLocaleDateString('en-IN')}</span>.</li>
+                <li>WARRANTY VALID FROM <span className="text-slate-900 font-black underline">{formatDate(sale.warrantyStartDate)}</span> UNTIL <span className="text-rose-600 font-black underline">{formatDate(sale.warrantyExpiry)}</span>.</li>
                 <li>WARRANTY IS LIMITED TO REPLACEMENT OF DEFECTIVE CELLS UNDER NORMAL USE.</li>
                 <li>PHYSICAL DAMAGE, OVER-CHARGING, OR SULPHATION DUE TO UNDER-CHARGING VOIDS ALL CLAIMS.</li>
                 <li>ORIGINAL TAX INVOICE AND GUARANTEE CARD ARE MANDATORY FOR PROCESSING CLAIMS.</li>

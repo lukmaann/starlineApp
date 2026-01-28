@@ -2,6 +2,7 @@
 import React from 'react';
 import { Battery, Replacement, Dealer, BatteryStatus } from '../types';
 import { Zap, ShieldCheck, MapPin, Store, History } from 'lucide-react';
+import { formatDate } from '../utils';
 
 interface HistoryReportProps {
     battery: Battery;
@@ -15,10 +16,6 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ battery, lineage, replace
     const getDealerName = (id?: string) => dealers.find(d => d.id === id)?.name || 'UNKNOWN PARTNER';
     const getDealterLocation = (id?: string) => dealers.find(d => d.id === id)?.location || 'UNKNOWN LOCATION';
 
-    const formatDate = (dateString?: string) => {
-        if (!dateString) return 'DATE UNKNOWN';
-        return new Date(dateString).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-    };
 
     const originalBattery = lineage.find(b => b.status === BatteryStatus.MANUFACTURED) || lineage[0];
     const isExpired = battery.warrantyExpiry ? new Date() > new Date(battery.warrantyExpiry) : false;
@@ -45,7 +42,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ battery, lineage, replace
                 </div>
                 <div className="text-right">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Report Generated On</p>
-                    <p className="font-bold font-mono">{new Date().toLocaleString('en-IN')}</p>
+                    <p className="font-bold font-mono">{formatDate(new Date())}</p>
                 </div>
             </div>
 

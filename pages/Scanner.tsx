@@ -12,6 +12,7 @@ import {
   ArrowDownCircle, HelpCircle, ArrowRightLeft, AlertOctagon,
   ShieldQuestion, CheckCircle2, FileCheck
 } from 'lucide-react';
+import { formatDate } from '../utils';
 import { BatteryStatus, Dealer, Battery, WarrantyCardStatus, BatteryModel } from '../types';
 
 interface ScannerProps {
@@ -482,7 +483,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                   <ShieldAlert size={32} />
                   <div>
                     <h2 className="text-xl font-black uppercase tracking-tight">Warranty Expired</h2>
-                    <p className="text-xs font-bold opacity-90 uppercase tracking-widest">Coverage ended on {activeAsset.battery.warrantyExpiry}</p>
+                    <p className="text-xs font-bold opacity-90 uppercase tracking-widest">Coverage ended on {formatDate(activeAsset.battery.warrantyExpiry)}</p>
                   </div>
                 </div>
                 <div className="bg-white/20 px-4 py-2 rounded-lg backdrop-blur-sm">
@@ -504,7 +505,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
               </div>
               <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div className="space-y-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Ownership record</p><div className="flex items-center space-x-3">{activeAsset.battery.customerName ? <><div className="p-2 bg-slate-50 rounded-lg"><User size={18} /></div><span className="font-bold text-slate-900 uppercase">{activeAsset.battery.customerName}</span></> : <p className="text-sm font-bold text-slate-300 italic">Inventory Stock</p>}</div></div>
-                <div className="space-y-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Lifecycle timeline</p><div className="space-y-2 text-xs font-bold"><div className="flex justify-between"><span className="text-slate-400">Sold On</span><span className="mono">{activeAsset.battery.activationDate || 'Pending'}</span></div><div className="flex justify-between"><span className="text-slate-400">Expiry</span><span className="mono text-rose-600 font-black">{activeAsset.battery.warrantyExpiry || 'N/A'}</span></div></div></div>
+                <div className="space-y-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Lifecycle timeline</p><div className="space-y-2 text-xs font-bold"><div className="flex justify-between"><span className="text-slate-400">Sold On</span><span className="mono">{formatDate(activeAsset.battery.activationDate)}</span></div><div className="flex justify-between"><span className="text-slate-400">Expiry</span><span className="mono text-rose-600 font-black">{formatDate(activeAsset.battery.warrantyExpiry)}</span></div></div></div>
                 <div className="space-y-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Dispatch metadata</p><div className="space-y-2 text-xs font-bold"><div className="flex justify-between"><span className="text-slate-400">Dealer</span><span className="text-blue-600 truncate max-w-[120px] uppercase">{dealers.find(d => d.id === activeAsset.battery.dealerId)?.name || 'Central'}</span></div><div className="flex justify-between"><span className="text-slate-400">Swap count</span><span className="mono">{activeAsset.battery.replacementCount}</span></div></div></div>
               </div>
             </div>
@@ -623,7 +624,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                           {isCurrent && <span className="bg-blue-100 text-blue-700 text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider">Current</span>}
                         </td>
                         <td className="px-8 py-6"><span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide ${getStatusBadge(item.status, itemExpired)}`}>{itemExpired ? 'EXPIRED' : item.status}</span></td>
-                        <td className="px-8 py-6 font-bold text-slate-500 text-xs mono">{item.activationDate || 'N/A'}</td>
+                        <td className="px-8 py-6 font-bold text-slate-500 text-xs mono">{formatDate(item.activationDate)}</td>
                         <td className="px-8 py-6">
                           {next ? (
                             <div className="flex flex-col gap-1">

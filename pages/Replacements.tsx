@@ -6,6 +6,7 @@ import {
   RefreshCw, Search, ShieldAlert, ArrowRight,
   ClipboardList, Activity, ChevronDown, CheckCircle2, History, X
 } from 'lucide-react';
+import { formatDate } from '../utils';
 
 const FAILURE_MODES = [
   "Dead Cell", "Charging Circuit Failure", "Internal Short-Circuit",
@@ -148,7 +149,7 @@ const Replacements: React.FC = () => {
 
     const isExpired = new Date() > new Date(sourceSale.warrantyExpiry);
     if (isExpired) {
-      setValidationResult({ battery, sale, originalSale, lineage, replacements, isValid: false, blockType: 'expired', error: `Expired on ${new Date(sourceSale.warrantyExpiry).toLocaleDateString()}.` });
+      setValidationResult({ battery, sale, originalSale, lineage, replacements, isValid: false, blockType: 'expired', error: `Expired on ${formatDate(sourceSale.warrantyExpiry)}.` });
       return;
     }
 
@@ -236,7 +237,7 @@ const Replacements: React.FC = () => {
               </div>
               <div className="pt-4 border-t border-white/10">
                 <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Policy Valid Until</p>
-                <p className="text-sm font-bold font-mono text-rose-600">{new Date(validationResult.originalSale?.warrantyExpiry).toLocaleDateString()}</p>
+                <p className="text-sm font-bold font-mono text-rose-600">{formatDate(validationResult.originalSale?.warrantyExpiry)}</p>
               </div>
             </div>
 

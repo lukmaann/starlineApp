@@ -8,6 +8,7 @@ import {
   User, ShieldCheck, ArrowRight, Fingerprint, Map, BadgeCheck,
   Phone
 } from 'lucide-react';
+import { formatDate } from '../utils';
 import { BatteryStatus, Battery, Dealer } from '../types';
 import HistoryReport from '../components/HistoryReport';
 
@@ -121,7 +122,7 @@ const SearchBattery: React.FC = () => {
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-1">MFG DATE</p>
-                    <p className="text-sm font-black text-slate-900">{new Date(result.battery.manufactureDate).toLocaleDateString()}</p>
+                    <p className="text-sm font-black text-slate-900">{formatDate(result.battery.manufactureDate)}</p>
                   </div>
                 </div>
               </div>
@@ -180,13 +181,13 @@ const SearchBattery: React.FC = () => {
                         <div className="flex items-center space-x-6 mt-1">
                           <div>
                             <p className="text-[9px] font-black opacity-40 uppercase">SALE</p>
-                            <p className="text-sm font-black font-mono">{new Date(result.battery.activationDate).toLocaleDateString()}</p>
+                            <p className="text-sm font-black font-mono">{formatDate(result.battery.activationDate)}</p>
                           </div>
                           <div className="h-8 w-px bg-slate-200"></div>
                           <div>
                             <p className="text-[9px] font-black opacity-40 uppercase">EXPIRY</p>
                             <p className={`text-sm font-black font-mono ${isExpired ? 'text-rose-500' : 'text-emerald-600'}`}>
-                              {new Date(result.battery.warrantyExpiry).toLocaleDateString()}
+                              {formatDate(result.battery.warrantyExpiry)}
                             </p>
                           </div>
                         </div>
@@ -251,7 +252,7 @@ const SearchBattery: React.FC = () => {
                             </div>
                             <div className="flex flex-col lg:items-end space-y-2 lg:text-right shrink-0">
                               <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">REGISTRATION DATE</p>
-                              <p className="text-sm font-black text-slate-700 font-mono">{(item.activationDate || item.manufactureDate)}</p>
+                              <p className="text-sm font-black text-slate-700 font-mono">{formatDate(item.activationDate || item.manufactureDate)}</p>
                             </div>
                           </div>
                         </div>
