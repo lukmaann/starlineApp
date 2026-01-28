@@ -18,6 +18,7 @@ import {
   LayoutGrid, Mail, Building as BuildingIcon
 } from 'lucide-react';
 import { formatDate } from '../utils';
+import { StatusDisplay } from '../components/StatusDisplay';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area
@@ -123,7 +124,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
     let table = 'batteries';
 
     if (activeLogTab === 'ACTIVE') {
-      where += ` AND status = 'ACTIVE' AND datetime(warrantyExpiry) >= datetime('now')`;
+      where += ` AND (status = 'ACTIVE' OR status = 'REPLACEMENT') AND datetime(warrantyExpiry) >= datetime('now')`;
     } else if (activeLogTab === 'EXPIRED') {
       where += ` AND (status = 'EXPIRED' OR datetime(warrantyExpiry) < datetime('now'))`;
     } else if (activeLogTab === 'EXCHANGES') {
@@ -304,9 +305,16 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                     </td>
                     <td className="px-8 py-5 font-bold text-slate-500 text-xs uppercase">{activeLogTab === 'EXCHANGES' ? '-' : item.model}</td>
                     <td className="px-8 py-5">
-                      {activeLogTab === 'ACTIVE' && <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded text-[9px] font-black uppercase tracking-widest border border-emerald-100">Active</span>}
-                      {activeLogTab === 'EXPIRED' && <span className="px-2 py-1 bg-rose-50 text-rose-600 rounded text-[9px] font-black uppercase tracking-widest border border-rose-100">Expired</span>}
-                      {activeLogTab === 'EXCHANGES' && <span className="px-2 py-1 bg-amber-50 text-amber-600 rounded text-[9px] font-black uppercase tracking-widest border border-amber-100">Swapped</span>}
+                      {activeLogTab === 'EXCHANGES' ? (
+                        <span className="px-2 py-1 bg-amber-50 text-amber-600 rounded text-[9px] font-black uppercase tracking-widest border border-amber-100">Swapped</span>
+                      ) : (
+                        <StatusDisplay
+                          status={item.status}
+                          isExpired={item.warrantyExpiry ? new Date() > new Date(item.warrantyExpiry) : false}
+                          dealerId={item.dealerId}
+                          variant="badge"
+                        />
+                      )}
                     </td>
                     <td className="px-8 py-5">
                       {activeLogTab === 'EXCHANGES' && <span className="font-bold text-xs text-slate-700">{item.reason}</span>}

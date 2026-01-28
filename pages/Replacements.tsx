@@ -7,6 +7,7 @@ import {
   ClipboardList, Activity, ChevronDown, CheckCircle2, History, X
 } from 'lucide-react';
 import { formatDate } from '../utils';
+import { StatusDisplay } from '../components/StatusDisplay';
 
 const FAILURE_MODES = [
   "Dead Cell", "Charging Circuit Failure", "Internal Short-Circuit",
@@ -232,8 +233,18 @@ const Replacements: React.FC = () => {
             <div className="bg-slate-900 p-6 rounded-2xl text-white shadow-sm flex flex-col justify-between h-48">
               <div>
                 <p className="text-[9px] font-bold text-blue-400 uppercase tracking-widest mb-1">Claimant Identity</p>
-                <h3 className="text-lg font-bold tracking-tight uppercase truncate">{validationResult.originalSale?.customerName}</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">{validationResult.originalSale?.customerPhone}</p>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-lg font-bold tracking-tight uppercase truncate">{validationResult.originalSale?.customerName}</h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">{validationResult.originalSale?.customerPhone}</p>
+                  </div>
+                  <StatusDisplay
+                    status={validationResult.battery.status}
+                    isExpired={false}
+                    variant="badge"
+                    className="!bg-white/10 !text-white !border-white/20"
+                  />
+                </div>
               </div>
               <div className="pt-4 border-t border-white/10">
                 <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Policy Valid Until</p>

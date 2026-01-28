@@ -5,6 +5,7 @@ import { BatteryStatus, Battery, Replacement } from '../types';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { ShieldCheck, Battery as BatteryIcon, Activity, RefreshCw, Zap, Users } from 'lucide-react';
 import { formatDate } from '../utils';
+import { StatusDisplay } from '../components/StatusDisplay';
 
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<any[]>([]);
@@ -68,7 +69,14 @@ const Dashboard: React.FC = () => {
                 <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center font-black text-blue-600 border border-slate-100 group-hover:bg-blue-600 group-hover:text-white transition-all"><RefreshCw size={18} /></div>
                 <div className="flex-1 ml-5">
                   <p className="text-sm font-black text-slate-800 uppercase tracking-tighter">{claim.oldBatteryId} &rarr; {claim.newBatteryId}</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Issue: {claim.reason}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <StatusDisplay
+                      status={BatteryStatus.REPLACEMENT}
+                      isExpired={false}
+                      variant="badge"
+                    />
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Issue: {claim.reason}</p>
+                  </div>
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] font-extrabold text-slate-400 uppercase">{formatDate(claim.replacementDate)}</p>

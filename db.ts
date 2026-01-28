@@ -256,7 +256,7 @@ export class Database {
       )
     ]);
 
-    const activeCount = statusCounts.find(s => s.status === BatteryStatus.ACTIVE)?.count || 0;
+    const activeCount = statusCounts.filter(s => s.status === BatteryStatus.ACTIVE || s.status === BatteryStatus.REPLACEMENT).reduce((a, b) => a + b.count, 0);
     const claimedCount = statusCounts.filter(s => s.status === BatteryStatus.RETURNED || s.status === BatteryStatus.REPLACEMENT).reduce((a, b) => a + b.count, 0);
 
     return {
@@ -279,7 +279,7 @@ export class Database {
           (SELECT COUNT(*) FROM replacements WHERE dealerId = ?) as totalClaims
         FROM sales WHERE dealerId = ?`, [dealerId, dealerId]
       ),
-      this.query<any>(`SELECT COUNT(*) as count FROM batteries WHERE dealerId = ? AND status = 'ACTIVE' AND datetime(warrantyExpiry) >= datetime('now')`, [dealerId]),
+      this.query<any>(`SELECT COUNT(*) as count FROM batteries WHERE dealerId = ? AND (status = 'ACTIVE' OR status = 'REPLACEMENT') AND datetime(warrantyExpiry) >= datetime('now')`, [dealerId]),
       this.query<any>(`
         SELECT 
           strftime('%Y-%m', saleDate) as month,
@@ -435,10 +435,10 @@ export class Database {
       [rep.newBatteryId, rep.oldBatteryId]
     );
 
-    // 3. Activate New Battery (Inherit Warranty & Customer)
+    // 3. Activate New Battery (REPLACEMENT status)
     await this.run(
       `UPDATE batteries SET 
-          status = 'ACTIVE', 
+          status = 'REPLACEMENT', 
           previousBatteryId = ?, 
           activationDate = ?,
           dealerId = ?,

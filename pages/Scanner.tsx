@@ -10,9 +10,10 @@ import {
   User, ChevronRight, Layers, FileText, Smartphone, Copy,
   Printer, Download, FileSpreadsheet, FileJson, StickyNote,
   ArrowDownCircle, HelpCircle, ArrowRightLeft, AlertOctagon,
-  ShieldQuestion, CheckCircle2, FileCheck
+  ShieldQuestion, CheckCircle2, FileCheck, ClipboardList, Activity, ChevronDown
 } from 'lucide-react';
 import { formatDate } from '../utils';
+import { StatusDisplay } from '../components/StatusDisplay';
 import { BatteryStatus, Dealer, Battery, WarrantyCardStatus, BatteryModel } from '../types';
 
 interface ScannerProps {
@@ -451,10 +452,21 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
               </div>
             )}
 
-            <div className={`border rounded-2xl shadow-sm overflow-hidden transition-colors duration-500 ${getCardColor()}`}>
+            {/* Status Banner System */}
+            {!isExp && (
+              <StatusDisplay
+                status={activeAsset.battery.status}
+                isExpired={isExp}
+                dealerId={activeAsset.battery.dealerId}
+                variant="banner"
+                className="rounded-t-2xl"
+              />
+            )}
+
+            <div className={`border rounded-2xl rounded-t-none shadow-sm overflow-hidden transition-colors duration-500 ${getCardColor()}`}>
               <div className="p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-slate-100">
                 <div className="space-y-1">
-                  <div className="flex items-center space-x-4"><h1 className="text-4xl font-black tracking-tight text-slate-900 mono uppercase">{activeAsset.battery.id}</h1><span className={`px-3 py-1 text-[10px] font-bold border rounded-full uppercase tracking-widest ${getStatusBadge(activeAsset.battery.status, isExpired)}`}>{isExpired ? 'EXPIRED' : (activeAsset.battery.status === 'Manufactured' && activeAsset.battery.dealerId ? 'ASSIGNED STOCK' : activeAsset.battery.status)}</span></div>
+                  <div className="flex items-center space-x-4"><h1 className="text-4xl font-black tracking-tight text-slate-900 mono uppercase">{activeAsset.battery.id}</h1></div>
                   <p className="text-slate-500 font-bold text-lg uppercase">{activeAsset.battery.model} • {activeAsset.battery.capacity}</p>
                 </div>
                 <button onClick={handlePrintReport} className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all border border-slate-100 no-print flex items-center gap-2">
