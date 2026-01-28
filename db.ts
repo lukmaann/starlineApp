@@ -46,10 +46,24 @@ export class Database {
 
   // --- ENTITIES ---
 
-  static async getPaginated<T>(table: string, page: number = 1, limit: number = 50): Promise<{ data: T[], total: number }> {
+  static async getPaginated<T>(
+    table: string,
+    page: number = 1,
+    limit: number = 50,
+    where: string = '',
+    params: any[] = []
+  ): Promise<{ data: T[], total: number }> {
     const offset = (page - 1) * limit;
-    const data = await this.query<T>(`SELECT * FROM ${table} LIMIT ? OFFSET ?`, [limit, offset]);
-    const countResult = await this.query<{ count: number }>(`SELECT COUNT(*) as count FROM ${table}`);
+    const whereClause = where ? `WHERE ${where}` : '';
+
+    const dataSql = `SELECT * FROM ${table} ${whereClause} ORDER BY rowid DESC LIMIT ? OFFSET ?`;
+    const countSql = `SELECT COUNT(*) as count FROM ${table} ${whereClause}`;
+
+    const [data, countResult] = await Promise.all([
+      this.query<T>(dataSql, [...params, limit, offset]),
+      this.query<{ count: number }>(countSql, params)
+    ]);
+
     return {
       data,
       total: countResult[0]?.count || 0
@@ -64,7 +78,7 @@ export class Database {
       console.warn('getAll(batteries) called - returning empty to prevent crash. Use searchBattery instead.');
       return [] as unknown as T[];
     }
-    return await this.query<T>(`SELECT * FROM ${table}`);
+    return await this.query<T>(`SELECT * FROM ${table} ORDER BY rowid DESC`);
   }
 
   static async getCount(table: string): Promise<number> {
@@ -76,11 +90,14 @@ export class Database {
     await this.run(
       `INSERT INTO batteries (
         id, model, capacity, manufactureDate, status, 
-        replacementCount, warrantyMonths, dealerId
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        replacementCount, warrantyMonths, dealerId,
+        activationDate, customerName, customerPhone, warrantyExpiry
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         battery.id, battery.model, battery.capacity, battery.manufactureDate,
-        battery.status, battery.replacementCount, battery.warrantyMonths, battery.dealerId || null
+        battery.status, battery.replacementCount, battery.warrantyMonths, battery.dealerId || null,
+        battery.activationDate || null, battery.customerName || null,
+        battery.customerPhone || null, battery.warrantyExpiry || null
       ]
     );
   }
@@ -103,7 +120,7 @@ export class Database {
     // Parallel fetch for speed
     const [sales, replacements] = await Promise.all([
       this.query<Sale>('SELECT * FROM sales WHERE batteryId = ?', [battery.id]),
-      this.query<Replacement>('SELECT * FROM replacements WHERE oldBatteryId = ? OR newBatteryId = ?', [battery.id, battery.id])
+      this.query<Replacement>('SELECT * FROM replacements WHERE oldBatteryId = ? OR newBatteryId = ? ORDER BY rowid DESC', [battery.id, battery.id])
     ]);
 
     const sale = sales[0];
@@ -139,7 +156,7 @@ export class Database {
 
 
   static async searchStock(term: string, model?: string): Promise<Battery[]> {
-    let sql = `SELECT * FROM batteries WHERE status = 'Manufactured' AND id LIKE ?`;
+    let sql = `SELECT * FROM batteries WHERE status = 'Manufactured' AND id LIKE ? ORDER BY rowid DESC`;
     const params: any[] = [`%${term}%`];
 
     if (model) {
@@ -152,20 +169,20 @@ export class Database {
   }
 
   static async getDealerStock(dealerId: string): Promise<Battery[]> {
-    return await this.query<Battery>('SELECT * FROM batteries WHERE dealerId = ? AND status = ?', [dealerId, 'Manufactured']);
+    return await this.query<Battery>('SELECT * FROM batteries WHERE dealerId = ? AND status = ? ORDER BY rowid DESC', [dealerId, 'Manufactured']);
   }
 
   static async getDealerBatteries(dealerId: string): Promise<Battery[]> {
-    return await this.query<Battery>('SELECT * FROM batteries WHERE dealerId = ?', [dealerId]);
+    return await this.query<Battery>('SELECT * FROM batteries WHERE dealerId = ? ORDER BY rowid DESC', [dealerId]);
   }
 
   static async getDealerReplacements(dealerId: string): Promise<Replacement[]> {
-    return await this.query<Replacement>('SELECT * FROM replacements WHERE dealerId = ?', [dealerId]);
+    return await this.query<Replacement>('SELECT * FROM replacements WHERE dealerId = ? ORDER BY rowid DESC', [dealerId]);
   }
 
   static async searchDealers(term: string): Promise<Dealer[]> {
     return await this.query<Dealer>(
-      `SELECT * FROM dealers WHERE name LIKE ? OR id LIKE ? LIMIT 10`,
+      `SELECT * FROM dealers WHERE (name LIKE ? OR id LIKE ?) ORDER BY rowid DESC LIMIT 10`,
       [`%${term}%`, `%${term}%`]
     );
   }
@@ -225,6 +242,69 @@ export class Database {
       },
       dealerStats: finalDealerStats,
       expiringSoon: expiring
+    };
+  }
+
+  static async getDashboardStats(): Promise<any> {
+    const [statusCounts, totalDealers, recentReplacements] = await Promise.all([
+      this.query<{ status: string, count: number }>(
+        'SELECT status, COUNT(*) as count FROM batteries GROUP BY status'
+      ),
+      this.getCount('dealers'),
+      this.query<any>(
+        'SELECT * FROM replacements ORDER BY rowid DESC LIMIT 5'
+      )
+    ]);
+
+    const activeCount = statusCounts.find(s => s.status === BatteryStatus.ACTIVE)?.count || 0;
+    const claimedCount = statusCounts.filter(s => s.status === BatteryStatus.RETURNED || s.status === BatteryStatus.REPLACEMENT).reduce((a, b) => a + b.count, 0);
+
+    return {
+      activeWarranties: activeCount,
+      claimedUnits: claimedCount,
+      totalDealers,
+      statusDistribution: statusCounts.map(s => ({ name: s.status, value: s.count })),
+      recentClaims: recentReplacements
+    };
+  }
+
+  static async getDealerAnalytics(dealerId: string): Promise<any> {
+    const today = new Date().toISOString().split('T')[0];
+    const thirtyDaysAgo = new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0];
+
+    const [stats, activeCount, trend] = await Promise.all([
+      this.query<any>(`
+        SELECT 
+          COUNT(*) as totalSales,
+          (SELECT COUNT(*) FROM replacements WHERE dealerId = ?) as totalClaims
+        FROM sales WHERE dealerId = ?`, [dealerId, dealerId]
+      ),
+      this.query<any>(`SELECT COUNT(*) as count FROM batteries WHERE dealerId = ? AND status = 'ACTIVE' AND datetime(warrantyExpiry) >= datetime('now')`, [dealerId]),
+      this.query<any>(`
+        SELECT 
+          strftime('%Y-%m', saleDate) as month,
+          COUNT(*) as count
+        FROM sales 
+        WHERE dealerId = ? AND saleDate >= date('now', '-6 months')
+        GROUP BY month
+        ORDER BY month ASC`, [dealerId]
+      )
+    ]);
+
+    const totalSales = stats[0]?.totalSales || 0;
+    const totalClaims = stats[0]?.totalClaims || 0;
+    const claimRatio = totalSales > 0 ? (totalClaims / totalSales) * 100 : 0;
+
+    // Last 30 days sales
+    const last30 = await this.query<any>(`SELECT COUNT(*) as count FROM sales WHERE dealerId = ? AND saleDate >= ?`, [dealerId, thirtyDaysAgo]);
+
+    return {
+      activeUnitCount: activeCount[0]?.count || 0,
+      last30Sales: last30[0]?.count || 0,
+      totalSales,
+      totalClaims,
+      claimRatio: claimRatio.toFixed(1),
+      salesTrend: trend.map((t: any) => ({ name: t.month, sales: t.count }))
     };
   }
 
@@ -418,7 +498,8 @@ export class Database {
       const expiryDate = new Date();
       expiryDate.setMonth(expiryDate.getMonth() + (item.warrantyMonths || 0));
       const expiryStr = expiryDate.toISOString().split('T')[0];
-      const customerName = `${item.dealerName || 'DEALER'} STOCK`;
+      // Ownership is strictly the Dealer
+      const customerName = item.dealerName || 'DEALER';
 
       if (item.exists) {
         // Update existing unit to new dealer and ACTIVATE
@@ -438,7 +519,7 @@ export class Database {
           id: item.id,
           model: item.model,
           capacity: item.capacity,
-          manufactureDate: item.manufactureDate,
+          manufactureDate: today, // Sync manufacture date to dispatch date for new units
           status: BatteryStatus.ACTIVE,
           activationDate: today,
           warrantyExpiry: expiryStr,
@@ -448,6 +529,20 @@ export class Database {
           dealerId: item.dealerId
         });
       }
+
+      // Create Sales record for analytics and reporting
+      await this.run(
+        `INSERT INTO sales (
+          id, batteryId, batteryType, dealerId, saleDate, salePrice, gstAmount, totalAmount,
+          isBilled, customerName, customerPhone, guaranteeCardReturned, paidInAccount,
+          warrantyStartDate, warrantyExpiry
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          `AUTO-${item.id}-${Date.now()}`,
+          item.id, item.model, item.dealerId, today, 0, 0, 0,
+          0, customerName, 'STOCK', 0, 0, today, expiryStr
+        ]
+      );
     }
   }
 

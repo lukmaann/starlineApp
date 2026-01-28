@@ -68,16 +68,14 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
   const [error, setError] = useState('');
 
   const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
-  const [allDealerUnits, setAllDealerUnits] = useState<Battery[]>([]);
-  const [dealerReplacements, setDealerReplacements] = useState<Replacement[]>([]);
-  const [dealerStock, setDealerStock] = useState<Battery[]>([]);
 
   // TABS
-  const [activeLogTab, setActiveLogTab] = useState<'WAREHOUSE' | 'ACTIVE' | 'EXPIRED' | 'EXCHANGES'>('WAREHOUSE');
+  const [activeLogTab, setActiveLogTab] = useState<'ACTIVE' | 'EXPIRED' | 'EXCHANGES'>('ACTIVE');
   const [logSearchQuery, setLogSearchQuery] = useState('');
 
   const [unitPage, setUnitPage] = useState(0);
   const unitsLimit = 10;
+  const [analytics, setAnalytics] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -114,24 +112,42 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
     });
   }, [dealers, searchTerm]);
 
-  const isBatteryExpired = (b: Battery) => b.warrantyExpiry ? new Date() > new Date(b.warrantyExpiry) : false;
+  const [paginatedData, setPaginatedData] = useState<any[]>([]);
+  const [totalItems, setTotalItems] = useState(0);
 
-  const activeUnits = useMemo(() => allDealerUnits.filter(u => !isBatteryExpired(u) && u.id.toUpperCase().includes(logSearchQuery.toUpperCase())), [allDealerUnits, logSearchQuery]);
-  const expiredUnits = useMemo(() => allDealerUnits.filter(u => isBatteryExpired(u) && u.id.toUpperCase().includes(logSearchQuery.toUpperCase())), [allDealerUnits, logSearchQuery]);
-  const filteredStock = useMemo(() => dealerStock.filter(u => u.id.toUpperCase().includes(logSearchQuery.toUpperCase())), [dealerStock, logSearchQuery]);
-  const filteredExchanges = useMemo(() => dealerReplacements.filter(r => r.newBatteryId.toUpperCase().includes(logSearchQuery.toUpperCase()) || r.oldBatteryId.toUpperCase().includes(logSearchQuery.toUpperCase())), [dealerReplacements, logSearchQuery]);
+  const fetchTabData = async () => {
+    if (!selectedDealer) return;
 
-  const getDataForTab = () => {
-    switch (activeLogTab) {
-      case 'WAREHOUSE': return filteredStock;
-      case 'ACTIVE': return activeUnits;
-      case 'EXPIRED': return expiredUnits;
-      case 'EXCHANGES': return filteredExchanges;
-      default: return [];
+    let where = `dealerId = ?`;
+    let params: any[] = [selectedDealer.id];
+    let table = 'batteries';
+
+    if (activeLogTab === 'ACTIVE') {
+      where += ` AND status = 'ACTIVE' AND datetime(warrantyExpiry) >= datetime('now')`;
+    } else if (activeLogTab === 'EXPIRED') {
+      where += ` AND (status = 'EXPIRED' OR datetime(warrantyExpiry) < datetime('now'))`;
+    } else if (activeLogTab === 'EXCHANGES') {
+      table = 'replacements';
     }
+
+    if (logSearchQuery) {
+      if (activeLogTab === 'EXCHANGES') {
+        where += ` AND (oldBatteryId LIKE ? OR newBatteryId LIKE ?)`;
+        params.push(`%${logSearchQuery}%`, `%${logSearchQuery}%`);
+      } else {
+        where += ` AND id LIKE ?`;
+        params.push(`%${logSearchQuery}%`);
+      }
+    }
+
+    const result = await Database.getPaginated<any>(table, unitPage + 1, unitsLimit, where, params);
+    setPaginatedData(result.data);
+    setTotalItems(result.total);
   };
 
-  const paginatedData = getDataForTab().slice(unitPage * unitsLimit, (unitPage + 1) * unitsLimit);
+  useEffect(() => {
+    fetchTabData();
+  }, [selectedDealer, activeLogTab, unitPage, logSearchQuery]);
 
   // --- ACTIONS ---
 
@@ -178,93 +194,33 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
   };
 
   const loadDealerDetail = async (dealer: Dealer) => {
-    const [allReps, units] = await Promise.all([
-      Database.getDealerReplacements(dealer.id),
-      Database.getDealerBatteries(dealer.id)
-    ]);
-    // const units = allBatts.filter(b => b.dealerId === dealer.id && b.status !== BatteryStatus.MANUFACTURED); // OLD: Client-side filter
-    const dealerStock = units.filter(b => b.status === BatteryStatus.MANUFACTURED);
-    const soldUnits = units.filter(b => b.status !== BatteryStatus.MANUFACTURED);
-
-    // const reps = allReps.filter(r => r.dealerId === dealer.id); // Optimized query used above
-    setAllDealerUnits(soldUnits); // "Units" in UI refers to sold/active/returned history
-    setDealerReplacements(allReps);
-    setDealerStock(dealerStock);
     setSelectedDealer(dealer);
-    setLogSearchQuery('');
     setUnitPage(0);
-    setActiveLogTab('WAREHOUSE');
+    setLogSearchQuery('');
+    setActiveLogTab('ACTIVE');
+    const data = await Database.getDealerAnalytics(dealer.id);
+    setAnalytics(data);
     setViewMode('DETAIL');
   };
 
-  const getStockAge = (dateStr?: string) => {
-    if (!dateStr) return { days: 0, status: 'FRESH', color: 'bg-emerald-50 text-emerald-600 border-emerald-100' };
-    const days = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24));
-    if (days > 90) return { days, status: 'STAGNANT', color: 'bg-rose-50 text-rose-600 border-rose-100' };
-    if (days > 60) return { days, status: 'SLOW', color: 'bg-amber-50 text-amber-600 border-amber-100' };
-    return { days, status: 'FRESH', color: 'bg-emerald-50 text-emerald-600 border-emerald-100' };
-  };
 
   const handleDeleteDealer = async (dealerId: string) => {
     if (!dealerId) return;
 
-    // Safety Check: Active Units
-    const activeUnitCount = allDealerUnits.filter(u => u.status === BatteryStatus.ACTIVE).length;
-
-    if (activeUnitCount > 0) {
-      if (!window.confirm(`WARNING: This partner has ${activeUnitCount} active warranty units.\n\nDeleting them will orphan these records but keep the warranty data valid.\n\nAre you sure you want to proceed?`)) {
+    if (analytics?.activeUnitCount > 0) {
+      if (!window.confirm(`WARNING: This partner has ${analytics.activeUnitCount} active warranty units.\n\nAre you sure you want to proceed?`)) {
         return;
       }
     } else {
-      if (!window.confirm(`Delete partner ${selectedDealer?.name} permanently?\n\nThis action cannot be undone.`)) {
+      if (!window.confirm(`Delete partner ${selectedDealer?.name} permanently?`)) {
         return;
       }
     }
 
     await Database.deleteDealer(dealerId);
-    window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: 'Partner deleted successfully' } }));
     setViewMode('LIST');
     loadData();
   };
-
-  // --- KPI ---
-  const kpiData = useMemo(() => {
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 30));
-    const last30Sales = allDealerUnits.filter(u => new Date(u.activationDate || '2000-01-01') > thirtyDaysAgo).length;
-    const totalSales = allDealerUnits.length;
-    const totalClaims = dealerReplacements.length;
-    const claimRatio = totalSales > 0 ? (totalClaims / totalSales) * 100 : 0;
-    const stockCount = dealerStock.length;
-    const stockStatus = stockCount < 10 ? 'CRITICAL' : stockCount < 30 ? 'LOW' : 'HEALTHY';
-    return { last30Sales, claimRatio: claimRatio.toFixed(1), stockCount, stockStatus };
-  }, [allDealerUnits, dealerReplacements, dealerStock]);
-
-  const stockDistributionData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    dealerStock.forEach(u => counts[u.model] = (counts[u.model] || 0) + 1);
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [dealerStock]);
-
-  const salesTrendData = useMemo(() => {
-    const last6Months: Record<string, number> = {};
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const key = d.toLocaleString('default', { month: 'short' });
-      last6Months[key] = 0;
-    }
-    allDealerUnits.forEach(u => {
-      if (!u.activationDate) return;
-      const d = new Date(u.activationDate);
-      if (isNaN(d.getTime())) return;
-      try {
-        const key = d.toLocaleString('default', { month: 'short' });
-        if (last6Months[key] !== undefined) last6Months[key]++;
-      } catch (e) { return; }
-    });
-    return Object.entries(last6Months).map(([name, sales]) => ({ name, sales }));
-  }, [allDealerUnits]);
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -302,49 +258,26 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                 <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><Zap size={20} /></div>
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Velocity (30d)</span>
               </div>
-              <p className="text-3xl font-black text-slate-900">{kpiData.last30Sales} <span className="text-xs font-bold text-slate-400">UNITS</span></p>
+              <p className="text-3xl font-black text-slate-900">{analytics?.last30Sales || 0} <span className="text-xs font-bold text-slate-400">UNITS</span></p>
             </div>
             <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm hover:shadow-md transition-all">
               <div className="flex justify-between items-start mb-2">
-                <div className={`p-3 rounded-xl ${Number(kpiData.claimRatio) > 5 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}><TrendingDown size={20} /></div>
+                <div className={`p-3 rounded-xl ${Number(analytics?.claimRatio) > 5 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}><TrendingDown size={20} /></div>
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Claim Ratio</span>
               </div>
-              <p className={`text-3xl font-black ${Number(kpiData.claimRatio) > 5 ? 'text-rose-600' : 'text-emerald-600'}`}>{kpiData.claimRatio}%</p>
-            </div>
-            <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm hover:shadow-md transition-all">
-              <div className="flex justify-between items-start mb-2">
-                <div className="p-3 bg-slate-50 text-slate-600 rounded-xl"><Package size={20} /></div>
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Stock Health</span>
-              </div>
-              <p className={`text-xl font-black ${kpiData.stockStatus === 'CRITICAL' ? 'text-rose-600' : kpiData.stockStatus === 'LOW' ? 'text-amber-600' : 'text-blue-600'}`}>{kpiData.stockStatus} ({kpiData.stockCount})</p>
+              <p className={`text-3xl font-black ${Number(analytics?.claimRatio) > 5 ? 'text-rose-600' : 'text-emerald-600'}`}>{analytics?.claimRatio || '0.0'}%</p>
             </div>
           </div>
 
-          {/* Charts */}
-          <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm flex flex-col h-[380px]">
-              <h4 className="text-xs font-bold text-slate-900 uppercase flex items-center gap-2 mb-6"><TrendingUp size={16} className="text-blue-500" /> Sales Trend</h4>
-              <div className="flex-1 w-full"><ResponsiveContainer width="100%" height="100%"><AreaChart data={salesTrendData}><defs><linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }} /><Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#1e293b', fontWeight: 'bold', fontSize: '12px' }} /><Area type="monotone" dataKey="sales" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" /></AreaChart></ResponsiveContainer></div>
-            </div>
-            <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm flex flex-col h-[380px]">
-              <h4 className="text-xs font-bold text-slate-900 uppercase flex items-center gap-2 mb-6"><IconPieChart size={16} className="text-emerald-500" /> Stock Mix</h4>
-              <div className="flex-1 w-full relative">
-                <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={stockDistributionData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">{stockDistributionData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />))}</Pie><Tooltip /></PieChart></ResponsiveContainer>
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col"><span className="text-3xl font-black text-slate-900">{kpiData.stockCount}</span><span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Items</span></div>
-              </div>
-              <div className="flex flex-wrap gap-3 justify-center mt-2">{stockDistributionData.slice(0, 4).map((entry, index) => (<div key={entry.name} className="flex items-center gap-2 text-[10px] font-bold text-slate-500"><div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />{entry.name}</div>))}</div>
-            </div>
-          </div>
         </div>
 
         {/* Data Table */}
         <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden min-h-[500px] flex flex-col">
           <div className="flex flex-col lg:flex-row justify-between items-center border-b border-slate-50 px-8 py-5 bg-slate-50/30 gap-6">
             <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-              <button onClick={() => { setActiveLogTab('WAREHOUSE'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'WAREHOUSE' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50'}`}>Stock ({filteredStock.length})</button>
-              <button onClick={() => { setActiveLogTab('ACTIVE'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'ACTIVE' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}>Active ({activeUnits.length})</button>
-              <button onClick={() => { setActiveLogTab('EXCHANGES'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'EXCHANGES' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}>Exchanges ({filteredExchanges.length})</button>
-              <button onClick={() => { setActiveLogTab('EXPIRED'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'EXPIRED' ? 'bg-rose-500 text-white shadow-md' : 'text-slate-500 hover:text-rose-600 hover:bg-rose-50'}`}>Expired ({expiredUnits.length})</button>
+              <button onClick={() => { setActiveLogTab('ACTIVE'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'ACTIVE' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}>Active</button>
+              <button onClick={() => { setActiveLogTab('EXCHANGES'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'EXCHANGES' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}>Exchanges</button>
+              <button onClick={() => { setActiveLogTab('EXPIRED'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'EXPIRED' ? 'bg-rose-500 text-white shadow-md' : 'text-slate-500 hover:text-rose-600 hover:bg-rose-50'}`}>Expired</button>
             </div>
             <div className="relative">
               <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -359,8 +292,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                   <th className="px-8 py-5 pl-10">Identifier</th>
                   <th className="px-8 py-5">Product Model</th>
                   <th className="px-8 py-5">Status Info</th>
-                  <th className="px-8 py-5">{activeLogTab === 'EXCHANGES' ? 'Reason' : activeLogTab === 'WAREHOUSE' ? '-' : 'Customer'}</th>
-                  <th className="px-8 py-5 text-right pr-10">{activeLogTab === 'EXCHANGES' ? 'Date' : activeLogTab === 'WAREHOUSE' ? 'Added' : 'Timeline'}</th>
+                  <th className="px-8 py-5">{activeLogTab === 'EXCHANGES' ? 'Reason' : 'Customer'}</th>
+                  <th className="px-8 py-5 text-right pr-10">{activeLogTab === 'EXCHANGES' ? 'Date' : 'Timeline'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -371,19 +304,16 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                     </td>
                     <td className="px-8 py-5 font-bold text-slate-500 text-xs uppercase">{activeLogTab === 'EXCHANGES' ? '-' : item.model}</td>
                     <td className="px-8 py-5">
-                      {activeLogTab === 'WAREHOUSE' && (() => { const aging = getStockAge(item.manufactureDate); return (<div className="flex items-center gap-2"><span className={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-widest border ${aging.color}`}>{aging.status}</span><span className="text-[9px] font-bold text-slate-400">({aging.days}d)</span></div>); })()}
                       {activeLogTab === 'ACTIVE' && <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded text-[9px] font-black uppercase tracking-widest border border-emerald-100">Active</span>}
                       {activeLogTab === 'EXPIRED' && <span className="px-2 py-1 bg-rose-50 text-rose-600 rounded text-[9px] font-black uppercase tracking-widest border border-rose-100">Expired</span>}
                       {activeLogTab === 'EXCHANGES' && <span className="px-2 py-1 bg-amber-50 text-amber-600 rounded text-[9px] font-black uppercase tracking-widest border border-amber-100">Swapped</span>}
                     </td>
                     <td className="px-8 py-5">
                       {activeLogTab === 'EXCHANGES' && <span className="font-bold text-xs text-slate-700">{item.reason}</span>}
-                      {activeLogTab === 'WAREHOUSE' && <span className="text-slate-300">-</span>}
                       {(activeLogTab === 'ACTIVE' || activeLogTab === 'EXPIRED') && <div className="space-y-0.5"><p className="font-bold text-xs text-slate-900">{item.customerName}</p></div>}
                     </td>
                     <td className="px-8 py-5 text-right pr-10 font-mono text-[10px] text-slate-500 font-bold">
                       {activeLogTab === 'EXCHANGES' && formatDate(item.replacementDate)}
-                      {activeLogTab === 'WAREHOUSE' && formatDate(item.manufactureDate)}
                       {(activeLogTab === 'ACTIVE' || activeLogTab === 'EXPIRED') && <div><span className="text-slate-900">{formatDate(item.activationDate)}</span><span className="text-slate-300 mx-2">→</span><span className="text-rose-600">{formatDate(item.warrantyExpiry)}</span></div>}
                     </td>
                   </tr>
@@ -395,10 +325,10 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
 
           {/* Pagination */}
           <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
-            <span>Total: {getDataForTab().length} Records</span>
+            <span>Showing {unitPage * unitsLimit + 1}-{Math.min((unitPage + 1) * unitsLimit, totalItems)} of {totalItems} Records</span>
             <div className="flex gap-2">
               <button disabled={unitPage === 0} onClick={() => setUnitPage(p => p - 1)} className="p-2 bg-white border border-slate-200 rounded-lg hover:border-blue-400 disabled:opacity-30 transition-all"><ChevronLeft size={16} /></button>
-              <button disabled={getDataForTab().length <= (unitPage + 1) * unitsLimit} onClick={() => setUnitPage(p => p + 1)} className="p-2 bg-white border border-slate-200 rounded-lg hover:border-blue-400 disabled:opacity-30 transition-all"><ChevronRight size={16} /></button>
+              <button disabled={(unitPage + 1) * unitsLimit >= totalItems} onClick={() => setUnitPage(p => p + 1)} className="p-2 bg-white border border-slate-200 rounded-lg hover:border-blue-400 disabled:opacity-30 transition-all"><ChevronRight size={16} /></button>
             </div>
           </div>
         </div>

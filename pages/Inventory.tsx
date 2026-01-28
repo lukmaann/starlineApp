@@ -24,26 +24,24 @@ const Stock: React.FC<StockProps> = () => {
   const [modelForm, setModelForm] = useState({ name: '', capacity: '', warranty: 24 });
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(0);
-  const limit = 15;
+  const limit = 12;
+  const [totalModels, setTotalModels] = useState(0);
 
   const loadData = async () => {
-    // We can add pagination or search for models later if needed, but for now getting all is fine as per previous logic
-    // or we can reuse the filtering logic if the user wants to search models. 
-    // The simplified view originally had model filtering. Let's keep it simple first.
-    // Actually, let's keep the get-all for simplicity as models count is usually low.
-    const mods = await Database.getAll<BatteryModel>('models');
+    let where = '';
+    let params: any[] = [];
 
-    // Simple client-side search for models if query exists
-    let filtered = mods;
     if (searchQuery) {
-      const q = searchQuery.toUpperCase();
-      filtered = mods.filter(m => m.name.includes(q) || m.id.includes(q));
+      where = 'name LIKE ? OR id LIKE ?';
+      params = [`%${searchQuery.toUpperCase()}%`, `%${searchQuery.toUpperCase()}%`];
     }
 
-    setModels(filtered);
+    const { data, total } = await Database.getPaginated<BatteryModel>('models', page + 1, limit, where, params);
+    setModels(data);
+    setTotalModels(total);
   };
 
-  useEffect(() => { loadData(); }, [searchQuery]);
+  useEffect(() => { loadData(); }, [searchQuery, page]);
 
   const handleOpenModelWizard = (m?: BatteryModel) => {
     if (m) {
@@ -298,6 +296,17 @@ const Stock: React.FC<StockProps> = () => {
             <span className="font-black uppercase tracking-widest text-[11px]">Define New Schema</span>
           </button>
         </div>
+
+        {/* Catalog Pagination */}
+        {totalModels > limit && (
+          <div className="mt-10 pt-8 border-t border-slate-100 flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest px-4">
+            <span>Showing {page * limit + 1}-{Math.min((page + 1) * limit, totalModels)} of {totalModels} Records</span>
+            <div className="flex gap-2">
+              <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:border-blue-400 disabled:opacity-30 transition-all shadow-sm"><ChevronLeft size={18} /></button>
+              <button disabled={(page + 1) * limit >= totalModels} onClick={() => setPage(p => p + 1)} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:border-blue-400 disabled:opacity-30 transition-all shadow-sm"><ChevronRight size={18} /></button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

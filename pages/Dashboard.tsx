@@ -13,27 +13,17 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     const load = async () => {
-      const allBatteries = await Database.getAll<Battery>('batteries');
-      const allReplacements = await Database.getAll<Replacement>('replacements');
-
-      const activeWarranties = allBatteries.filter(b => b.status === BatteryStatus.ACTIVE).length;
-      const claimedUnits = allReplacements.length;
-      const totalDealers = await Database.getCount('dealers');
+      const dashboard = await Database.getDashboardStats();
 
       setStats([
-        { label: 'Active', value: activeWarranties.toLocaleString(), icon: ShieldCheck, color: 'bg-emerald-600', text: 'Live' },
-        { label: 'Exchanges', value: claimedUnits.toLocaleString(), icon: RefreshCw, color: 'bg-blue-600', text: 'Done' },
-        { label: 'Dealers', value: totalDealers.toString(), icon: Users, color: 'bg-indigo-600', text: 'Partners' },
+        { label: 'Active', value: dashboard.activeWarranties.toLocaleString(), icon: ShieldCheck, color: 'bg-emerald-600', text: 'Live' },
+        { label: 'Exchanges', value: dashboard.claimedUnits.toLocaleString(), icon: RefreshCw, color: 'bg-blue-600', text: 'Done' },
+        { label: 'Dealers', value: dashboard.totalDealers.toString(), icon: Users, color: 'bg-indigo-600', text: 'Partners' },
         { label: 'Status', value: 'SECURE', icon: Zap, color: 'bg-amber-500', text: 'Health' },
       ]);
 
-      const statusCounts = allBatteries.reduce((acc: any, b: any) => {
-        acc[b.status] = (acc[b.status] || 0) + 1;
-        return acc;
-      }, {});
-
-      setChartData(Object.keys(statusCounts).map(key => ({ name: key, value: statusCounts[key] })));
-      setRecentClaims(allReplacements.slice(-5).reverse());
+      setChartData(dashboard.statusDistribution);
+      setRecentClaims(dashboard.recentClaims);
     };
     load();
   }, []);
