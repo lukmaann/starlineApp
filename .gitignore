@@ -22,3 +22,24 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Build outputs
+release/
+*.exe
+*.dmg
+*.zip
+*.blockmap
+
+# Test and debug files
+*.test.ts
+*.test.js
+*_test.js
+debug_*.js
+test_*.js
+mock_*/
+scripts/verify_*.js
+scripts/system_test_*.js
+
+# Environment and metadata
+.env.local
+metadata.json
