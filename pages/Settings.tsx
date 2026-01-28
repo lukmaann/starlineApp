@@ -38,7 +38,7 @@ const Settings: React.FC = () => {
   const [deletingDealer, setDeletingDealer] = useState<Dealer | null>(null); // Added for Dealer Deletion
   const [modelDeleteConfirmName, setModelDeleteConfirmName] = useState('');
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const [modelForm, setModelForm] = useState({ name: '', capacity: '', warranty: 24 });
+  const [modelForm, setModelForm] = useState({ name: '', capacity: '', warranty: 18 });
   // Search state for models
   const [modelSearch, setModelSearch] = useState('');
 
@@ -290,7 +290,7 @@ const Settings: React.FC = () => {
                         <div className="space-y-2">
                           <label className="text-xs font-bold text-slate-500 uppercase">Warranty Period</label>
                           <div className="relative">
-                            <input type="number" placeholder="24" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-base outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all" value={modelForm.warranty} onChange={e => setModelForm({ ...modelForm, warranty: parseInt(e.target.value) || 0 })} />
+                            <input type="number" placeholder="18" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-base outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all" value={modelForm.warranty} onChange={e => setModelForm({ ...modelForm, warranty: parseInt(e.target.value) || 0 })} />
                             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Months</span>
                           </div>
                         </div>

@@ -38,7 +38,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
 
   // Batch Assignment Mode State
   const [batchMode, setBatchMode] = useState(false);
-  const [batchConfig, setBatchConfig] = useState({ dealerId: '', modelId: '' });
+  const [batchConfig, setBatchConfig] = useState({ dealerId: '', modelId: '', date: new Date().toISOString().split('T')[0] });
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [stagedItems, setStagedItems] = useState<any[]>([]);
 
@@ -356,6 +356,12 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                 <option value="">Select Default Model</option>
                 {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
+              <input
+                type="date"
+                className="col-span-2 px-4 py-3 bg-indigo-800 border-indigo-700 text-white rounded-xl font-bold text-sm uppercase outline-none focus:ring-2 focus:ring-indigo-400"
+                value={batchConfig.date}
+                onChange={e => setBatchConfig({ ...batchConfig, date: e.target.value })}
+              />
             </div>
           )}
 
@@ -413,7 +419,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                   <button
                     onClick={async () => {
                       setIsActionLoading(true);
-                      await Database.batchAssign(stagedItems);
+                      await Database.batchAssign(stagedItems, batchConfig.date);
                       notify(`Processed ${stagedItems.length} items`);
                       setStagedItems([]);
                       setIsActionLoading(false);

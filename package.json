@@ -38,11 +38,16 @@
   "build": {
     "appId": "com.starline.registry",
     "productName": "Starline Registry",
+    "compression": "maximum",
     "win": {
       "target": "portable"
     },
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ],
     "files": [
-      "dist/**/*",
+      "out/**/*",
       "main.js",
       "preload.js",
       "package.json"

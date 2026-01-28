@@ -553,11 +553,11 @@ export class Database {
     await this.run('DELETE FROM models WHERE id = ?', [id]);
   }
 
-  static async batchAssign(items: any[]): Promise<void> {
-    const today = new Date().toISOString().split('T')[0];
+  static async batchAssign(items: any[], dateOverride?: string): Promise<void> {
+    const today = dateOverride || new Date().toISOString().split('T')[0];
 
     for (const item of items) {
-      const expiryDate = new Date();
+      const expiryDate = new Date(today);
       expiryDate.setMonth(expiryDate.getMonth() + (item.warrantyMonths || 0));
       const expiryStr = expiryDate.toISOString().split('T')[0];
       // Ownership is strictly the Dealer
