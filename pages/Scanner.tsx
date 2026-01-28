@@ -50,12 +50,6 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
     return counts;
   }, [stagedItems]);
 
-  const [regForm, setRegForm] = useState({
-    customerName: '',
-    customerPhone: '',
-    dealerId: '',
-    date: new Date().toISOString().split('T')[0]
-  });
 
   const [isReplacing, setIsReplacing] = useState(false);
   const [isConfirmingReplacement, setIsConfirmingReplacement] = useState(false);
@@ -69,8 +63,6 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
   });
 
   // Name Validation State
-  const [showNameWarning, setShowNameWarning] = useState(false);
-  const nameInputRef = useRef<HTMLInputElement>(null);
 
 
   useEffect(() => {
@@ -138,10 +130,11 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
           id: cleanId,
           model: selectedModel.name,
           dealerId: batchConfig.dealerId,
+          dealerName: dealers.find(d => d.id === batchConfig.dealerId)?.name || 'DEALER',
           exists: !!(data && data.battery),
           capacity: selectedModel.defaultCapacity,
           manufactureDate: new Date().toISOString().split('T')[0],
-          status: BatteryStatus.MANUFACTURED,
+          status: BatteryStatus.ACTIVE,
           warrantyMonths: selectedModel.defaultWarrantyMonths
         };
 
@@ -159,6 +152,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
       return;
     }
 
+
     // NORMAL MODE LOGIC
     setIsProcessing(true);
     setActiveAsset(null);
@@ -171,9 +165,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
       const data = await Database.searchBattery(cleanId);
       if (data && data.battery) {
         setActiveAsset(data);
-        // Auto-fill registration form if dealer is assigned
         if (data.battery.dealerId) {
-          setRegForm(prev => ({ ...prev, dealerId: data.battery.dealerId }));
+          // Auto-fill registration form is no longer needed as units are auto-activated
         }
         notify(`${cleanId} traced successfully`);
       } else {
@@ -192,57 +185,14 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
 
   const handlePrintReport = () => window.print();
 
-
-
-  const handleRegistration = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeAsset) return;
-
-    // QA AUDIT FIX: Prevent activation of dead/sold units
-    if (activeAsset.battery.status !== BatteryStatus.MANUFACTURED) {
-      notify(`Error: Cannot activate unit in ${activeAsset.battery.status} state.`, 'error');
-      return;
-    }
-
-    setIsActionLoading(true);
-
-    let finalCustomerName = regForm.customerName.trim().toUpperCase();
-    if (!finalCustomerName) {
-      const selectedDealer = dealers.find(d => d.id === regForm.dealerId);
-      finalCustomerName = selectedDealer ? `${selectedDealer.name} (DEALER STOCK)` : 'AUTHORIZED DEALER';
-    }
-
-    const startDate = new Date(regForm.date);
-
-    // BUG FIX: Prevent future dating (Timezone Safe)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    // Create a date object from the input treated as local midnight
-    const inputDate = new Date(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate());
-
-    if (inputDate > today) {
-      notify('Cannot register sale in the future', 'error');
-      setIsActionLoading(false);
-      return;
-    }
-
-    const expiry = new Date(startDate);
-    expiry.setMonth(expiry.getMonth() + activeAsset.battery.warrantyMonths);
-
-    await Database.activateWarranty(
-      activeAsset.battery.id,
-      finalCustomerName,
-      regForm.customerPhone || '0000000000',
-      regForm.dealerId,
-      regForm.date,
-      expiry.toISOString().split('T')[0],
-      'RECEIVED'
-    );
-
-    notify('Warranty protocol active');
-    setIsActionLoading(false);
-    handleSearch(activeAsset.battery.id);
+  const removeStagedItem = (id: string) => {
+    setStagedItems(prev => prev.filter(item => item.id !== id));
+    if (lastScanned === id) setLastScanned(null);
+    notify(`${id} removed from stage`);
   };
+
+
+
 
   const handleReplacementRequest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -393,11 +343,20 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                   </div>
                   <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-2 pr-2">
                     {stagedItems.map((item, i) => (
-                      <div key={i} className="flex justify-between items-center p-3 bg-indigo-950/50 rounded-lg border border-indigo-800/50">
-                        <span className="text-white font-mono font-bold text-xs">{item.id}</span>
+                      <div key={i} className="flex justify-between items-center p-3 bg-indigo-950/50 rounded-lg border border-indigo-800/50 group/item">
+                        <div className="flex flex-col">
+                          <span className="text-white font-mono font-bold text-xs">{item.id}</span>
+                          <span className="text-[10px] font-bold text-indigo-400">{item.model}</span>
+                        </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-bold text-indigo-300">{item.model}</span>
                           {item.exists ? <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">UPDATE</span> : <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">NEW</span>}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); removeStagedItem(item.id); }}
+                            className="p-1.5 text-indigo-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition-all opacity-0 group-hover/item:opacity-100"
+                            title="Remove from stage"
+                          >
+                            <X size={14} />
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -512,37 +471,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
 
             <div className="no-print">
               {activeAsset.battery.status === BatteryStatus.MANUFACTURED ? (
-                <div className="bg-emerald-600 text-white p-8 rounded-2xl shadow-xl space-y-6">
-                  <div className="flex justify-between items-center"><div><h3 className="text-xl font-bold uppercase tracking-tight">Ready for Activation</h3><p className="text-emerald-100 text-[10px] font-bold uppercase tracking-widest opacity-80">Establishing ownership and policy lifecycle.</p></div><BadgeCheck size={32} className="opacity-20" /></div>
-                  <form onSubmit={handleRegistration} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-emerald-100 uppercase ml-1">Customer Name</label>
-                      <input ref={nameInputRef} placeholder="Full Name" className={`w-full px-5 py-3.5 bg-white/10 border ${showNameWarning ? 'border-amber-300 animate-pulse' : 'border-white/20'} rounded-xl font-bold text-sm text-white placeholder:text-emerald-200 outline-none focus:bg-white/20 transition-all uppercase`} value={regForm.customerName} onChange={e => { setRegForm({ ...regForm, customerName: e.target.value }); setShowNameWarning(false); }} />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-emerald-100 uppercase ml-1">Issuing Partner</label>
-                      <input
-                        readOnly
-                        className="w-full px-5 py-3.5 bg-white/10 border border-white/20 rounded-xl font-bold text-sm text-white/70 cursor-not-allowed outline-none uppercase"
-                        value={dealers.find(d => d.id === regForm.dealerId)?.name || 'Central Stock'}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-emerald-100 uppercase ml-1">Selling Date</label>
-                      <input required type="date" className="w-full px-5 py-3.5 bg-white/10 border border-white/20 rounded-xl font-bold text-sm text-white outline-none focus:bg-white/20 transition-all" value={regForm.date} onChange={e => setRegForm({ ...regForm, date: e.target.value })} />
-                    </div>
-                    <div className="flex items-end">
-                      {showNameWarning ? (
-                        <div className="flex gap-2 w-full animate-in slide-in-from-right-4">
-                          <button type="button" onClick={() => nameInputRef.current?.focus()} className="flex-1 bg-white/10 text-white font-bold py-3.5 rounded-xl hover:bg-white/20 transition-all uppercase text-[10px] tracking-widest border border-white/20">Add Name</button>
-                          <button type="submit" className="flex-1 bg-amber-500 text-white font-bold py-3.5 rounded-xl hover:bg-amber-600 transition-all uppercase text-[10px] tracking-widest shadow-lg">Use Dealer</button>
-                        </div>
-                      ) : (
-                        <button type="submit" className="w-full bg-white text-emerald-700 font-bold py-3.5 rounded-xl hover:bg-emerald-50 transition-all active:scale-95 uppercase text-xs tracking-widest shadow-lg">Activate Coverage</button>
-                      )}
-                    </div>
-                  </form>
-                </div>
+                <div className="bg-blue-600 p-8 rounded-2xl shadow-xl flex justify-between items-center text-white"><div><h3 className="text-xl font-bold uppercase tracking-tight mb-2">Central Stock Unit</h3><p className="text-blue-100 text-xs font-bold uppercase tracking-widest opacity-80">This unit is currently in central stock. Use Batch Mode to dispatch and activate.</p></div><Package size={32} className="opacity-40" /></div>
               ) : !isExpired && activeAsset.battery.status !== BatteryStatus.RETURNED ? (
                 <div className="space-y-6">
                   {!isReplacing && !isConfirmingReplacement && (

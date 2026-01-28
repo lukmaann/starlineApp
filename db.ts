@@ -412,21 +412,37 @@ export class Database {
   }
 
   static async batchAssign(items: any[]): Promise<void> {
+    const today = new Date().toISOString().split('T')[0];
+
     for (const item of items) {
+      const expiryDate = new Date();
+      expiryDate.setMonth(expiryDate.getMonth() + (item.warrantyMonths || 0));
+      const expiryStr = expiryDate.toISOString().split('T')[0];
+      const customerName = `${item.dealerName || 'DEALER'} STOCK`;
+
       if (item.exists) {
-        // Update existing unit to new dealer
+        // Update existing unit to new dealer and ACTIVATE
         await this.run(
-          `UPDATE batteries SET dealerId = ?, status = ? WHERE id = ?`,
-          [item.dealerId, BatteryStatus.MANUFACTURED, item.id] // Keep status as Manufactured/Stock
+          `UPDATE batteries SET 
+             dealerId = ?, 
+             status = ?, 
+             activationDate = ?, 
+             warrantyExpiry = ?, 
+             customerName = ? 
+           WHERE id = ?`,
+          [item.dealerId, BatteryStatus.ACTIVE, today, expiryStr, customerName, item.id]
         );
       } else {
-        // Create new unit assigned to dealer
+        // Create new unit assigned to dealer and ACTIVATE
         await this.addBattery({
           id: item.id,
           model: item.model,
           capacity: item.capacity,
           manufactureDate: item.manufactureDate,
-          status: BatteryStatus.MANUFACTURED,
+          status: BatteryStatus.ACTIVE,
+          activationDate: today,
+          warrantyExpiry: expiryStr,
+          customerName: customerName,
           replacementCount: 0,
           warrantyMonths: item.warrantyMonths,
           dealerId: item.dealerId
