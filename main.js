@@ -71,7 +71,9 @@ function initDatabase() {
         replacementDate TEXT,
         reason TEXT,
         problemDescription TEXT,
+        problemDescription TEXT,
         warrantyCardStatus TEXT,
+        replenishmentBatteryId TEXT,
         paidInAccount INTEGER DEFAULT 0
       );
 
@@ -128,6 +130,16 @@ function initDatabase() {
       // Column might already exist, ignore error
       if (!err.message.includes('duplicate column')) {
         console.error('Migration warning:', err.message);
+      }
+    }
+
+    // Migration: Add replenishmentBatteryId column
+    try {
+      db.exec(`ALTER TABLE replacements ADD COLUMN replenishmentBatteryId TEXT`);
+      console.log('Migration: Added replenishmentBatteryId column to replacements table');
+    } catch (err) {
+      if (!err.message.includes('duplicate column')) {
+        console.error('Migration warning for replenishmentBatteryId:', err.message);
       }
     }
 

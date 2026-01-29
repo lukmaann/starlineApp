@@ -71,7 +71,15 @@
     "productName": "Starline Registry",
     "compression": "maximum",
     "win": {
-      "target": "portable"
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.png"
     },
     "asar": true,
     "asarUnpack": [

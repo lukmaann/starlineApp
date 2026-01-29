@@ -64,7 +64,9 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
     warrantyCardStatus: 'RECEIVED' as WarrantyCardStatus,
     replacementDate: new Date().toISOString().split('T')[0],
     soldDate: '',
-    paidInAccount: false
+    paidInAccount: false,
+    replenishmentBatteryId: '',
+    settlementMethod: 'CREDIT' as 'CREDIT' | 'STOCK'
   });
 
   // Warranty Date Correction State
@@ -295,12 +297,40 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
         return;
       }
 
-      // Check if the unit exists (Should NOT exist for fresh replacement)
+      // Check if the unit exists
       const newUnitCheck = await Database.searchBattery(newUnitId);
       if (newUnitCheck && newUnitCheck.battery) {
-        notify(`Stock Conflict: ID ${newUnitId} is already registered. Use a fresh stamp.`, 'error');
-        return;
+        // Allow if it's in a valid state for assignment (MANUFACTURED or ACTIVE in dealer stock)
+        const validStates = [BatteryStatus.MANUFACTURED, BatteryStatus.ACTIVE];
+        if (!validStates.includes(newUnitCheck.battery.status)) {
+          notify(`Stock Conflict: ID ${newUnitId} is ${newUnitCheck.battery.status}. Cannot use as replacement.`, 'error');
+          return;
+        }
+        // It's valid stock, we will effectively "transfer" it
       }
+
+      // Check Replenishment Unit if STOCK method selected
+      if (replacementData.settlementMethod === 'STOCK') {
+        const replId = replacementData.replenishmentBatteryId.toUpperCase().trim();
+        if (!replId) {
+          notify('Please scan Replenishment Unit for Dealer', 'error');
+          return;
+        }
+
+        if (replId === replacementData.newBatteryId || replId === activeAsset.battery.id) {
+          notify('Replenishment unit cannot be same as faulty or customer unit', 'error');
+          return;
+        }
+
+        const replCheck = await Database.searchBattery(replId);
+        // Ensure unit is valid for assignment
+        if (replCheck && replCheck.battery && replCheck.battery.status !== BatteryStatus.MANUFACTURED) {
+          notify(`Replenishment Unit ${replId} is not fresh stock (Status: ${replCheck.battery.status})`, 'error');
+          return;
+        }
+      }
+
+
 
       setReplacementStep(2);
       return;
@@ -345,17 +375,38 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
     try {
       // 1. Create the new battery record first (Fresh Stock)
       // We clone the physical specs (Model/Capacity) from the old unit
-      await Database.addBattery({
-        id: newUnitId,
-        model: activeAsset.battery.model,
-        capacity: activeAsset.battery.capacity,
-        manufactureDate: new Date().toISOString().split('T')[0],
-        status: BatteryStatus.MANUFACTURED,
-        replacementCount: (activeAsset.battery.replacementCount || 0) + 1, // ✅ Bug #7: Increment count
-        warrantyMonths: activeAsset.battery.warrantyMonths,
-        dealerId: activeAsset.battery.dealerId || 'CENTRAL',
-        originalBatteryId: activeAsset.battery.originalBatteryId || activeAsset.battery.id // ✅ Bug #1: Track original battery
-      });
+      // 1. Create OR Update the new battery record (Fresh Stock or Stock Transfer)
+      // If it exists, we update strict fields. If new, we create.
+      const existingNewUnit = await Database.getBattery(newUnitId);
+
+      if (existingNewUnit) {
+        // Update existing unit to link it as a replacement
+        await Database.run(
+          `UPDATE batteries SET 
+              replacementCount = ?, 
+              originalBatteryId = ?,
+              status = 'MANUFACTURED' -- Temporarily set to MANUFACTURED so addReplacement logic can activate it correctly
+            WHERE id = ?`,
+          [
+            (activeAsset.battery.replacementCount || 0) + 1,
+            activeAsset.battery.originalBatteryId || activeAsset.battery.id,
+            newUnitId
+          ]
+        );
+      } else {
+        // Create new
+        await Database.addBattery({
+          id: newUnitId,
+          model: activeAsset.battery.model,
+          capacity: activeAsset.battery.capacity,
+          manufactureDate: new Date().toISOString().split('T')[0],
+          status: BatteryStatus.MANUFACTURED,
+          replacementCount: (activeAsset.battery.replacementCount || 0) + 1, // ✅ Bug #7: Increment count
+          warrantyMonths: activeAsset.battery.warrantyMonths,
+          dealerId: activeAsset.battery.dealerId || 'CENTRAL',
+          originalBatteryId: activeAsset.battery.originalBatteryId || activeAsset.battery.id // ✅ Bug #1: Track original battery
+        });
+      }
 
       // 2. Execute the official Swap Protocol
       // Calculate new expiry based on soldDate
@@ -376,7 +427,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
         reason: replacementData.reason,
         problemDescription: replacementData.problemDescription,
         warrantyCardStatus: replacementData.warrantyCardStatus,
-        paidInAccount: replacementData.paidInAccount
+        paidInAccount: replacementData.settlementMethod === 'CREDIT' ? replacementData.paidInAccount : false,
+        replenishmentBatteryId: replacementData.settlementMethod === 'STOCK' ? replacementData.replenishmentBatteryId : undefined
       };
       await Database.addReplacement(replacement, {
         customerName: activeAsset.sale?.customerName || null,
@@ -394,7 +446,9 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
         replacementDate: new Date().toISOString().split('T')[0],
         warrantyCardStatus: 'RECEIVED',
         soldDate: '',
-        paidInAccount: false
+        paidInAccount: false,
+        replenishmentBatteryId: '',
+        settlementMethod: 'CREDIT'
       });
       setIsReplacing(false);
       setReplacementStep(1);
@@ -905,16 +959,75 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                               </div>
                             </div>
 
-                            <div className="p-5 bg-blue-50 rounded-xl border-2 border-blue-100 transition-colors hover:border-blue-300 cursor-pointer" onClick={() => setReplacementData(prev => ({ ...prev, paidInAccount: !prev.paidInAccount }))}>
-                              <label className="flex items-center gap-4 cursor-pointer select-none">
-                                <div className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all ${replacementData.paidInAccount ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300'}`}>
-                                  {replacementData.paidInAccount && <CheckCircle2 size={20} />}
+                            <div className="p-6 bg-slate-50 border-2 border-slate-200 rounded-2xl space-y-4">
+                              <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                                <Store size={18} className="text-blue-600" /> Dealer Settlement Method
+                              </h4>
+
+                              <div className="grid grid-cols-2 gap-4">
+                                <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col gap-2 ${replacementData.settlementMethod === 'CREDIT' ? 'bg-blue-50 border-blue-500 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                  <input
+                                    type="radio"
+                                    name="settlementMethod"
+                                    value="CREDIT"
+                                    className="hidden"
+                                    checked={replacementData.settlementMethod === 'CREDIT'}
+                                    onChange={() => setReplacementData(prev => ({ ...prev, settlementMethod: 'CREDIT' }))}
+                                  />
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${replacementData.settlementMethod === 'CREDIT' ? 'border-blue-600' : 'border-slate-300'}`}>
+                                      {replacementData.settlementMethod === 'CREDIT' && <div className="w-2 h-2 rounded-full bg-blue-600" />}
+                                    </div>
+                                    <span className={`font-bold uppercase text-xs ${replacementData.settlementMethod === 'CREDIT' ? 'text-blue-700' : 'text-slate-500'}`}>Account Credit</span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-400 font-medium pl-6">No stock given. Value credited to account.</p>
+                                </label>
+
+                                <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col gap-2 ${replacementData.settlementMethod === 'STOCK' ? 'bg-indigo-50 border-indigo-500 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                  <input
+                                    type="radio"
+                                    name="settlementMethod"
+                                    value="STOCK"
+                                    className="hidden"
+                                    checked={replacementData.settlementMethod === 'STOCK'}
+                                    onChange={() => setReplacementData(prev => ({ ...prev, settlementMethod: 'STOCK' }))}
+                                  />
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${replacementData.settlementMethod === 'STOCK' ? 'border-indigo-600' : 'border-slate-300'}`}>
+                                      {replacementData.settlementMethod === 'STOCK' && <div className="w-2 h-2 rounded-full bg-indigo-600" />}
+                                    </div>
+                                    <span className={`font-bold uppercase text-xs ${replacementData.settlementMethod === 'STOCK' ? 'text-indigo-700' : 'text-slate-500'}`}>Stock Replacement</span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-400 font-medium pl-6">Physical battery given to dealer now.</p>
+                                </label>
+                              </div>
+
+                              {replacementData.settlementMethod === 'CREDIT' ? (
+                                <div className="p-4 bg-blue-100/50 rounded-xl border border-blue-200 transition-all animate-in fade-in slide-in-from-top-1 cursor-pointer" onClick={() => setReplacementData(prev => ({ ...prev, paidInAccount: !prev.paidInAccount }))}>
+                                  <label className="flex items-center gap-4 cursor-pointer select-none">
+                                    <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${replacementData.paidInAccount ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-300'}`}>
+                                      {replacementData.paidInAccount && <CheckCircle2 size={16} />}
+                                    </div>
+                                    <div>
+                                      <span className="text-xs font-black text-blue-900 uppercase block">Mark as Paid?</span>
+                                      <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wide">Tick to confirm payment settled</span>
+                                    </div>
+                                  </label>
                                 </div>
-                                <div>
-                                  <span className="text-sm font-black text-blue-900 uppercase block">Settled in Account</span>
-                                  <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Mark as paid via account adjustment</span>
+                              ) : (
+                                <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
+                                  <label className="text-xs font-bold text-indigo-900 uppercase tracking-wider ml-1 flex items-center gap-2">
+                                    <Barcode size={14} /> Scan Replenishment Unit (For Dealer)
+                                  </label>
+                                  <input
+                                    required
+                                    placeholder="SCAN DEALER UNIT..."
+                                    className="w-full px-6 py-4 bg-indigo-50 border-2 border-indigo-200 rounded-xl font-bold text-xl outline-none focus:border-indigo-500 focus:shadow-lg focus:shadow-indigo-500/10 uppercase transition-all mono placeholder:text-indigo-300 text-indigo-900"
+                                    value={replacementData.replenishmentBatteryId}
+                                    onChange={e => setReplacementData({ ...replacementData, replenishmentBatteryId: e.target.value.toUpperCase() })}
+                                  />
                                 </div>
-                              </label>
+                              )}
                             </div>
 
                             <div className="flex gap-4 pt-4">
@@ -970,10 +1083,17 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                             <p className="text-xs font-black text-blue-400 uppercase tracking-wide">{replacementData.warrantyCardStatus.replace('_', ' ')}</p>
                           </div>
                           <div className="p-4 bg-white/5 border border-white/10 rounded-2xl text-center">
-                            <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Account Payment</p>
-                            <div className={`text-xs font-black uppercase tracking-wide justify-center flex items-center gap-2 ${replacementData.paidInAccount ? 'text-emerald-400' : 'text-slate-500'}`}>
-                              {replacementData.paidInAccount ? <><CheckCircle2 size={14} /> YES</> : 'NO'}
-                            </div>
+                            <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Dealer Settlement</p>
+                            {replacementData.settlementMethod === 'STOCK' ? (
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-indigo-400 uppercase">Stock Replaced</span>
+                                <span className="text-xs font-black text-white mono">{replacementData.replenishmentBatteryId}</span>
+                              </div>
+                            ) : (
+                              <div className={`text-xs font-black uppercase tracking-wide justify-center flex items-center gap-2 ${replacementData.paidInAccount ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                {replacementData.paidInAccount ? <><CheckCircle2 size={14} /> PAID</> : 'PENDING'}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -1015,7 +1135,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                       <th className="px-6 py-4 whitespace-nowrap">Dispatched to Dealer</th>
                       <th className="px-6 py-4 whitespace-nowrap">Sold to Customer</th>
                       <th className="px-6 py-4 whitespace-nowrap">Replaced On</th>
-                      <th className="px-6 py-4 whitespace-nowrap">Paid in Account</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Settlement</th>
                       <th className="px-6 py-4 whitespace-nowrap">Status</th>
                       <th className="px-6 py-4 whitespace-nowrap">Outcome / Evidence</th>
                     </tr>
@@ -1099,12 +1219,26 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                             {next ? formatDate(next.replacementDate) : '-'}
                           </td>
 
-                          {/* Paid in Account */}
+                          {/* Settlement */}
                           <td className="px-6 py-5 whitespace-nowrap">
-                            {(next || sale) ? (
-                              <span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide flex w-fit items-center gap-1 ${(next?.paidInAccount || sale?.paidInAccount) ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
-                                {(next?.paidInAccount || sale?.paidInAccount) ? <CheckCircle2 size={12} /> : <X size={12} />}
-                                {(next?.paidInAccount || sale?.paidInAccount) ? 'YES' : 'NO'}
+                            {next ? (
+                              <>
+                                {next.replenishmentBatteryId ? (
+                                  <div className="flex flex-col">
+                                    <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wide">Stock Given</span>
+                                    <span className="text-xs font-bold text-slate-700 mono">{next.replenishmentBatteryId}</span>
+                                  </div>
+                                ) : (
+                                  <span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide flex w-fit items-center gap-1 ${next.paidInAccount ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                    {next.paidInAccount ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                                    {next.paidInAccount ? 'PAID' : 'PENDING'}
+                                  </span>
+                                )}
+                              </>
+                            ) : (sale && !incoming) ? (
+                              <span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide flex w-fit items-center gap-1 ${sale.paidInAccount ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                {sale.paidInAccount ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                                {sale.paidInAccount ? 'PAID' : 'PENDING'}
                               </span>
                             ) : <span className="text-slate-300 font-bold text-xs">-</span>}
                           </td>

@@ -102,6 +102,7 @@ export interface Replacement {
   warrantyCardStatus: WarrantyCardStatus;
   paidInAccount: boolean;
   soldDate?: string; // Corrected Original Sale Date
+  replenishmentBatteryId?: string;
 }
 
 export interface Sale {

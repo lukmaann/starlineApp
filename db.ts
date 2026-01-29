@@ -38,7 +38,7 @@ export class Database {
     return [];
   }
 
-  private static async run(sql: string, params: any[] = []): Promise<{ changes: number; lastInsertRowid: number }> {
+  public static async run(sql: string, params: any[] = []): Promise<{ changes: number; lastInsertRowid: number }> {
     if (window.electronAPI?.db) {
       return await window.electronAPI.db.run(sql, params);
     }
@@ -498,14 +498,48 @@ export class Database {
     await this.run(
       `INSERT INTO replacements (
         id, oldBatteryId, newBatteryId, dealerId, replacementDate, 
-        reason, problemDescription, warrantyCardStatus, paidInAccount
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        reason, problemDescription, warrantyCardStatus, paidInAccount, replenishmentBatteryId
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         rep.id, rep.oldBatteryId, rep.newBatteryId, rep.dealerId,
         rep.replacementDate, rep.reason, rep.problemDescription, rep.warrantyCardStatus,
-        rep.paidInAccount ? 1 : 0
+        rep.paidInAccount ? 1 : 0, rep.replenishmentBatteryId || null
       ]
     );
+
+    // 1b. If Replenishment Unit Provided -> Activate & Assign to Dealer (Stock Replenishment)
+    if (rep.replenishmentBatteryId) {
+      // It's a "Zero Cost" assignment essentially replacing the stock loss
+      // We set it to ACTIVE assigned to the dealer
+      const today = new Date().toISOString().split('T')[0];
+      const replUnit = await this.getBattery(rep.replenishmentBatteryId);
+
+      if (replUnit) {
+        // Calculate default expiry from activation
+        const expiryDate = new Date(today);
+        expiryDate.setMonth(expiryDate.getMonth() + (replUnit.warrantyMonths || 24));
+        const expiryStr = expiryDate.toISOString().split('T')[0];
+
+        await this.run(
+          `UPDATE batteries SET 
+            status = 'ACTIVE', 
+            dealerId = ?, 
+            activationDate = ?, 
+            warrantyExpiry = ?, 
+            customerName = 'DEALER STOCK',
+            replacementCount = 0
+          WHERE id = ?`,
+          [rep.dealerId, today, expiryStr, rep.replenishmentBatteryId]
+        );
+
+        // Optional: Create a zero-value sales record for tracking stock movement
+        // const saleId = `REP-STOCK-${Date.now()}`;
+        // await this.run(
+        //   `INSERT INTO sales (id, batteryId, batteryType, dealerId, saleDate, salePrice, gstAmount, totalAmount, isBilled, customerName, customerPhone, guaranteeCardReturned, paidInAccount, warrantyStartDate, warrantyExpiry) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        //   [saleId, rep.replenishmentBatteryId, replUnit.model, rep.dealerId, today, 0, 0, 0, 0, 'DEALER STOCK REPLENISHMENT', 'STOCK', 0, 0, today, expiryStr]
+        // );
+      }
+    }
 
     // 2. Mark Old Battery as RETURNED
     // If correctedOriginalSaleDate is provided, we also fix the old battery's records for historical accuracy
