@@ -16,3 +16,13 @@ export const formatDate = (dateInput: string | Date | undefined | null): string 
 
     return `${day}/${month}/${year}`;
 };
+
+/**
+ * Returns the current date in YYYY-MM-DD format based on local timezone.
+ * Uses 'en-CA' locale which naturally outputs YYYY-MM-DD.
+ */
+export const getLocalDate = (): string => {
+    const now = new Date();
+    // 'en-CA' is the locale for Canada, which uses YYYY-MM-DD as standard
+    return now.toLocaleDateString('en-CA');
+};

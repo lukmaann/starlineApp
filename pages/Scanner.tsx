@@ -13,7 +13,7 @@ import {
   ArrowDownCircle, HelpCircle, ArrowRightLeft, AlertOctagon,
   ShieldQuestion, CheckCircle2, FileCheck, ClipboardList, Activity, ChevronDown
 } from 'lucide-react';
-import { formatDate } from '../utils';
+import { formatDate, getLocalDate } from '../utils';
 import { StatusDisplay } from '../components/StatusDisplay';
 import { BatteryStatus, type Battery, type Dealer, WarrantyCardStatus, type Sale, Replacement, BatteryModel, WarrantyStatus } from '../types';
 
@@ -39,7 +39,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
 
   // Batch Assignment Mode State
   const [batchMode, setBatchMode] = useState(false);
-  const [batchConfig, setBatchConfig] = useState({ dealerId: '', modelId: '', date: new Date().toISOString().split('T')[0] });
+  const [batchConfig, setBatchConfig] = useState({ dealerId: '', modelId: '', date: getLocalDate() });
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [stagedItems, setStagedItems] = useState<any[]>([]);
 
@@ -62,7 +62,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
     reason: 'DEAD CELL',
     problemDescription: '',
     warrantyCardStatus: 'RECEIVED' as WarrantyCardStatus,
-    replacementDate: new Date().toISOString().split('T')[0],
+    replacementDate: getLocalDate(),
     soldDate: '',
     paidInAccount: false,
     replenishmentBatteryId: '',
@@ -147,7 +147,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
           dealerName: dealers.find(d => d.id === batchConfig.dealerId)?.name || 'DEALER',
           exists: !!(data && data.battery),
           capacity: selectedModel.defaultCapacity,
-          manufactureDate: new Date().toISOString().split('T')[0],
+          manufactureDate: getLocalDate(),
           status: BatteryStatus.ACTIVE,
           warrantyMonths: selectedModel.defaultWarrantyMonths
         };
@@ -309,31 +309,44 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
         // It's valid stock, we will effectively "transfer" it
       }
 
-      // Check Replenishment Unit if STOCK method selected
-      if (replacementData.settlementMethod === 'STOCK') {
-        const replId = replacementData.replenishmentBatteryId.toUpperCase().trim();
-        if (!replId) {
-          notify('Please scan Replenishment Unit for Dealer', 'error');
-          return;
-        }
+      // If we are merely in Step 1, we stop here and advance to Step 2
+      if (replacementStep === 1) {
+        setReplacementStep(2);
+        return;
+      }
+    }
 
-        if (replId === replacementData.newBatteryId || replId === activeAsset.battery.id) {
-          notify('Replenishment unit cannot be same as faulty or customer unit', 'error');
-          return;
-        }
+    // ----------------------------------------
+    // STEP 2 VALIDATION: Replenishment & Details (Runs on "Confirm" click)
+    // ----------------------------------------
 
-        const replCheck = await Database.searchBattery(replId);
-        // Ensure unit is valid for assignment
-        if (replCheck && replCheck.battery && replCheck.battery.status !== BatteryStatus.MANUFACTURED) {
-          notify(`Replenishment Unit ${replId} is not fresh stock (Status: ${replCheck.battery.status})`, 'error');
+    // Check Replenishment Unit if STOCK method selected
+    if (replacementData.settlementMethod === 'STOCK') {
+      const replId = replacementData.replenishmentBatteryId.toUpperCase().trim();
+      if (!replId) {
+        notify('Please scan Replenishment Unit for Dealer', 'error');
+        return;
+      }
+
+      if (replId === replacementData.newBatteryId || replId === activeAsset.battery.id) {
+        notify('Replenishment unit cannot be same as faulty or customer unit', 'error');
+        return;
+      }
+
+      const replCheck = await Database.searchBattery(replId);
+      // Ensure unit is valid for assignment
+      if (replCheck && replCheck.battery) {
+        const isDealerStock = replCheck.battery.dealerId === replacementData.dealerId;
+        const status = (replCheck.battery.status || '').toUpperCase();
+
+        // BUG FIX: Allow ACTIVE if it belongs to dealer (Dealer Stock)
+        const isValidStock = status === 'MANUFACTURED' || (status === 'ACTIVE' && isDealerStock);
+
+        if (!isValidStock) {
+          notify(`Replenishment Unit ${replId} is invalid status: ${replCheck.battery.status}. Must be FRESH STOCK or DEALER STOCK.`, 'error');
           return;
         }
       }
-
-
-
-      setReplacementStep(2);
-      return;
     }
 
     // Validate soldDate before proceeding to confirmation
@@ -344,23 +357,35 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
 
     // ✅ Bug #5: Validate sold date is not in future or before manufacture
     const soldDate = new Date(replacementData.soldDate);
-    const today = new Date();
+    // Use local date for comparison to avoid timezone issues
+    const today = new Date(getLocalDate());
+    // Normalize time components for accurate date-only comparison
+    soldDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+
     const manufactureDate = new Date(activeAsset.battery.manufactureDate);
+    manufactureDate.setHours(0, 0, 0, 0);
+
     const activationDate = activeAsset.battery.activationDate ? new Date(activeAsset.battery.activationDate) : null;
+    if (activationDate) activationDate.setHours(0, 0, 0, 0);
 
     if (soldDate > today) {
       notify('Sale date cannot be in the future', 'error');
       return;
     }
 
+    // Relaxed Validation: Allow dates before manufacture/activation for legacy data support
+    // BUT Enforce Strict rule: Sold Date cannot be before OLD battery manufacture date
     if (soldDate < manufactureDate) {
-      notify('Sale date cannot be before manufacture date', 'error');
+      // This is the Old Battery's manufacture date. Strictly impossible to sell before made.
+      notify(`Invalid Date: Sold date cannot be before Old Battery manufacture (${formatDate(activeAsset.battery.manufactureDate)})`, 'error');
       return;
     }
 
+    // Note: We intentionally ALLOW soldDate < NewBattery.manufactureDate (The inheritance feature)
+
     if (activationDate && soldDate < activationDate) {
-      notify('Customer sale date cannot be before dealer activation date', 'error');
-      return;
+      notify('Note: Customer sale date is before dealer activation (Legacy Record)', 'success');
     }
 
     setIsConfirmingReplacement(true);
@@ -399,13 +424,40 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
           id: newUnitId,
           model: activeAsset.battery.model,
           capacity: activeAsset.battery.capacity,
-          manufactureDate: new Date().toISOString().split('T')[0],
+          manufactureDate: getLocalDate(),
           status: BatteryStatus.MANUFACTURED,
           replacementCount: (activeAsset.battery.replacementCount || 0) + 1, // ✅ Bug #7: Increment count
           warrantyMonths: activeAsset.battery.warrantyMonths,
           dealerId: activeAsset.battery.dealerId || 'CENTRAL',
           originalBatteryId: activeAsset.battery.originalBatteryId || activeAsset.battery.id // ✅ Bug #1: Track original battery
         });
+      }
+
+      // 1.5 Handle Replenishment Unit (If STOCK method)
+      // Check if unit exists - if not create it (Fresh Stock behavior), if yes update it
+      if (replacementData.settlementMethod === 'STOCK' && replacementData.replenishmentBatteryId) {
+        const replId = replacementData.replenishmentBatteryId.toUpperCase().trim();
+        const existingRepl = await Database.getBattery(replId);
+
+        if (existingRepl) {
+          // Existing unit: Mark as Active (Dispatched to Dealer)
+          await Database.run(
+            `UPDATE batteries SET status = 'ACTIVE', dealerId = ? WHERE id = ?`,
+            [activeAsset.battery.dealerId || 'CENTRAL', replId]
+          );
+        } else {
+          // New Unit (Not in DB): Create it and mark Active
+          await Database.addBattery({
+            id: replId,
+            model: activeAsset.battery.model,
+            capacity: activeAsset.battery.capacity,
+            manufactureDate: getLocalDate(),
+            status: BatteryStatus.ACTIVE, // Created and immediately Active (Dispatched)
+            replacementCount: 0,
+            warrantyMonths: activeAsset.battery.warrantyMonths,
+            dealerId: activeAsset.battery.dealerId || 'CENTRAL'
+          });
+        }
       }
 
       // 2. Execute the official Swap Protocol
@@ -443,7 +495,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
         dealerId: dealers[0]?.id || '',
         reason: 'DEAD CELL',
         problemDescription: '',
-        replacementDate: new Date().toISOString().split('T')[0],
+        replacementDate: getLocalDate(),
         warrantyCardStatus: 'RECEIVED',
         soldDate: '',
         paidInAccount: false,

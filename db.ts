@@ -1,5 +1,6 @@
 import { Battery, Dealer, Replacement, BatteryModel, Sale, WarrantyCardStatus, BatteryStatus } from './types';
 import { validateName, validatePhone } from './utils/validation';
+import { getLocalDate } from './utils';
 
 declare global {
   interface Window {
@@ -206,7 +207,10 @@ export class Database {
   }
 
   static async getDealerStock(dealerId: string): Promise<Battery[]> {
-    return await this.query<Battery>('SELECT * FROM batteries WHERE dealerId = ? AND status = ? ORDER BY rowid DESC', [dealerId, 'Manufactured']);
+    return await this.query<Battery>(
+      'SELECT * FROM batteries WHERE dealerId = ? AND (status = ? OR status = ?) ORDER BY rowid DESC',
+      [dealerId, 'Manufactured', 'ACTIVE']
+    );
   }
 
   static async getDealerBatteries(dealerId: string): Promise<Battery[]> {
@@ -261,7 +265,7 @@ export class Database {
     }));
 
     // 4. Expiring Soon (Optimized Date Query)
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDate();
     const next3Months = new Date();
     next3Months.setMonth(next3Months.getMonth() + 3);
     const futureDate = next3Months.toISOString().split('T')[0];
@@ -306,7 +310,7 @@ export class Database {
   }
 
   static async getDealerAnalytics(dealerId: string): Promise<any> {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDate();
     const thirtyDaysAgo = new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0];
 
     const [stats, activeCount, trend] = await Promise.all([
@@ -492,36 +496,38 @@ export class Database {
       }
     }
 
-    // Transaction-like sequence
+    // Transaction-like sequence PROTECTED
+    try {
+      await this.run('BEGIN TRANSACTION');
 
-    // 1. Insert Replacement Record
-    await this.run(
-      `INSERT INTO replacements (
+      // 1. Insert Replacement Record
+      await this.run(
+        `INSERT INTO replacements (
         id, oldBatteryId, newBatteryId, dealerId, replacementDate, 
         reason, problemDescription, warrantyCardStatus, paidInAccount, replenishmentBatteryId
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        rep.id, rep.oldBatteryId, rep.newBatteryId, rep.dealerId,
-        rep.replacementDate, rep.reason, rep.problemDescription, rep.warrantyCardStatus,
-        rep.paidInAccount ? 1 : 0, rep.replenishmentBatteryId || null
-      ]
-    );
+        [
+          rep.id, rep.oldBatteryId, rep.newBatteryId, rep.dealerId,
+          rep.replacementDate, rep.reason, rep.problemDescription, rep.warrantyCardStatus,
+          rep.paidInAccount ? 1 : 0, rep.replenishmentBatteryId || null
+        ]
+      );
 
-    // 1b. If Replenishment Unit Provided -> Activate & Assign to Dealer (Stock Replenishment)
-    if (rep.replenishmentBatteryId) {
-      // It's a "Zero Cost" assignment essentially replacing the stock loss
-      // We set it to ACTIVE assigned to the dealer
-      const today = new Date().toISOString().split('T')[0];
-      const replUnit = await this.getBattery(rep.replenishmentBatteryId);
+      // 1b. If Replenishment Unit Provided -> Activate & Assign to Dealer (Stock Replenishment)
+      if (rep.replenishmentBatteryId) {
+        // It's a "Zero Cost" assignment essentially replacing the stock loss
+        // We set it to ACTIVE assigned to the dealer
+        const today = getLocalDate();
+        const replUnit = await this.getBattery(rep.replenishmentBatteryId);
 
-      if (replUnit) {
-        // Calculate default expiry from activation
-        const expiryDate = new Date(today);
-        expiryDate.setMonth(expiryDate.getMonth() + (replUnit.warrantyMonths || 24));
-        const expiryStr = expiryDate.toISOString().split('T')[0];
+        if (replUnit) {
+          // Calculate default expiry from activation
+          const expiryDate = new Date(today);
+          expiryDate.setMonth(expiryDate.getMonth() + (replUnit.warrantyMonths || 24));
+          const expiryStr = expiryDate.toISOString().split('T')[0];
 
-        await this.run(
-          `UPDATE batteries SET 
+          await this.run(
+            `UPDATE batteries SET 
             status = 'ACTIVE', 
             dealerId = ?, 
             activationDate = ?, 
@@ -529,45 +535,38 @@ export class Database {
             customerName = 'DEALER STOCK',
             replacementCount = 0
           WHERE id = ?`,
-          [rep.dealerId, today, expiryStr, rep.replenishmentBatteryId]
-        );
-
-        // Optional: Create a zero-value sales record for tracking stock movement
-        // const saleId = `REP-STOCK-${Date.now()}`;
-        // await this.run(
-        //   `INSERT INTO sales (id, batteryId, batteryType, dealerId, saleDate, salePrice, gstAmount, totalAmount, isBilled, customerName, customerPhone, guaranteeCardReturned, paidInAccount, warrantyStartDate, warrantyExpiry) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        //   [saleId, rep.replenishmentBatteryId, replUnit.model, rep.dealerId, today, 0, 0, 0, 0, 'DEALER STOCK REPLENISHMENT', 'STOCK', 0, 0, today, expiryStr]
-        // );
+            [rep.dealerId, today, expiryStr, rep.replenishmentBatteryId]
+          );
+        }
       }
-    }
 
-    // 2. Mark Old Battery as RETURNED
-    // If correctedOriginalSaleDate is provided, we also fix the old battery's records for historical accuracy
-    if (meta?.correctedOriginalSaleDate) {
-      // Fetch battery to get warranty months for recalculation
-      const oldBatt = await this.getBattery(rep.oldBatteryId);
-      const months = oldBatt?.warrantyMonths || 24;
-      const newExpiry = new Date(meta.correctedOriginalSaleDate);
-      newExpiry.setMonth(newExpiry.getMonth() + months);
-      const newExpiryStr = newExpiry.toISOString().split('T')[0];
+      // 2. Mark Old Battery as RETURNED
+      // If correctedOriginalSaleDate is provided, we also fix the old battery's records for historical accuracy
+      if (meta?.correctedOriginalSaleDate) {
+        // Fetch battery to get warranty months for recalculation
+        const oldBatt = await this.getBattery(rep.oldBatteryId);
+        const months = oldBatt?.warrantyMonths || 24;
+        const newExpiry = new Date(meta.correctedOriginalSaleDate);
+        newExpiry.setMonth(newExpiry.getMonth() + months);
+        const newExpiryStr = newExpiry.toISOString().split('T')[0];
+
+        await this.run(
+          `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ?, activationDate = ?, warrantyExpiry = ? WHERE id = ?`,
+          [rep.newBatteryId, meta.correctedOriginalSaleDate, newExpiryStr, rep.oldBatteryId]
+        );
+      } else {
+        await this.run(
+          `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ? WHERE id = ?`,
+          [rep.newBatteryId, rep.oldBatteryId]
+        );
+      }
+
+      // 3. Activate New Battery (REPLACEMENT status)
+      // If correctedOriginalSaleDate is provided, use it for activation. Else use replacementDate.
+      const activationDate = meta?.correctedOriginalSaleDate || rep.replacementDate;
 
       await this.run(
-        `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ?, activationDate = ?, warrantyExpiry = ? WHERE id = ?`,
-        [rep.newBatteryId, meta.correctedOriginalSaleDate, newExpiryStr, rep.oldBatteryId]
-      );
-    } else {
-      await this.run(
-        `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ? WHERE id = ?`,
-        [rep.newBatteryId, rep.oldBatteryId]
-      );
-    }
-
-    // 3. Activate New Battery (REPLACEMENT status)
-    // If correctedOriginalSaleDate is provided, use it for activation. Else use replacementDate.
-    const activationDate = meta?.correctedOriginalSaleDate || rep.replacementDate;
-
-    await this.run(
-      `UPDATE batteries SET 
+        `UPDATE batteries SET 
           status = 'REPLACEMENT', 
           previousBatteryId = ?, 
           activationDate = ?,
@@ -576,12 +575,19 @@ export class Database {
           customerPhone = ?,
           warrantyExpiry = ?
         WHERE id = ?`,
-      [
-        rep.oldBatteryId, activationDate, rep.dealerId || 'CENTRAL',
-        meta?.customerName || null, meta?.customerPhone || null, meta?.warrantyExpiry || null,
-        rep.newBatteryId
-      ]
-    );
+        [
+          rep.oldBatteryId, activationDate, rep.dealerId || 'CENTRAL',
+          meta?.customerName || null, meta?.customerPhone || null, meta?.warrantyExpiry || null,
+          rep.newBatteryId
+        ]
+      );
+
+      await this.run('COMMIT');
+    } catch (error) {
+      await this.run('ROLLBACK');
+      console.error('Transaction Failed: addReplacement', error);
+      throw error; // Re-throw to alert UI
+    }
   }
 
   static async addDealer(dealer: Dealer): Promise<void> {
@@ -666,7 +672,7 @@ export class Database {
   }
 
   static async batchAssign(items: any[], dateOverride?: string): Promise<void> {
-    const today = dateOverride || new Date().toISOString().split('T')[0];
+    const today = dateOverride || getLocalDate();
 
     for (const item of items) {
       const expiryDate = new Date(today);

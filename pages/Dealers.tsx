@@ -7,7 +7,7 @@ import {
   User, ShieldCheck, ChevronRight, RefreshCw,
   ArrowLeft, ChevronLeft, ShoppingBag,
   Landmark, Filter, Users, Box, Info,
-  Trash2, ShieldAlert, ClipboardCheck,
+  Trash2, ShieldAlert, ClipboardCheck, Clock,
   UserCheck, ExternalLink, Globe, ListFilter,
   CheckCircle2, FileSignature, MapPinned,
   Building2, Loader2, ArrowRight, Settings, ShieldQuestion,
@@ -295,14 +295,13 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                 <tr className="bg-slate-50/50 text-slate-400 text-xs font-black border-b border-slate-100 uppercase tracking-widest">
                   {activeLogTab === 'EXCHANGES' ? (
                     <>
-                      <th className="px-4 py-5 pl-8">Old Battery</th>
-                      <th className="px-4 py-5">New Battery</th>
-                      <th className="px-4 py-5">Model</th>
-                      <th className="px-4 py-5">Reason</th>
-                      <th className="px-4 py-5">Sale Date</th>
-                      <th className="px-4 py-5">Exchange Date</th>
-                      <th className="px-4 py-5">Card Given</th>
-                      <th className="px-4 py-5">Paid in Account</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Old Battery</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Replaced By</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Model</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Sold Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Replaced On</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Settlement</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Outcome / Evidence</th>
                     </>
                   ) : (
                     <>
@@ -323,37 +322,52 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                   >
                     {activeLogTab === 'EXCHANGES' ? (
                       <>
-                        <td className="px-4 py-5 pl-8 font-mono text-sm text-slate-500 line-through">{item.oldBatteryId}</td>
-                        <td className="px-4 py-5 font-mono text-sm text-blue-600 font-bold">{item.newBatteryId}</td>
-                        <td className="px-4 py-5 font-bold text-slate-700 text-sm uppercase">
+                        <td className="px-6 py-5 font-bold text-slate-900 mono text-sm whitespace-nowrap flex items-center gap-2">
+                          {item.oldBatteryId}
+                          <span className="text-slate-300">→</span>
+                        </td>
+                        <td className="px-6 py-5 font-bold text-blue-600 mono text-sm whitespace-nowrap cursor-pointer hover:underline" onClick={(e) => {
+                          e.stopPropagation();
+                          if (onNavigateToHub) onNavigateToHub(item.newBatteryId);
+                        }}>
+                          {item.newBatteryId}
+                        </td>
+                        <td className="px-6 py-5 font-bold text-slate-700 text-sm uppercase whitespace-nowrap">
                           {item.batteryModel || '-'}
                         </td>
-                        <td className="px-4 py-5 text-sm text-slate-700 font-medium">{item.reason}</td>
-                        <td className="px-4 py-5 font-mono text-xs text-slate-600">{item.soldDate ? formatDate(item.soldDate) : '-'}</td>
-                        <td className="px-4 py-5 font-mono text-xs text-slate-600">{formatDate(item.replacementDate)}</td>
-                        <td className="px-4 py-5">
-                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide ${item.warrantyCardStatus === 'RECEIVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                            item.warrantyCardStatus === 'XEROX' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                              item.warrantyCardStatus === 'WHATSAPP' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                                'bg-slate-50 text-slate-500 border border-slate-200'
-                            }`}>
-                            {item.warrantyCardStatus === 'RECEIVED' ? 'Original' :
-                              item.warrantyCardStatus === 'XEROX' ? 'Xerox' :
-                                item.warrantyCardStatus === 'WHATSAPP' ? 'Digital' : 'None'}
-                          </span>
+                        <td className="px-6 py-5 whitespace-nowrap">
+                          {item.soldDate ? (
+                            <span className="font-bold text-slate-900 mono text-xs">{formatDate(item.soldDate)}</span>
+                          ) : '-'}
                         </td>
-                        <td className="px-4 py-5" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={async () => {
-                              const newValue = !item.paidInAccount;
-                              await Database.updateReplacementPaidStatus(item.id, newValue);
-                              fetchTabData();
-                            }}
-                            className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wide transition-all hover:shadow-md ${item.paidInAccount ? 'bg-emerald-100 text-emerald-800 border-2 border-emerald-300 hover:bg-emerald-200' : 'bg-rose-100 text-rose-800 border-2 border-rose-300 hover:bg-rose-200'
-                              }`}
-                          >
-                            {item.paidInAccount ? '✓ YES' : '✗ NO'}
-                          </button>
+                        <td className="px-6 py-5 font-bold text-slate-500 text-xs mono whitespace-nowrap">
+                          {formatDate(item.replacementDate)}
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          {item.replenishmentBatteryId ? (
+                            <div className="flex flex-col">
+                              <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wide">Stock Given</span>
+                              <span className="text-xs font-bold text-slate-700 mono">{item.replenishmentBatteryId}</span>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={async () => {
+                                const newValue = !item.paidInAccount;
+                                await Database.updateReplacementPaidStatus(item.id, newValue);
+                                fetchTabData();
+                              }}
+                              className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide flex w-fit items-center gap-1 transition-all hover:shadow-md ${item.paidInAccount ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}
+                            >
+                              {item.paidInAccount ? <CheckCircle2 size={12} /> : <div className="w-3 h-3"><Clock size={12} /></div>}
+                              {item.paidInAccount ? 'PAID' : 'PENDING'}
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap">
+                          <div className="flex flex-col gap-1">
+                            <div className="text-xs font-bold text-amber-700 flex items-center gap-1 uppercase"><ShieldAlert size={14} /> FAILED: {item.reason}</div>
+                            <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1 uppercase pl-5"><FileText size={10} /> Doc: {item.warrantyCardStatus === 'RECEIVED' ? 'Original' : item.warrantyCardStatus === 'XEROX' ? 'Xerox' : item.warrantyCardStatus === 'WHATSAPP' ? 'Digital' : 'None'}</div>
+                          </div>
                         </td>
                       </>
                     ) : (

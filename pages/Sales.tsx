@@ -289,8 +289,34 @@ const Sales: React.FC = () => {
       return;
     }
 
-    setIsProcessing(true);
+    // STRICT DATE VALIDATION
     const saleDateObj = new Date(form.date);
+    // Use local time for comparison
+    saleDateObj.setHours(0, 0, 0, 0);
+
+    // Check against Manufacture Date
+    if (battery.manufactureDate) {
+      const mfgDate = new Date(battery.manufactureDate);
+      mfgDate.setHours(0, 0, 0, 0);
+      if (saleDateObj < mfgDate) {
+        alert(`INVALID DATE: Cannot sell battery before it was manufactured.\n\nManufactured: ${formatDate(battery.manufactureDate)}\nSale Date: ${formatDate(form.date)}`);
+        return;
+      }
+    }
+
+    // Check against Activation Date (if Dealer Stock, this is when they got it)
+    if (battery.status === BatteryStatus.ACTIVE && battery.activationDate) {
+      const arrivalDate = new Date(battery.activationDate);
+      arrivalDate.setHours(0, 0, 0, 0);
+      // If it's dealer stock, activationDate = dispatch date.
+      if (saleDateObj < arrivalDate) {
+        alert(`INVALID DATE: Cannot sell battery before stock arrival.\n\nArrived at Dealer: ${formatDate(battery.activationDate)}\nSale Date: ${formatDate(form.date)}`);
+        return;
+      }
+    }
+
+    setIsProcessing(true);
+    // Reuse validated saleDateObj or re-parse if needed (it's the same)
     const expiry = new Date(saleDateObj);
     expiry.setMonth(expiry.getMonth() + (battery.warrantyMonths || 24));
 

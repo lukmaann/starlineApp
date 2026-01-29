@@ -104,7 +104,8 @@ export class WarrantyCalculator {
         if (battery.manufactureDate) {
             const manufactureDate = new Date(battery.manufactureDate);
             if (proposedDateObj < manufactureDate) {
-                return { valid: false, reason: 'Sale date cannot be before manufacture date' };
+                // WARN: Log internally but allow for legacy correction
+                console.warn('Date correction: Proposed date is before manufacture date');
             }
         }
 
@@ -112,7 +113,7 @@ export class WarrantyCalculator {
         if (battery.activationDate) {
             const activationDate = new Date(battery.activationDate);
             if (proposedDateObj < activationDate) {
-                return { valid: false, reason: 'Customer sale date cannot be before dealer activation date' };
+                console.warn('Date correction: Proposed date is before activation date');
             }
         }
 
