@@ -447,7 +447,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
           </div>
 
           {batchMode && (
-            <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
+            <div className="grid grid-cols-3 gap-4 animate-in fade-in slide-in-from-top-2">
               <select className="px-4 py-3 bg-indigo-800 border-indigo-700 text-white rounded-xl font-bold text-sm uppercase outline-none focus:ring-2 focus:ring-indigo-400" value={batchConfig.dealerId} onChange={e => setBatchConfig({ ...batchConfig, dealerId: e.target.value })}>
                 <option value="">Select Target Dealer</option>
                 {dealers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -458,7 +458,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
               </select>
               <input
                 type="date"
-                className="col-span-2 px-4 py-3 bg-indigo-800 border-indigo-700 text-white rounded-xl font-bold text-sm uppercase outline-none focus:ring-2 focus:ring-indigo-400"
+                className="px-4 py-3 bg-indigo-800 border-indigo-700 text-white rounded-xl font-bold text-sm uppercase outline-none focus:ring-2 focus:ring-indigo-400"
                 value={batchConfig.date}
                 onChange={e => setBatchConfig({ ...batchConfig, date: e.target.value })}
               />
@@ -487,8 +487,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                     {stagedItems.map((item, i) => (
                       <div key={i} className="flex justify-between items-center p-3 bg-indigo-950/50 rounded-lg border border-indigo-800/50 group/item">
                         <div className="flex flex-col">
-                          <span className="text-white font-mono font-bold text-xs">{item.id}</span>
-                          <span className="text-[10px] font-bold text-indigo-400">{item.model}</span>
+                          <span className="text-white font-mono font-bold text-lg">{item.id}</span>
+                          <span className="text-sm font-bold text-indigo-400">{item.model}</span>
                         </div>
                         <div className="flex items-center gap-3">
                           {item.exists ? <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">UPDATE</span> : <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">NEW</span>}
