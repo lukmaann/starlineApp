@@ -125,7 +125,7 @@ const Settings: React.FC = () => {
       });
     } else {
       setEditingModelId(null);
-      setModelForm({ name: '', capacity: '', warranty: 24 });
+      setModelForm({ name: '', capacity: '', warranty: 18 });
     }
     setModelWizardStep(0);
     setActiveForm('model');
@@ -481,170 +481,230 @@ const Settings: React.FC = () => {
       {currentTab === 'access' && (
         <div className="max-w-4xl mx-auto animate-in slide-in-from-right-4 duration-300">
           {!accessUnlocked ? (
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl p-10 text-center max-w-sm mx-auto mt-16 animate-in zoom-in-95 duration-300 relative overflow-hidden">
-              {/* Decorative background element */}
-              <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-900" />
+            <div className="bg-white rounded-xl border border-slate-200 shadow-xl p-0 max-w-md mx-auto mt-16 animate-in zoom-in-95 duration-300 relative overflow-hidden text-slate-900">
 
-              <div className="w-20 h-20 bg-slate-50 text-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm border border-slate-100">
-                <Lock size={32} strokeWidth={1.5} />
+              {/* Header Bar */}
+              <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
+                  <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">System Locked</span>
+                </div>
+                <div className="text-[10px] font-mono text-slate-400">v2.4.0-SECURE</div>
               </div>
 
-              <h3 className="text-xl font-black text-slate-900 mb-1 tracking-tight">Security Gateway</h3>
-              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-8">Authorized Personnel Only</p>
-
-              <div className="space-y-3">
-                <div className="relative group text-left">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Key className="text-slate-400 group-focus-within:text-slate-900 transition-colors" size={16} />
+              <div className="p-8 space-y-8">
+                <div className="text-center space-y-2">
+                  <div className="w-16 h-16 bg-slate-50 border border-slate-200 text-slate-400 rounded-lg flex items-center justify-center mx-auto mb-6 shadow-sm">
+                    <ShieldCheck size={28} strokeWidth={1.5} />
                   </div>
-                  <input
-                    type="password"
-                    autoFocus
-                    placeholder="Password"
-                    className="w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-center text-base text-slate-900 outline-none focus:bg-white focus:border-slate-900 focus:ring-4 focus:ring-slate-900/5 transition-all placeholder:text-slate-300 tracking-widest"
-                    value={accessPassword}
-                    onChange={e => setAccessPassword(e.target.value)}
-                    onKeyDown={async e => {
-                      if (e.key === 'Enter') {
-                        const stored = await Database.getConfig('starline_admin_pass') || 'starline@2025';
-                        if (accessPassword === stored) setAccessUnlocked(true);
-                        else notify('Access Denied: Invalid Password', 'error');
-                      }
-                    }}
-                  />
+                  <h3 className="text-lg font-bold text-slate-900 tracking-widest uppercase">Admin Console</h3>
+                  <p className="text-xs text-slate-400 font-mono">Restricted Access Environment</p>
                 </div>
 
-                <button
-                  onClick={async () => {
-                    const stored = await Database.getConfig('starline_admin_pass') || 'starline@2025';
-                    if (accessPassword === stored) setAccessUnlocked(true);
-                    else notify('Access Denied: Invalid Password', 'error');
-                  }}
-                  className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl uppercase tracking-widest text-[10px] hover:bg-black transition-all shadow-xl shadow-slate-900/10 active:scale-95 flex items-center justify-center gap-2"
-                >
-                  <Fingerprint size={14} /> Unlock Console
-                </button>
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Identity Verification</label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <Key className="text-slate-400 group-focus-within:text-blue-600 transition-colors" size={14} />
+                      </div>
+                      <input
+                        type="password"
+                        autoFocus
+                        placeholder="ENTER ACCESS KEY"
+                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg font-mono text-sm text-slate-900 outline-none focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-400 uppercase tracking-widest"
+                        value={accessPassword}
+                        onChange={e => setAccessPassword(e.target.value)}
+                        onKeyDown={async e => {
+                          if (e.key === 'Enter') {
+                            const stored = await Database.getConfig('starline_admin_pass') || 'starline@2025';
+                            if (accessPassword === stored) setAccessUnlocked(true);
+                            else notify('AUTHENTICATION FAILED', 'error');
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      const stored = await Database.getConfig('starline_admin_pass') || 'starline@2025';
+                      if (accessPassword === stored) setAccessUnlocked(true);
+                      else notify('AUTHENTICATION FAILED', 'error');
+                    }}
+                    className="w-full py-3 bg-slate-900 hover:bg-black text-white font-bold rounded-lg text-xs uppercase tracking-widest transition-all shadow-lg shadow-slate-900/10 active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <Fingerprint size={14} /> Authenticate
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-8 text-[10px] text-slate-300 font-medium">Session ID: {Math.random().toString(36).substring(7).toUpperCase()}</p>
+              {/* Footer Status */}
+              <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center text-[9px] font-mono text-slate-400">
+                <div className="flex items-center gap-2">
+                  <Lock size={10} />
+                  <span>ENCRYPTED CONNECTION</span>
+                </div>
+                <div>ID: {Math.random().toString(36).substring(7).toUpperCase()}</div>
+              </div>
             </div>
           ) : (
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden animate-in zoom-in-95 duration-300">
 
               {/* Header */}
-              <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
+              <div className="p-5 bg-white border-b border-slate-100 flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <ShieldCheck size={24} className="text-emerald-400" />
-                  <div><h3 className="font-bold text-lg">Admin Controller</h3><p className="text-xs text-slate-400 uppercase tracking-wider">Authenticated Session</p></div>
+                  <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center shadow-sm">
+                    <ShieldCheck size={20} strokeWidth={2} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-slate-900 leading-none">Admin Controller</h3>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">Secure Configuration Access</p>
+                  </div>
                 </div>
-                <button onClick={() => { setAccessUnlocked(false); setAccessPassword(''); }} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold uppercase tracking-wider transition-all">Lock</button>
+                <button
+                  onClick={() => { setAccessUnlocked(false); setAccessPassword(''); }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all flex items-center gap-2"
+                >
+                  <Lock size={14} /> Lock Console
+                </button>
               </div>
 
               {/* Security Config */}
               <div className="p-8 border-b border-slate-100">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2.5 bg-slate-900 text-white rounded-lg shadow-md"><Key size={20} /></div>
+                <div className="flex justify-between items-start mb-8">
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900">Admin Credentials</h3>
-                    <p className="text-xs font-medium text-slate-500">Update your access identification.</p>
+                    <h4 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      Admin Credentials
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-1">Update the authentication protocol for the master account.</p>
+                  </div>
+                  <div className="bg-slate-50 text-slate-400 p-2 rounded-lg border border-slate-100">
+                    <Key size={18} />
                   </div>
                 </div>
 
-                <form onSubmit={handleUpdateCredentials} className="space-y-6 max-w-2xl bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">New Username</label>
-                      <div className="relative">
-                        <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                        <input className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl font-bold text-sm text-slate-900 outline-none focus:border-slate-900 focus:ring-4 focus:ring-slate-900/5 transition-all" value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value.toUpperCase() })} />
-                      </div>
-                    </div>
+                <form onSubmit={handleUpdateCredentials} className="space-y-8 max-w-3xl">
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Identity Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Identity</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">New Password</label>
-                        <div className="relative">
-                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                          <input type="password" placeholder="••••••" className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl font-bold text-sm text-slate-900 outline-none focus:border-slate-900 focus:ring-4 focus:ring-slate-900/5 transition-all" value={formData.newPassword} onChange={e => setFormData({ ...formData, newPassword: e.target.value })} />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Confirm Password</label>
-                        <div className="relative">
-                          <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                          <input type="password" placeholder="••••••" className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl font-bold text-sm text-slate-900 outline-none focus:border-slate-900 focus:ring-4 focus:ring-slate-900/5 transition-all" value={formData.confirmPassword} onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })} />
+                        <label className="text-xs font-bold text-slate-700">Username</label>
+                        <div className="relative group">
+                          <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+                          <input
+                            className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none font-bold text-slate-900 placeholder:text-slate-400"
+                            value={formData.username}
+                            onChange={e => setFormData({ ...formData, username: e.target.value.toUpperCase() })}
+                            placeholder="ADMIN"
+                          />
                         </div>
                       </div>
                     </div>
                   </div>
-                  <div className="flex justify-end pt-2">
-                    <button type="submit" className="px-8 py-3.5 bg-slate-900 text-white font-bold rounded-xl text-xs uppercase tracking-widest hover:bg-black transition-all shadow-lg flex items-center gap-2">
-                      <Save size={16} /> Save Credentials
+
+                  {/* Security Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Security Key</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-700">New Password</label>
+                        <div className="relative group">
+                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+                          <input
+                            type="password"
+                            className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none font-bold text-slate-900 placeholder:text-slate-400"
+                            value={formData.newPassword}
+                            onChange={e => setFormData({ ...formData, newPassword: e.target.value })}
+                            placeholder="••••••"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-700">Confirm Password</label>
+                        <div className="relative group">
+                          <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+                          <input
+                            type="password"
+                            className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none font-bold text-slate-900 placeholder:text-slate-400"
+                            value={formData.confirmPassword}
+                            onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
+                            placeholder="••••••"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-start pt-4">
+                    <button type="submit" className="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl text-sm hover:bg-black transition-all shadow-xl shadow-slate-900/10 active:scale-95 flex items-center gap-2">
+                      <Save size={16} /> Update Credentials
                     </button>
                   </div>
                 </form>
               </div>
 
-              {/* DANGER ZONE: Dealer Deletion & Factory Reset */}
-              <div className="p-8 bg-rose-50/50 space-y-8">
-                <div>
-                  <h3 className="text-lg font-bold text-rose-700 mb-2 flex items-center gap-2"><ShieldAlert size={20} /> Hazard Zone</h3>
-                  <p className="text-sm text-rose-600/70 mb-6 font-medium">Irreversible administrative actions. Proceed with caution.</p>
-                </div>
+              {/* DANGER ZONE */}
+              <div className="p-8 bg-slate-50 border-t border-slate-200">
+                <h4 className="text-sm font-bold text-rose-700 mb-6 flex items-center gap-2">
+                  <AlertTriangle size={16} />
+                  Danger Zone
+                </h4>
 
-                <div className="grid grid-cols-1 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Dealer Deletion */}
-                  <div className="bg-white border border-rose-100 rounded-2xl p-6 shadow-sm">
-                    <h4 className="text-sm font-black text-rose-600 uppercase tracking-widest mb-4">Partner Termination</h4>
-                    <div className="flex gap-4 items-end">
-                      <div className="flex-1 space-y-2">
-                        <label className="text-xs font-bold text-slate-400 uppercase">Select Partner to Remove</label>
-                        <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-rose-500 uppercase" value={deletingDealer?.id || ''} onChange={e => { setDeletingDealer(dealers.find(d => d.id === e.target.value) as any); setModelDeleteConfirmName(''); }}>
-                          <option value="">-- Select Partner --</option>
-                          {dealers.map(d => <option key={d.id} value={d.id}>{d.name} ({d.id})</option>)}
-                        </select>
-                      </div>
+                  <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm">
+                    <div className="mb-4">
+                      <h5 className="font-bold text-slate-900 text-sm">Remove Partner</h5>
+                      <p className="text-xs text-slate-500 mt-1">Permanently delete a dealer and their records.</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <select className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-rose-500" value={deletingDealer?.id || ''} onChange={e => { setDeletingDealer(dealers.find(d => d.id === e.target.value) as any); setModelDeleteConfirmName(''); }}>
+                        <option value="">Select Partner...</option>
+                        {dealers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      </select>
+
                       {deletingDealer && (
-                        <div className="flex-1 space-y-2 animate-in fade-in">
-                          <label className="text-xs font-bold text-rose-500 uppercase">Type "{deletingDealer.name}" to confirm</label>
-                          <input
-                            placeholder="CONFIRM NAME"
-                            className="w-full px-4 py-3 bg-white border border-rose-200 text-rose-600 rounded-xl font-bold text-sm focus:ring-2 focus:ring-rose-500/20 uppercase"
-                            value={modelDeleteConfirmName}
-                            onChange={e => setModelDeleteConfirmName(e.target.value)}
-                          />
-                        </div>
+                        <input
+                          placeholder={`Type "${deletingDealer.name}"`}
+                          className="w-full px-3 py-2 bg-white border border-rose-200 text-rose-600 rounded-lg text-sm font-bold focus:border-rose-500 outline-none placeholder:text-rose-200 placeholder:font-normal"
+                          value={modelDeleteConfirmName}
+                          onChange={e => setModelDeleteConfirmName(e.target.value)}
+                        />
                       )}
-                      <div className="pb-0.5">
-                        <button
-                          disabled={!deletingDealer || modelDeleteConfirmName !== deletingDealer.name || isActionLoading}
-                          onClick={async () => {
-                            if (deletingDealer) {
-                              setIsActionLoading(true);
-                              await Database.deleteDealer(deletingDealer.id);
-                              setDeletingDealer(null);
-                              setModelDeleteConfirmName('');
-                              loadModelData(); // Reloads dealers too
-                              notify('Partner Termination Complete', 'error');
-                              setIsActionLoading(false);
-                            }
-                          }}
-                          className="px-6 py-3.5 bg-rose-600 text-white font-bold rounded-xl text-xs uppercase tracking-widest hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-rose-500/20 transition-all"
-                        >
-                          {isActionLoading ? <Loader2 size={16} className="animate-spin" /> : 'Terminate'}
-                        </button>
-                      </div>
+
+                      <button
+                        disabled={!deletingDealer || modelDeleteConfirmName !== deletingDealer.name || isActionLoading}
+                        onClick={async () => {
+                          if (deletingDealer) {
+                            setIsActionLoading(true);
+                            await Database.deleteDealer(deletingDealer.id);
+                            setDeletingDealer(null);
+                            setModelDeleteConfirmName('');
+                            loadModelData();
+                            notify('Partner removed successfully', 'success');
+                            setIsActionLoading(false);
+                          }
+                        }}
+                        className="w-full py-2 bg-white border border-rose-200 text-rose-600 font-bold rounded-lg text-xs hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        {isActionLoading ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Delete Partner'}
+                      </button>
                     </div>
                   </div>
 
                   {/* Factory Reset */}
-                  <div className="bg-white border border-rose-100 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-white border border-rose-100 rounded-xl text-rose-600 shadow-sm"><AlertTriangle size={24} /></div>
-                      <div>
-                        <h3 className="text-base font-bold text-slate-900">Factory Reset</h3>
-                        <p className="text-xs font-medium text-slate-500 max-w-sm">Permanently wipe all data, including models, dealers, and warranties. This cannot be undone.</p>
-                      </div>
+                  <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm flex flex-col justify-between">
+                    <div className="mb-4">
+                      <h5 className="font-bold text-slate-900 text-sm">Factory Reset</h5>
+                      <p className="text-xs text-slate-500 mt-1">Wipe all data and restore system defaults.</p>
                     </div>
                     <button
                       onClick={async () => {
@@ -656,9 +716,9 @@ const Settings: React.FC = () => {
                           }
                         }
                       }}
-                      className="px-6 py-3 bg-white border border-rose-200 text-rose-600 font-bold text-sm rounded-xl hover:bg-rose-600 hover:text-white hover:border-transparent transition-all shadow-sm flex items-center gap-2 whitespace-nowrap"
+                      className="w-full py-2 bg-rose-600 text-white font-bold rounded-lg text-xs hover:bg-rose-700 transition-all shadow-sm flex items-center justify-center gap-2"
                     >
-                      <Trash2 size={16} /> Reset Application
+                      <Trash2 size={14} /> Reset Application
                     </button>
                   </div>
                 </div>
@@ -666,7 +726,14 @@ const Settings: React.FC = () => {
             </div>
           )}
         </div>
-      )}    </div>
+      )}
+
+      <div className="mt-12 mb-6 text-center">
+        <p className="text-[10px] font-medium text-slate-400">
+          Developed by <span className="font-bold text-slate-600">Lukmaann</span>
+        </p>
+      </div>
+    </div>
   );
 };
 

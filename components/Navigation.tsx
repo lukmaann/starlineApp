@@ -72,16 +72,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
           <Settings size={18} />
           <span className="text-[13px] font-semibold">Settings</span>
         </button>
-        <div className="mt-4 px-4 py-3 bg-white border border-slate-200 rounded-xl">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Version</span>
-            <span className="text-[10px] font-bold text-blue-600">v2.9.2</span>
-          </div>
-          <div className="flex items-center space-x-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-bold text-emerald-600 uppercase">Registry Live</span>
-          </div>
-        </div>
+
       </div>
     </div>
   );

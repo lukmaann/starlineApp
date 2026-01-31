@@ -21,7 +21,7 @@ const Stock: React.FC<StockProps> = () => {
   const [deletingModel, setDeletingModel] = useState<BatteryModel | null>(null);
   const [modelDeleteConfirmName, setModelDeleteConfirmName] = useState('');
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const [modelForm, setModelForm] = useState({ name: '', capacity: '', warranty: 24 });
+  const [modelForm, setModelForm] = useState({ name: '', capacity: '', warranty: 18 });
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(0);
   const limit = 12;
@@ -54,7 +54,7 @@ const Stock: React.FC<StockProps> = () => {
       });
     } else {
       setEditingModelId(null);
-      setModelForm({ name: '', capacity: '', warranty: 24 });
+      setModelForm({ name: '', capacity: '', warranty: 18 });
     }
     setModelWizardStep(0);
     setActiveForm('model');

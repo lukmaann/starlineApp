@@ -13,6 +13,36 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Forgot Password State
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [isResetAuthenticated, setIsResetAuthenticated] = useState(false);
+  const [secretAnswer, setSecretAnswer] = useState('');
+  const [newResetPassword, setNewResetPassword] = useState('');
+
+  const handleChallengeVerify = () => {
+    if (secretAnswer.trim().toLowerCase() === 'lukmaann') {
+      setIsResetAuthenticated(true);
+      setError('');
+    } else {
+      setError('Access Denied: Incorrect Security Protocol Answer.');
+    }
+  };
+
+  const handlePasswordResetConfirm = async () => {
+    if (newResetPassword.length < 4) {
+      setError('Error: Password length insufficient (min 4 chars).');
+      return;
+    }
+    await Database.setConfig('starline_admin_pass', newResetPassword);
+    setIsForgotPassword(false);
+    setIsResetAuthenticated(false);
+    setSecretAnswer('');
+    setNewResetPassword('');
+    setPassword('');
+    // Show success message via error field (repurposed for feedback) or just reset
+    setError('Credentials Updated Successfully. Please Login.');
+  };
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -97,51 +127,147 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             )}
 
             <form onSubmit={handleLogin} className="space-y-5">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Identity UID</label>
-                <div className="relative group">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
-                  <input
-                    required
-                    autoFocus
-                    placeholder="Enter username"
-                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                  />
-                </div>
-              </div>
+              {!isForgotPassword ? (
+                // NORMAL LOGIN
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Identity UID</label>
+                    <div className="relative group">
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+                      <input
+                        required
+                        autoFocus
+                        placeholder="Enter username"
+                        className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                      />
+                    </div>
+                  </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Access Key</label>
-                <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
-                  <input
-                    required
-                    type="password"
-                    placeholder="••••••••"
-                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
-              </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center px-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Access Key</label>
+                      <button type="button" onClick={() => { setError(''); setIsForgotPassword(true); }} className="text-[10px] font-bold text-blue-600 hover:text-blue-700 hover:underline uppercase tracking-wider">Forgot Passkey?</button>
+                    </div>
+                    <div className="relative group">
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+                      <input
+                        required
+                        type="password"
+                        placeholder="••••••••"
+                        className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                      />
+                    </div>
+                  </div>
 
-              <div className="pt-2">
-                <button
-                  disabled={isLoading}
-                  className="w-full py-3.5 bg-slate-900 text-white font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-black transition-all shadow-lg active:scale-[0.98] disabled:opacity-50 flex items-center justify-center space-x-3 group"
-                >
-                  {isLoading ? (
-                    <Loader2 className="animate-spin text-blue-500" size={18} />
+                  <div className="pt-2">
+                    <button
+                      disabled={isLoading}
+                      className="w-full py-3.5 bg-slate-900 text-white font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-black transition-all shadow-lg active:scale-[0.98] disabled:opacity-50 flex items-center justify-center space-x-3 group"
+                    >
+                      {isLoading ? (
+                        <Loader2 className="animate-spin text-blue-500" size={18} />
+                      ) : (
+                        <>
+                          <span>Initialize Session</span>
+                          <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                // FORGOT PASSWORD CHALLENGE
+                <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                  <div className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm space-y-4 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-[0.03]">
+                      <Fingerprint size={80} className="text-slate-900" />
+                    </div>
+
+                    <div className="relative z-10">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-50 text-amber-700 rounded-full border border-amber-100 mb-3">
+                        <ShieldAlert size={12} />
+                        <span className="text-[10px] font-bold uppercase tracking-wide">Security Riddle</span>
+                      </div>
+
+                      <h4 className="text-sm font-serif italic text-slate-800 leading-relaxed">
+                        "I forged the keys you lost.<br />
+                        My signature lies at the foundation.<br />
+                        <span className="font-bold text-blue-600 not-italic font-sans text-xs uppercase tracking-wider mt-2 block">Who Am I?</span>"
+                      </h4>
+                    </div>
+                  </div>
+
+                  {!isResetAuthenticated ? (
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">The Answer</label>
+                        <input
+                          autoFocus
+                          placeholder="Type the name..."
+                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder-slate-400 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all uppercase"
+                          value={secretAnswer}
+                          onChange={(e) => setSecretAnswer(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleChallengeVerify();
+                            }
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleChallengeVerify}
+                        className="w-full py-3 bg-blue-600 text-white font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-all shadow-lg active:scale-95"
+                      >
+                        Verify Identity
+                      </button>
+                    </div>
                   ) : (
-                    <>
-                      <span>Initialize Session</span>
-                      <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-                    </>
+                    <div className="space-y-4 animate-in fade-in duration-300">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Set New Access Key</label>
+                        <div className="relative group">
+                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500" size={16} />
+                          <input
+                            autoFocus
+                            type="password"
+                            placeholder="New Password"
+                            className="w-full pl-11 pr-4 py-3 bg-emerald-50/50 border border-emerald-200 rounded-xl text-sm font-bold text-emerald-900 placeholder-emerald-400 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                            value={newResetPassword}
+                            onChange={(e) => setNewResetPassword(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handlePasswordResetConfirm();
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handlePasswordResetConfirm}
+                        className="w-full py-3 bg-emerald-600 text-white font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                      >
+                        <Fingerprint size={16} /> Update Credentials
+                      </button>
+                    </div>
                   )}
-                </button>
-              </div>
+
+                  <button
+                    type="button"
+                    onClick={() => { setIsForgotPassword(false); setIsResetAuthenticated(false); setError(''); setSecretAnswer(''); }}
+                    className="w-full text-center text-[10px] font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest py-2"
+                  >
+                    Cancel Override
+                  </button>
+                </div>
+              )}
             </form>
 
             <div className="pt-6 flex items-center justify-center space-x-4 opacity-40">
@@ -152,7 +278,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
             <p className="text-center text-[9px] text-slate-400 font-medium">
               Authorized personnel only. Sessions are logged.<br />
-              © 2025 Starline Batteries.
+              <span className="opacity-80">Developed by <span className="font-bold text-slate-500">Lukmaann</span></span>
             </p>
           </div>
         </div>
