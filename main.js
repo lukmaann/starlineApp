@@ -142,6 +142,16 @@ function initDatabase() {
       }
     }
 
+    // Migration: Add settlementType column
+    try {
+      db.exec(`ALTER TABLE replacements ADD COLUMN settlementType TEXT`);
+      console.log('Migration: Added settlementType column to replacements table');
+    } catch (err) {
+      if (!err.message.includes('duplicate column')) {
+        console.error('Migration warning for settlementType:', err.message);
+      }
+    }
+
     // Migration: Add warranty date management columns
     const warrantyDateColumns = [
       { name: 'actualSaleDate', type: 'TEXT' },

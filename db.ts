@@ -504,12 +504,12 @@ export class Database {
       await this.run(
         `INSERT INTO replacements (
         id, oldBatteryId, newBatteryId, dealerId, replacementDate, 
-        reason, problemDescription, warrantyCardStatus, paidInAccount, replenishmentBatteryId
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        reason, problemDescription, warrantyCardStatus, paidInAccount, replenishmentBatteryId, settlementType
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           rep.id, rep.oldBatteryId, rep.newBatteryId, rep.dealerId,
           rep.replacementDate, rep.reason, rep.problemDescription, rep.warrantyCardStatus,
-          rep.paidInAccount ? 1 : 0, rep.replenishmentBatteryId || null
+          rep.paidInAccount ? 1 : 0, rep.replenishmentBatteryId || null, rep.settlementType || null
         ]
       );
 
@@ -630,7 +630,7 @@ export class Database {
       this.query<any>(`
         SELECT 
           r.*,
-          s.warrantyStartDate as soldDate,
+          COALESCE(s.warrantyStartDate, b.actualSaleDate, b.activationDate) as soldDate,
           b.model as batteryModel
         FROM replacements r
         LEFT JOIN sales s ON s.batteryId = r.oldBatteryId

@@ -103,6 +103,7 @@ export interface Replacement {
   paidInAccount: boolean;
   soldDate?: string; // Corrected Original Sale Date
   replenishmentBatteryId?: string;
+  settlementType?: 'CREDIT' | 'STOCK' | 'DIRECT';
 }
 
 export interface Sale {

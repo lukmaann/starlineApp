@@ -181,20 +181,27 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
   const handleAddOrUpdate = async () => {
     setIsSubmitting(true);
     const locationString = `${formData.city}, ${formData.state} - ${formData.pincode}`.toUpperCase();
-    await Database.addDealer({
+
+    const dealerData = {
       id: generatedId,
       name: formData.name.toUpperCase(),
       ownerName: formData.owner.toUpperCase(),
       address: formData.address.toUpperCase(),
       contact: formData.contact,
       location: locationString
-    });
+    };
+
+    if (selectedDealer) {
+      await Database.updateDealer(dealerData);
+    } else {
+      await Database.addDealer(dealerData);
+    }
 
     setIsSubmitting(false);
 
     await loadData();
     setViewMode('LIST');
-    window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: 'Partner enrollment complete' } }));
+    window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: selectedDealer ? 'Partner details updated' : 'Partner enrollment complete' } }));
   };
 
   const loadDealerDetail = async (dealer: Dealer) => {
@@ -344,7 +351,14 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                           {formatDate(item.replacementDate)}
                         </td>
                         <td className="px-6 py-5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                          {item.replenishmentBatteryId ? (
+                          {item.settlementType === 'DIRECT' ? (
+                            <div className="flex flex-col">
+                              <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wide flex items-center gap-1">
+                                <CheckCircle2 size={10} /> Direct Settlement
+                              </span>
+                              <span className="text-xs font-bold text-slate-700 mono">{item.newBatteryId}</span>
+                            </div>
+                          ) : item.replenishmentBatteryId ? (
                             <div className="flex flex-col">
                               <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wide">Stock Given</span>
                               <span className="text-xs font-bold text-slate-700 mono">{item.replenishmentBatteryId}</span>

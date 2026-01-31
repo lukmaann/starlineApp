@@ -174,7 +174,17 @@ const BatteryReportTemplate: React.FC<{
                                 <div className="pt-2 border-t border-amber-200/30">
                                     <p className="text-[9px] font-bold text-amber-500 uppercase mb-1">Settlement Details</p>
 
-                                    {rep.replenishmentBatteryId ? (
+                                    {rep.settlementType === 'DIRECT' ? (
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50/50 px-2 py-1 rounded border border-emerald-100">
+                                                <CheckCircle2 size={10} />
+                                                <span className="text-[9px] font-bold uppercase tracking-wider">Direct Settlement (Sold to Customer)</span>
+                                            </div>
+                                            <p className="text-[9px] font-mono text-emerald-600 pl-1">
+                                                Exchanged Unit: <span className="font-bold">{rep.newBatteryId}</span>
+                                            </p>
+                                        </div>
+                                    ) : rep.replenishmentBatteryId ? (
                                         <div className="flex flex-col gap-1">
                                             <div className="flex items-center gap-1.5 text-indigo-700 bg-indigo-50/50 px-2 py-1 rounded border border-indigo-100">
                                                 <CheckCircle2 size={10} />

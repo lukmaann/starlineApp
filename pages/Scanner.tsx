@@ -68,7 +68,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
     soldDate: '',
     paidInAccount: false,
     replenishmentBatteryId: '',
-    settlementMethod: 'CREDIT' as 'CREDIT' | 'STOCK'
+    settlementMethod: 'CREDIT' as 'CREDIT' | 'STOCK' | 'DIRECT'
   });
 
   // Warranty Date Correction State
@@ -481,8 +481,9 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
         reason: replacementData.reason,
         problemDescription: replacementData.problemDescription,
         warrantyCardStatus: replacementData.warrantyCardStatus,
-        paidInAccount: replacementData.settlementMethod === 'CREDIT' ? replacementData.paidInAccount : false,
-        replenishmentBatteryId: replacementData.settlementMethod === 'STOCK' ? replacementData.replenishmentBatteryId : undefined
+        paidInAccount: replacementData.settlementMethod === 'CREDIT' ? replacementData.paidInAccount : (replacementData.settlementMethod === 'DIRECT' ? true : false),
+        replenishmentBatteryId: replacementData.settlementMethod === 'STOCK' ? replacementData.replenishmentBatteryId : undefined,
+        settlementType: replacementData.settlementMethod
       };
       await Database.addReplacement(replacement, {
         customerName: activeAsset.sale?.customerName || null,
@@ -1032,7 +1033,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                                 <Store size={18} className="text-blue-600" /> Dealer Settlement Method
                               </h4>
 
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="grid grid-cols-3 gap-4">
                                 <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col gap-2 ${replacementData.settlementMethod === 'CREDIT' ? 'bg-blue-50 border-blue-500 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
                                   <input
                                     type="radio"
@@ -1048,7 +1049,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                                     </div>
                                     <span className={`font-bold uppercase text-xs ${replacementData.settlementMethod === 'CREDIT' ? 'text-blue-700' : 'text-slate-500'}`}>Account Credit</span>
                                   </div>
-                                  <p className="text-[10px] text-slate-400 font-medium pl-6">No stock given. Value credited to account.</p>
+                                  <p className="text-[10px] text-slate-400 font-medium pl-6">Value credited. Pending/Paid status.</p>
                                 </label>
 
                                 <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col gap-2 ${replacementData.settlementMethod === 'STOCK' ? 'bg-indigo-50 border-indigo-500 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
@@ -1068,9 +1069,27 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                                   </div>
                                   <p className="text-[10px] text-slate-400 font-medium pl-6">Physical battery given to dealer now.</p>
                                 </label>
+
+                                <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col gap-2 ${replacementData.settlementMethod === 'DIRECT' ? 'bg-emerald-50 border-emerald-500 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                  <input
+                                    type="radio"
+                                    name="settlementMethod"
+                                    value="DIRECT"
+                                    className="hidden"
+                                    checked={replacementData.settlementMethod === 'DIRECT'}
+                                    onChange={() => setReplacementData(prev => ({ ...prev, settlementMethod: 'DIRECT' }))}
+                                  />
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${replacementData.settlementMethod === 'DIRECT' ? 'border-emerald-600' : 'border-slate-300'}`}>
+                                      {replacementData.settlementMethod === 'DIRECT' && <div className="w-2 h-2 rounded-full bg-emerald-600" />}
+                                    </div>
+                                    <span className={`font-bold uppercase text-xs ${replacementData.settlementMethod === 'DIRECT' ? 'text-emerald-700' : 'text-slate-500'}`}>Direct Settlement</span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-400 font-medium pl-6">Immediate handover of {replacementData.newBatteryId}. No tracking.</p>
+                                </label>
                               </div>
 
-                              {replacementData.settlementMethod === 'CREDIT' ? (
+                              {replacementData.settlementMethod === 'CREDIT' && (
                                 <div className="p-4 bg-blue-100/50 rounded-xl border border-blue-200 transition-all animate-in fade-in slide-in-from-top-1 cursor-pointer" onClick={() => setReplacementData(prev => ({ ...prev, paidInAccount: !prev.paidInAccount }))}>
                                   <label className="flex items-center gap-4 cursor-pointer select-none">
                                     <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${replacementData.paidInAccount ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-300'}`}>
@@ -1078,11 +1097,13 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                                     </div>
                                     <div>
                                       <span className="text-xs font-black text-blue-900 uppercase block">Mark as Paid?</span>
-                                      <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wide">Tick to confirm payment settled</span>
+                                      <span className="text-xs font-bold text-blue-500 uppercase tracking-wide">Tick to confirm payment settled</span>
                                     </div>
                                   </label>
                                 </div>
-                              ) : (
+                              )}
+
+                              {replacementData.settlementMethod === 'STOCK' && (
                                 <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
                                   <label className="text-xs font-bold text-indigo-900 uppercase tracking-wider ml-1 flex items-center gap-2">
                                     <Barcode size={14} /> Scan Replenishment Unit (For Dealer)
@@ -1094,6 +1115,18 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                                     value={replacementData.replenishmentBatteryId}
                                     onChange={e => setReplacementData({ ...replacementData, replenishmentBatteryId: e.target.value.toUpperCase() })}
                                   />
+                                </div>
+                              )}
+
+                              {replacementData.settlementMethod === 'DIRECT' && (
+                                <div className="p-4 bg-emerald-100/50 rounded-xl border border-emerald-200 transition-all animate-in fade-in slide-in-from-top-1">
+                                  <div className="flex items-center gap-3 text-emerald-800">
+                                    <CheckCircle2 size={20} />
+                                    <div>
+                                      <span className="text-xs font-black uppercase block">Settled Directly</span>
+                                      <span className="text-[10px] font-bold uppercase tracking-wide opacity-80">Transaction will be marked as fully settled.</span>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -1156,6 +1189,11 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                               <div className="flex flex-col">
                                 <span className="text-[10px] font-bold text-indigo-400 uppercase">Stock Replaced</span>
                                 <span className="text-xs font-black text-white mono">{replacementData.replenishmentBatteryId}</span>
+                              </div>
+                            ) : replacementData.settlementMethod === 'DIRECT' ? (
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-emerald-400 uppercase">Method</span>
+                                <span className="text-xs font-black text-white uppercase tracking-wider">DIRECT SETTLEMENT</span>
                               </div>
                             ) : (
                               <div className={`text-xs font-black uppercase tracking-wide justify-center flex items-center gap-2 ${replacementData.paidInAccount ? 'text-emerald-400' : 'text-slate-500'}`}>
@@ -1291,7 +1329,14 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                           <td className="px-6 py-5 whitespace-nowrap">
                             {next ? (
                               <>
-                                {next.replenishmentBatteryId ? (
+                                {next.settlementType === 'DIRECT' ? (
+                                  <div className="flex flex-col">
+                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wide flex items-center gap-1">
+                                      <CheckCircle2 size={10} /> Direct Settlement
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-700 mono">{next.newBatteryId}</span>
+                                  </div>
+                                ) : next.replenishmentBatteryId ? (
                                   <div className="flex flex-col">
                                     <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wide">Stock Given</span>
                                     <span className="text-xs font-bold text-slate-700 mono">{next.replenishmentBatteryId}</span>
