@@ -152,7 +152,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
             <p className="text-center text-[9px] text-slate-400 font-medium">
               Authorized personnel only. Sessions are logged.<br />
-              © 2025 Starline Power Architectures.
+              © 2025 Starline Batteries.
             </p>
           </div>
         </div>

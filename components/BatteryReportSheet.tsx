@@ -30,8 +30,8 @@ const BatteryReportTemplate: React.FC<{
 
     // Conditional classes based on mode
     const containerClasses = mode === 'print'
-        ? "bg-white w-full max-w-[210mm] min-h-[297mm] relative overflow-hidden flex flex-col print-container" // Print styles
-        : "bg-white w-full max-w-[210mm] min-h-[297mm] shadow-2xl relative overflow-hidden flex flex-col"; // View styles
+        ? "bg-white w-full max-w-[210mm] relative overflow-visible flex flex-col print-container" // Print: Visible overflow, natural height
+        : "bg-white w-full h-full relative overflow-y-auto flex flex-col"; // View: Full width/height, scrollable
 
     const headerClasses = mode === 'print'
         ? "bg-slate-900 text-white p-6 border-b-4 border-amber-500 relative shrink-0 print-header"
@@ -55,7 +55,7 @@ const BatteryReportTemplate: React.FC<{
                     </div>
 
                     <div className="text-right">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Serial Identity</p>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Battery Serial Number</p>
                         <p className="text-2xl font-black mono text-emerald-400 tracking-tight leading-none">{battery.id}</p>
                     </div>
                 </div>
@@ -99,7 +99,7 @@ const BatteryReportTemplate: React.FC<{
                             <Store size={14} />
                         </div>
                         <div className="mb-1">
-                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Dispatched to Dealer</h4>
+                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Sold to Dealer</h4>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
@@ -108,7 +108,7 @@ const BatteryReportTemplate: React.FC<{
                                 <p className="font-bold text-slate-800 text-xs">{formatDate(originalBattery?.manufactureDate)}</p>
                             </div>
                             <div>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase">Authorized Partner</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase">Dealer name</p>
                                 <p className="font-bold text-slate-800 text-xs truncate">{dealers.find(d => d.id === battery.dealerId)?.name || 'Unknown'}</p>
                             </div>
                         </div>
@@ -120,10 +120,10 @@ const BatteryReportTemplate: React.FC<{
                             <User size={14} />
                         </div>
                         <div className="mb-1">
-                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Sold to Customer</h4>
+                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Dealer selling details to Customer</h4>
                         </div>
 
-                        <div className="bg-blue-50/30 p-3 rounded-lg border border-blue-100 print:bg-[#eff6ff] print:border-[#eff6ff]">
+                        <div className="bg-blue-50/30 p-3 rounded-lg border border-blue-100">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <p className="text-[9px] font-bold text-blue-400 uppercase">Sale Date</p>
@@ -153,8 +153,8 @@ const BatteryReportTemplate: React.FC<{
                                 <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Warranty Exchange #{idx + 1}</h4>
                             </div>
 
-                            <div className="bg-amber-50/30 p-3 rounded-lg border border-amber-100 space-y-3 print:bg-[#fff7ed] print:border-[#fff7ed]">
-                                <div className="flex justify-between items-start">
+                            <div className="bg-amber-50/30 p-3 rounded-lg border border-amber-100 space-y-3">
+                                <div className="flex justify-between items-start mb-3">
                                     <div>
                                         <p className="text-[9px] font-bold text-amber-500 uppercase">Exchange Date</p>
                                         <p className="font-bold text-slate-900 text-xs">{formatDate(rep.replacementDate)}</p>
@@ -176,7 +176,7 @@ const BatteryReportTemplate: React.FC<{
 
                                     {rep.replenishmentBatteryId ? (
                                         <div className="flex flex-col gap-1">
-                                            <div className="flex items-center gap-1.5 text-indigo-700 bg-indigo-50/50 px-2 py-1 rounded border border-indigo-100 print:bg-indigo-50">
+                                            <div className="flex items-center gap-1.5 text-indigo-700 bg-indigo-50/50 px-2 py-1 rounded border border-indigo-100">
                                                 <CheckCircle2 size={10} />
                                                 <span className="text-[9px] font-bold uppercase">Replaced with New Battery to Dealer</span>
                                             </div>
@@ -186,7 +186,7 @@ const BatteryReportTemplate: React.FC<{
                                         </div>
                                     ) : (
                                         <div className="flex flex-col gap-1">
-                                            <div className={`flex items-center gap-1.5 px-2 py-1 rounded border ${rep.paidInAccount ? 'text-emerald-700 bg-emerald-50/50 border-emerald-100 print:bg-emerald-50' : 'text-rose-700 bg-rose-50/50 border-rose-100 print:bg-rose-50'}`}>
+                                            <div className={`flex items-center gap-1.5 px-2 py-1 rounded border ${rep.paidInAccount ? 'text-emerald-700 bg-emerald-50/50 border-emerald-100' : 'text-rose-700 bg-rose-50/50 border-rose-100'}`}>
                                                 <CreditCard size={10} />
                                                 <span className="text-[9px] font-bold uppercase">Financial Settlement</span>
                                             </div>
@@ -204,7 +204,7 @@ const BatteryReportTemplate: React.FC<{
                 {/* Footer Note */}
                 <div className="mt-auto pt-16 text-center">
                     <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-                        Starline Power Architectures • Service Division
+                        Starline Batteries
                     </p>
                     <div className="h-1 w-8 bg-slate-200 mx-auto mt-2 rounded-full"></div>
                 </div>
@@ -237,9 +237,12 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                             margin: 12mm;
                         }
                         
-                        body {
-                            margin: 0;
-                            background: white;
+                        html, body {
+                            margin: 0 !important;
+                            padding: 0 !important;
+                            background-color: white !important;
+                            -webkit-print-color-adjust: exact !important;
+                            print-color-adjust: exact !important;
                         }
 
                         /* 
@@ -266,8 +269,20 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                             left: 0 !important;
                             width: 100% !important;
                             height: auto !important;
+                            min-height: 0 !important;
                             z-index: 99999 !important;
                             visibility: visible !important;
+                            background-color: white !important;
+                        }
+
+                        /* Force white background on the report container */
+                        #report-printable {
+                            background-color: white !important;
+                            box-shadow: none !important;
+                            border: none !important;
+                            min-height: 0 !important;
+                            height: auto !important;
+                            overflow: visible !important;
                         }
                         
                         /* Explicit print styles for the content */
@@ -281,6 +296,8 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                         .print-header * {
                             color: #ffffff !important;
                         }
+
+
 
                         * {
                             -webkit-print-color-adjust: exact !important;
@@ -301,7 +318,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
             </style>
 
             {/* View Mode (Interactive, inside Sheet) */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex items-start justify-center">
+            <div className="flex-1 overflow-hidden flex flex-col relative h-full">
                 <BatteryReportTemplate
                     mode="view"
                     battery={battery}

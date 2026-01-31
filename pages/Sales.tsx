@@ -103,7 +103,7 @@ const Invoice: React.FC<{ sale: Sale; dealer: Dealer | null; battery: Battery | 
               <tr className="bg-slate-900 text-white text-[11px] font-black tracking-[0.2em]">
                 <th className="px-6 py-5 text-left">ITEM DESCRIPTION</th>
                 <th className="px-4 py-5 text-center border-l border-white/10">HSN CODE</th>
-                <th className="px-6 py-5 text-center border-l border-white/10">SERIAL IDENTITY</th>
+                <th className="px-6 py-5 text-center border-l border-white/10">BATTERY SERIAL NUMBER</th>
                 <th className="px-4 py-5 text-center border-l border-white/10">RATING</th>
                 <th className="px-6 py-5 text-right border-l border-white/10">TAXABLE VALUE</th>
               </tr>
@@ -163,7 +163,7 @@ const Invoice: React.FC<{ sale: Sale; dealer: Dealer | null; battery: Battery | 
 
             <div className="pt-10 flex flex-col items-center justify-center space-y-4 relative">
               <div className="w-full border-t-2 border-slate-900 mt-16 pt-5 text-center">
-                <p className="text-[11px] font-black text-slate-900 tracking-[0.3em]">FOR STARLINE POWER SOLUTIONS PVT LTD</p>
+                <p className="text-[11px] font-black text-slate-900 tracking-[0.3em]">FOR STARLINE BATTERIES</p>
                 <div className="h-12"></div>
                 <p className="text-[9px] font-black text-slate-500 mt-2 uppercase">AUTHORIZED SIGNATORY</p>
               </div>

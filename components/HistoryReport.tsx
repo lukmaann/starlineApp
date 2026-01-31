@@ -54,7 +54,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ battery, lineage, replace
                 <div className="prose prose-slate max-w-none text-justify leading-relaxed text-sm">
                     <p>
                         <strong>1. ORIGIN & MANUFACTURE</strong><br />
-                        This Starline Power Architecture unit, identified by Serial ID <strong>{originalBattery?.id}</strong>, is a high-performance <strong>{originalBattery?.model}</strong> model ({originalBattery?.capacity}).
+                        This Starline Batteries unit, identified by Serial ID <strong>{originalBattery?.id}</strong>, is a high-performance <strong>{originalBattery?.model}</strong> model ({originalBattery?.capacity}).
                         It was manufactured on <strong>{formatDate(originalBattery?.manufactureDate)}</strong> and entered the distribution network with a standard warranty coverage of <strong>{originalBattery?.warrantyMonths} months</strong>.
                     </p>
 

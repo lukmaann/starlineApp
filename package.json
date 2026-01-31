@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "keywords": [],
-  "author": "Starline Power Architectures",
+  "author": "Starline Batteries",
   "license": "ISC",
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
