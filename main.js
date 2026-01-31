@@ -71,7 +71,6 @@ function initDatabase() {
         replacementDate TEXT,
         reason TEXT,
         problemDescription TEXT,
-        problemDescription TEXT,
         warrantyCardStatus TEXT,
         replenishmentBatteryId TEXT,
         paidInAccount INTEGER DEFAULT 0
@@ -198,6 +197,7 @@ function createWindow() {
 // 1. SELECT (Read)
 ipcMain.handle('db-query', (event, sql, params = []) => {
   try {
+    if (!db) throw new Error('Database not initialized');
     const stmt = db.prepare(sql);
     return stmt.all(...params);
   } catch (err) {
@@ -209,6 +209,7 @@ ipcMain.handle('db-query', (event, sql, params = []) => {
 // 2. INSERT/UPDATE/DELETE (Write)
 ipcMain.handle('db-run', (event, sql, params = []) => {
   try {
+    if (!db) throw new Error('Database not initialized');
     const stmt = db.prepare(sql);
     const info = stmt.run(...params);
     return { changes: info.changes, lastInsertRowid: info.lastInsertRowid };
@@ -221,6 +222,7 @@ ipcMain.handle('db-run', (event, sql, params = []) => {
 // 3. EXEC (Schema/Batch)
 ipcMain.handle('db-exec', (event, sql) => {
   try {
+    if (!db) throw new Error('Database not initialized');
     db.exec(sql);
     return true;
   } catch (err) {
