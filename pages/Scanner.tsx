@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { formatDate, getLocalDate } from '../utils';
 import { StatusDisplay } from '../components/StatusDisplay';
+import { Sheet, SheetContent, SheetTrigger } from '../components/ui/sheet';
+import BatteryReportSheet from '../components/BatteryReportSheet';
 import { BatteryStatus, type Battery, type Dealer, WarrantyCardStatus, type Sale, Replacement, BatteryModel, WarrantyStatus } from '../types';
 
 interface ScannerProps {
@@ -883,10 +885,24 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                   <div className="flex items-center space-x-4"><h1 className="text-4xl font-black tracking-tight text-slate-900 mono uppercase">{activeAsset.battery.id}</h1></div>
                   <p className="text-slate-500 font-bold text-lg uppercase">{activeAsset.battery.model} • {activeAsset.battery.capacity}</p>
                 </div>
-                <button onClick={handlePrintReport} className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all border border-slate-100 no-print flex items-center gap-2">
-                  <Printer size={20} />
-                  <span className="text-xs font-bold uppercase">Print Details</span>
-                </button>
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <button className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all border border-slate-100 no-print flex items-center gap-2">
+                      <FileText size={20} />
+                      <span className="text-xs font-bold uppercase">Create Report</span>
+                    </button>
+                  </SheetTrigger>
+                  <SheetContent className="w-full sm:max-w-[50vw] p-0">
+                    <BatteryReportSheet
+                      battery={activeAsset.battery}
+                      lineage={activeAsset.lineage}
+                      replacements={activeAsset.replacements}
+                      dealers={dealers}
+                      saleDate={activeAsset.lineageSales?.find((s: any) => s.batteryId === activeAsset.battery.id)?.saleDate}
+                      onPrint={handlePrintReport}
+                    />
+                  </SheetContent>
+                </Sheet>
               </div>
               <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div className="space-y-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Ownership record</p><div className="flex items-center space-x-3">{activeAsset.battery.customerName ? <><div className="p-2 bg-slate-50 rounded-lg"><User size={18} /></div><span className="font-bold text-slate-900 uppercase">{activeAsset.battery.customerName}</span></> : <p className="text-sm font-bold text-slate-300 italic">Inventory Stock</p>}</div></div>
