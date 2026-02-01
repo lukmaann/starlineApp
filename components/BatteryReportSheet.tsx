@@ -104,7 +104,7 @@ const BatteryReportTemplate: React.FC<{
 
                         <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                             <div>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase">Manufactured Date</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase">Date</p>
                                 <p className="font-bold text-slate-800 text-xs">{formatDate(originalBattery?.manufactureDate)}</p>
                             </div>
                             <div>
@@ -136,8 +136,8 @@ const BatteryReportTemplate: React.FC<{
                                     </div>
                                 )}
                             </div>
-                            <div className="mt-3 pt-2 border-t border-blue-100 flex justify-between items-center text-blue-600/70">
-                                <p className="text-[9px] font-bold uppercase">Warranty Ends</p>
+                            <div className="mt-3 pt-2 border-t border-blue-100 flex justify-between items-center text-red-600/70">
+                                <p className="text-[9px] font-bold uppercase">Expiry Date</p>
                                 <p className="font-mono font-bold text-xs">{formatDate(battery.warrantyExpiry)}</p>
                             </div>
                         </div>

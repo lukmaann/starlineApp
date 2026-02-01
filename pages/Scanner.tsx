@@ -7,7 +7,7 @@ import {
   RefreshCw, Store, Phone, Calendar,
   X, CheckCircle, ArrowRight, PackagePlus,
   Loader2, Zap, LayoutGrid, Package, ArrowDown,
-  AlertCircle, ShieldAlert, BadgeCheck, Clock,
+  AlertCircle, ShieldAlert, BadgeCheck, Clock, Lock, Fingerprint,
   User, ChevronRight, Layers, FileText, Smartphone, Copy,
   Printer, Download, FileSpreadsheet, FileJson, StickyNote,
   ArrowDownCircle, HelpCircle, ArrowRightLeft, AlertOctagon,
@@ -78,17 +78,23 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
   const [warrantyCalculation, setWarrantyCalculation] = useState<any>(null);
   const [isApplyingCorrection, setIsApplyingCorrection] = useState(false);
 
-  // Name Validation State
+  // Lock Screen State
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockPassword, setLockPassword] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [lockError, setLockError] = useState('');
 
 
   useEffect(() => {
     const init = async () => {
-      const [d, m] = await Promise.all([
+      const [d, m, p] = await Promise.all([
         Database.getAll<Dealer>('dealers'),
-        Database.getAll<BatteryModel>('models')
+        Database.getAll<BatteryModel>('models'),
+        Database.getConfig('starline_admin_pass')
       ]);
       setDealers(d);
       setModels(m);
+      setAdminPassword(p || 'starline@2025');
     };
     init();
     focusMainInput();
@@ -282,6 +288,20 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
 
 
 
+  const handleUnlockAndExchange = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (lockPassword === adminPassword) {
+      setIsLocked(false);
+      setLockPassword('');
+      setLockError('');
+      setIsReplacing(true);
+      setReplacementStep(1);
+      notify('Security Clearance Approved', 'success');
+    } else {
+      setLockError('Invalid Access Key. Authorization Denied.');
+      setLockPassword('');
+    }
+  };
 
   const handleReplacementRequest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -929,7 +949,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                 <div className="space-y-6">
 
                   {!isReplacing && !isConfirmingReplacement && (
-                    <button onClick={() => { setIsReplacing(true); setReplacementStep(1); }} className="w-full py-8 text-2xl bg-slate-900 text-white rounded-3xl font-black flex items-center justify-center space-x-4 hover:bg-black transition-all shadow-2xl active:scale-[0.98] uppercase tracking-[0.2em] animate-in fade-in slide-in-from-bottom-2 border-4 border-slate-900 hover:border-white/20"><RefreshCw size={28} /><span>Start Warranty Exchange</span></button>
+                    <button onClick={() => setIsLocked(true)} className="w-full py-8 text-2xl bg-slate-900 text-white rounded-3xl font-black flex items-center justify-center space-x-4 hover:bg-black transition-all shadow-2xl active:scale-[0.98] uppercase tracking-[0.2em] animate-in fade-in slide-in-from-bottom-2 border-4 border-slate-900 hover:border-white/20"><RefreshCw size={28} /><span>Start Warranty Exchange</span></button>
                   )}
 
                   {isReplacing && !isConfirmingReplacement && (
@@ -1407,6 +1427,66 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
           </div>
         )
       })()}
+      {/* Authorization Lock Screen Overlay */}
+      {isLocked && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/40 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="max-w-md w-full bg-white rounded-[2.5rem] p-10 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300">
+            <div className="flex flex-col items-center text-center space-y-6">
+              <div className="w-20 h-20 bg-slate-900 text-white rounded-3xl flex items-center justify-center shadow-xl shadow-slate-900/20">
+                <Lock size={40} />
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black text-slate-900">Security Protocol</h3>
+                <p className="text-slate-500 text-xs font-bold leading-relaxed">
+                  Administrative authorization is required to proceed with warranty exchange.
+                </p>
+              </div>
+
+              {lockError && (
+                <div className="w-full p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600 animate-shake">
+                  <ShieldAlert size={18} />
+                  <span className="text-[10px] font-black">{lockError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleUnlockAndExchange} className="w-full space-y-4">
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[10px] font-black text-slate-400 ml-1">Access Passkey</label>
+                  <div className="relative group">
+                    <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={20} />
+                    <input
+                      autoFocus
+                      type="password"
+                      placeholder="••••••••"
+                      className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xl outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all mono placeholder:text-slate-300"
+                      value={lockPassword}
+                      onChange={e => setLockPassword(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setIsLocked(false); setLockPassword(''); setLockError(''); }}
+                    className="flex-1 py-4 bg-slate-100 text-slate-500 font-black text-xs rounded-2xl hover:bg-slate-200 transition-all active:scale-95"
+                  >
+                    Abort
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-[2] py-4 bg-slate-900 text-white font-black text-xs rounded-2xl hover:bg-black transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 group"
+                  >
+                    <span>Authorize</span>
+                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
