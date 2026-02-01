@@ -104,7 +104,7 @@ const BatteryReportTemplate: React.FC<{
 
                         <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                             <div>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase">Date</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase">Manufactured Date</p>
                                 <p className="font-bold text-slate-800 text-xs">{formatDate(originalBattery?.manufactureDate)}</p>
                             </div>
                             <div>
@@ -162,8 +162,8 @@ const BatteryReportTemplate: React.FC<{
                                     <div className="text-right flex flex-col items-end gap-1">
                                         <span className="text-[10px] font-bold text-amber-700 uppercase">{rep.reason}</span>
                                         {rep.settlementType === 'DIRECT' ? (
-                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-slate-800 text-white uppercase tracking-wider border border-slate-600">
-                                                FACTORY GIVEN
+                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-white text-slate-900 uppercase tracking-wider border border-slate-300 shadow-sm">
+                                                GIVEN BY FACTORY
                                             </span>
                                         ) : (
                                             <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-white text-amber-700 uppercase tracking-wider border border-amber-200 shadow-sm">
@@ -263,31 +263,23 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                             margin: 12mm;
                         }
                         
+                        /* HIDE EVERYTHING ELSE */
+                        body > *:not(#print-portal-root) {
+                            display: none !important;
+                        }
+
+                        /* Reset Body for Print */
                         html, body {
                             margin: 0 !important;
                             padding: 0 !important;
                             background-color: white !important;
                             -webkit-print-color-adjust: exact !important;
                             print-color-adjust: exact !important;
-                        }
-
-                        /* 
-                            CRITICAL ARCHITECTURAL FIX:
-                            Hide the ENTIRE React App Root.
-                            Only show the Portal content which is outside App Root.
-                        */
-                        #root, .app-root, [role="dialog"], [data-radix-portal] {
-                            display: none !important;
-                        }
-
-                        /* Reset body visibility to ensure Portal is visible */
-                        body {
-                            visibility: visible !important;
-                            overflow: visible !important;
                             height: auto !important;
+                            overflow: visible !important;
                         }
 
-                        /* Target the Portal Print Container directly */
+                        /* Ensure Portal is Visible and positioned correctly */
                         #print-portal-root {
                             display: block !important;
                             position: absolute !important;
@@ -295,9 +287,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                             left: 0 !important;
                             width: 100% !important;
                             height: auto !important;
-                            min-height: 0 !important;
-                            z-index: 99999 !important;
-                            visibility: visible !important;
+                            z-index: 9999 !important;
                             background-color: white !important;
                         }
 
@@ -306,9 +296,12 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                             background-color: white !important;
                             box-shadow: none !important;
                             border: none !important;
+                            width: 100% !important;
+                            max-width: none !important; /* Allow full width */
                             min-height: 0 !important;
                             height: auto !important;
                             overflow: visible !important;
+                            margin: 0 auto !important;
                         }
                         
                         /* Explicit print styles for the content */
@@ -322,8 +315,6 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                         .print-header * {
                             color: #ffffff !important;
                         }
-
-
 
                         * {
                             -webkit-print-color-adjust: exact !important;
