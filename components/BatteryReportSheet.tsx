@@ -50,12 +50,12 @@ const BatteryReportTemplate: React.FC<{
                         </div>
                         <div>
                             <h1 className="text-xl font-black uppercase tracking-tighter leading-none">Starline Batteries</h1>
-                            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mt-1">Official Lifecycle Report</p>
+                            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mt-1">Battery History Report</p>
                         </div>
                     </div>
 
                     <div className="text-right">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Battery Serial Number</p>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Serial Number</p>
                         <p className="text-2xl font-black mono text-emerald-400 tracking-tight leading-none">{battery.id}</p>
                     </div>
                 </div>
@@ -84,7 +84,7 @@ const BatteryReportTemplate: React.FC<{
                     <div className={`px-3 py-1.5 rounded-lg border flex items-center gap-2 ${isExpired ? 'bg-rose-50 border-rose-100 text-rose-700' : 'bg-emerald-50 border-emerald-100 text-emerald-700'}`}>
                         {isExpired ? <AlertTriangle size={14} /> : <ShieldCheck size={14} />}
                         <span className="text-[10px] font-black uppercase tracking-wider">
-                            {isExpired ? 'Warranty Expired' : 'Active Coverage'}
+                            {isExpired ? 'Warranty Expired' : 'Active Warranty'}
                         </span>
                     </div>
                 </div>
@@ -99,7 +99,7 @@ const BatteryReportTemplate: React.FC<{
                             <Store size={14} />
                         </div>
                         <div className="mb-1">
-                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Sold to Dealer</h4>
+                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Sent to Shop</h4>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
@@ -108,8 +108,8 @@ const BatteryReportTemplate: React.FC<{
                                 <p className="font-bold text-slate-800 text-xs">{formatDate(originalBattery?.manufactureDate)}</p>
                             </div>
                             <div>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase">Dealer name</p>
-                                <p className="font-bold text-slate-800 text-xs truncate">{dealers.find(d => d.id === battery.dealerId)?.name || 'Unknown'}</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase">Shop Name</p>
+                                <p className="font-bold text-slate-800 text-xs truncate">{dealers.find(d => d.id === originalBattery?.dealerId)?.name || 'Unknown'}</p>
                             </div>
                         </div>
                     </div>
@@ -120,7 +120,7 @@ const BatteryReportTemplate: React.FC<{
                             <User size={14} />
                         </div>
                         <div className="mb-1">
-                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Dealer selling details to Customer</h4>
+                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Sold to Customer</h4>
                         </div>
 
                         <div className="bg-blue-50/30 p-3 rounded-lg border border-blue-100">
@@ -137,7 +137,7 @@ const BatteryReportTemplate: React.FC<{
                                 )}
                             </div>
                             <div className="mt-3 pt-2 border-t border-blue-100 flex justify-between items-center text-blue-600/70">
-                                <p className="text-[9px] font-bold uppercase">Warranty Valid Until</p>
+                                <p className="text-[9px] font-bold uppercase">Warranty Ends</p>
                                 <p className="font-mono font-bold text-xs">{formatDate(battery.warrantyExpiry)}</p>
                             </div>
                         </div>
@@ -150,7 +150,7 @@ const BatteryReportTemplate: React.FC<{
                                 <ArrowRightLeft size={14} />
                             </div>
                             <div className="mb-1">
-                                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Warranty Exchange #{idx + 1}</h4>
+                                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Exchange #{idx + 1}</h4>
                             </div>
 
                             <div className="bg-amber-50/30 p-3 rounded-lg border border-amber-100 space-y-3">
@@ -159,60 +159,59 @@ const BatteryReportTemplate: React.FC<{
                                         <p className="text-[9px] font-bold text-amber-500 uppercase">Exchange Date</p>
                                         <p className="font-bold text-slate-900 text-xs">{formatDate(rep.replacementDate)}</p>
                                     </div>
-                                    <div className="text-right">
+                                    <div className="text-right flex flex-col items-end gap-1">
                                         <span className="text-[10px] font-bold text-amber-700 uppercase">{rep.reason}</span>
+                                        {rep.settlementType === 'DIRECT' ? (
+                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-slate-800 text-white uppercase tracking-wider border border-slate-600">
+                                                FACTORY GIVEN
+                                            </span>
+                                        ) : (
+                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-white text-amber-700 uppercase tracking-wider border border-amber-200 shadow-sm">
+                                                GIVEN BY DEALER
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
 
-                                <div className="flex justify-between items-center mb-2 px-1">
-                                    <div className="flex items-center gap-2">
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Settlement Date</p>
-                                        <p className="font-bold text-slate-900 text-xs">
-                                            {(rep.settlementDate || rep.settlementType === 'DIRECT')
-                                                ? formatDate(rep.settlementType === 'DIRECT' ? rep.replacementDate : rep.settlementDate)
-                                                : '-'}
-                                        </p>
+                                <div className="flex items-center gap-4 bg-white p-3 rounded-lg border border-amber-100/60 shadow-sm">
+                                    <div className="flex flex-col items-center">
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase">OLD BATTERY</span>
+                                        <span className="font-mono text-lg text-rose-500 font-bold decoration-2 opacity-75">{rep.oldBatteryId}</span>
+                                    </div>
+                                    <div className="flex-1 flex justify-center">
+                                        <ArrowRightLeft size={20} className="text-slate-300" />
+                                    </div>
+                                    <div className="flex flex-col items-center">
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase">NEW BATTERY</span>
+                                        <span className="font-mono text-lg text-emerald-600 font-black tracking-tight">{rep.newBatteryId}</span>
                                     </div>
                                 </div>
-
-                                <div className="flex items-center gap-2 text-[10px] bg-white p-2 rounded border border-amber-100/50">
-                                    <span className="font-mono text-lg text-rose-500 font-bold decoration-2 opacity-75">{rep.oldBatteryId}</span>
-                                    <span className="text-slate-300 transform scale-150">→</span>
-                                    <span className="font-mono text-lg text-emerald-600 font-black tracking-tight">{rep.newBatteryId}</span>
-                                </div>
-
-                                <div className="pt-2 border-t border-amber-200/30">
-                                    <p className="text-[9px] font-bold text-amber-500 uppercase mb-1">Settlement Details</p>
+                                <div className="mt-4 pt-3 border-t border-amber-200/50 bg-white/50 rounded-lg p-2">
+                                    <p className="text-[9px] font-black text-amber-600 uppercase mb-2">Exchange Info</p>
 
                                     {rep.settlementType === 'DIRECT' ? (
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50/50 px-2 py-1 rounded border border-emerald-100">
-                                                <CheckCircle2 size={10} />
-                                                <span className="text-[9px] font-bold uppercase tracking-wider">Direct Settlement (Sold to Customer)</span>
-                                            </div>
-                                            <p className="text-[9px] font-mono text-emerald-600 pl-1">
-                                                Exchanged Unit: <span className="font-bold">{rep.newBatteryId}</span>
-                                            </p>
+                                        <div className="flex items-center gap-2 text-emerald-700">
+                                            <CheckCircle2 size={12} />
+                                            <span className="text-[10px] font-bold">Handled directly by Factory (Stock) on {formatDate(rep.replacementDate)}</span>
                                         </div>
                                     ) : rep.replenishmentBatteryId ? (
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex items-center gap-1.5 text-indigo-700 bg-indigo-50/50 px-2 py-1 rounded border border-indigo-100">
-                                                <CheckCircle2 size={10} />
-                                                <span className="text-[9px] font-bold uppercase">Replaced with New Battery to Dealer</span>
-                                            </div>
-                                            <p className="text-[9px] font-mono text-indigo-600 pl-1">
-                                                New Unit ID: <span className="font-bold">{rep.replenishmentBatteryId}</span>
-                                            </p>
+                                        <div className="flex items-center gap-2 text-indigo-700">
+                                            <CheckCircle2 size={12} />
+                                            <span className="text-[10px] font-bold">Factory sent unit <span className="font-mono bg-indigo-50 px-1 rounded">{rep.replenishmentBatteryId}</span> to Shop on {formatDate(rep.settlementDate || rep.replacementDate)}</span>
                                         </div>
                                     ) : (
-                                        <div className="flex flex-col gap-1">
-                                            <div className={`flex items-center gap-1.5 px-2 py-1 rounded border ${rep.paidInAccount ? 'text-emerald-700 bg-emerald-50/50 border-emerald-100' : 'text-rose-700 bg-rose-50/50 border-rose-100'}`}>
-                                                <CreditCard size={10} />
-                                                <span className="text-[9px] font-bold uppercase">Financial Settlement</span>
-                                            </div>
-                                            <p className={`text-[9px] font-mono pl-1 ${rep.paidInAccount ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                Paid in Account: <span className="font-bold border-b-2 border-current">{rep.paidInAccount ? 'YES' : 'NO'}</span>
-                                            </p>
+                                        <div className="flex items-center gap-2">
+                                            {rep.paidInAccount ? (
+                                                <div className="flex items-center gap-2 text-emerald-700">
+                                                    <CreditCard size={12} />
+                                                    <span className="text-[10px] font-bold">Factory added credit to Shop's account on {formatDate(rep.settlementDate || rep.replacementDate)}</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-2 text-rose-600">
+                                                    <CreditCard size={12} />
+                                                    <span className="text-[10px] font-bold">Pending Payment/Credit to Shop</span>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -239,6 +238,13 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
     const originalBattery = lineage.find(b => b.status === BatteryStatus.MANUFACTURED) || lineage[0];
     const effectiveSaleDate = saleDate || originalBattery?.activationDate;
     const reportDate = formatDate(new Date());
+
+    // Sort replacements topologically based on lineage order (A -> B -> C)
+    const sortedReplacements = [...replacements].sort((a, b) => {
+        const idxA = lineage.findIndex(l => l.id === a.oldBatteryId);
+        const idxB = lineage.findIndex(l => l.id === b.oldBatteryId);
+        return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+    });
 
     const handlePrint = () => {
         const originalTitle = document.title;
@@ -343,7 +349,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                     mode="view"
                     battery={battery}
                     lineage={lineage}
-                    replacements={replacements}
+                    replacements={sortedReplacements}
                     dealers={dealers}
                     reportDate={reportDate}
                     isExpired={isExpired}
@@ -359,7 +365,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                         mode="print"
                         battery={battery}
                         lineage={lineage}
-                        replacements={replacements}
+                        replacements={sortedReplacements}
                         dealers={dealers}
                         reportDate={reportDate}
                         isExpired={isExpired}
