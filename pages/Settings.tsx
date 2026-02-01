@@ -136,13 +136,18 @@ const Settings: React.FC = () => {
     setIsActionLoading(true);
     try {
       const id = editingModelId || modelForm.name.toUpperCase().replace(/\s+/g, '-');
-
-      await Database.addModel({
+      const modelData = {
         id: id,
         name: modelForm.name.toUpperCase(),
         defaultCapacity: modelForm.capacity.replace(/AH$/i, '') + 'AH',
         defaultWarrantyMonths: modelForm.warranty
-      });
+      };
+
+      if (editingModelId) {
+        await Database.updateModel(modelData);
+      } else {
+        await Database.addModel(modelData);
+      }
 
       setIsActionLoading(false);
       setActiveForm(null);
@@ -158,12 +163,17 @@ const Settings: React.FC = () => {
   const handleExecuteModelDeletion = async () => {
     if (!deletingModel) return;
     setIsActionLoading(true);
-    await Database.deleteModel(deletingModel.id);
-    setDeletingModel(null);
-    setModelDeleteConfirmName('');
-    setIsActionLoading(false);
-    loadModelData();
-    notify('Model deleted from registry', 'error');
+    try {
+      await Database.deleteModel(deletingModel.id);
+      setDeletingModel(null);
+      setModelDeleteConfirmName('');
+      loadModelData();
+      notify('Model deleted from registry', 'success');
+    } catch (e: any) {
+      notify(e.message || 'Failed to delete model', 'error');
+    } finally {
+      setIsActionLoading(false);
+    }
   };
 
   // Filter models based on search

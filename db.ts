@@ -667,7 +667,23 @@ export class Database {
     );
   }
 
+  static async getBatteryCountByModel(modelName: string): Promise<number> {
+    const result = await this.query<{ count: number }>(
+      'SELECT COUNT(*) as count FROM batteries WHERE model = ?',
+      [modelName]
+    );
+    return result[0]?.count || 0;
+  }
+
   static async deleteModel(id: string): Promise<void> {
+    // Safety Check: Prevent deletion if batteries exist
+    const model = (await this.query<{ name: string }>('SELECT name FROM models WHERE id = ?', [id]))[0];
+    if (model) {
+      const count = await this.getBatteryCountByModel(model.name);
+      if (count > 0) {
+        throw new Error(`Cannot delete model "${model.name}". It is used by ${count} batteries.`);
+      }
+    }
     await this.run('DELETE FROM models WHERE id = ?', [id]);
   }
 

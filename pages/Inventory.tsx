@@ -63,28 +63,44 @@ const Stock: React.FC<StockProps> = () => {
 
   const handleCommitModel = async () => {
     setIsActionLoading(true);
-    await Database.addModel({
+    const modelData = {
       id: editingModelId || modelForm.name.toUpperCase().replace(/\s+/g, '-'),
       name: modelForm.name.toUpperCase(),
       // Ensure AH is appended on save
       defaultCapacity: modelForm.capacity.replace(/AH$/i, '') + 'AH',
       defaultWarrantyMonths: modelForm.warranty
-    });
-    setIsActionLoading(false);
-    setActiveForm(null);
-    loadData();
-    window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: editingModelId ? 'ARCHETYPE UPDATED' : 'SCHEMA INITIALIZED' } }));
+    };
+
+    try {
+      if (editingModelId) {
+        await Database.updateModel(modelData);
+      } else {
+        await Database.addModel(modelData);
+      }
+      setIsActionLoading(false);
+      setActiveForm(null);
+      loadData();
+      window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: editingModelId ? 'ARCHETYPE UPDATED' : 'SCHEMA INITIALIZED' } }));
+    } catch (e: any) {
+      setIsActionLoading(false);
+      window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: `ERROR: ${e.message}`, type: 'error' } }));
+    }
   };
 
   const handleExecuteModelDeletion = async () => {
     if (!deletingModel) return;
     setIsActionLoading(true);
-    await Database.deleteModel(deletingModel.id);
-    setDeletingModel(null);
-    setModelDeleteConfirmName('');
-    setIsActionLoading(false);
-    loadData();
-    window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: 'MODEL REMOVED FROM REGISTRY', type: 'error' } }));
+    try {
+      await Database.deleteModel(deletingModel.id);
+      setDeletingModel(null);
+      setModelDeleteConfirmName('');
+      loadData();
+      window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: 'MODEL REMOVED FROM REGISTRY', type: 'error' } }));
+    } catch (e: any) {
+      window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: e.message || 'Deletion Failed', type: 'error' } }));
+    } finally {
+      setIsActionLoading(false);
+    }
   };
 
   return (
