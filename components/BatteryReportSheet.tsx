@@ -160,8 +160,18 @@ const BatteryReportTemplate: React.FC<{
                                         <p className="font-bold text-slate-900 text-xs">{formatDate(rep.replacementDate)}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-[9px] font-bold text-amber-500 uppercase">Reason</p>
                                         <span className="text-[10px] font-bold text-amber-700 uppercase">{rep.reason}</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-between items-center mb-2 px-1">
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Settlement Date</p>
+                                        <p className="font-bold text-slate-900 text-xs">
+                                            {(rep.settlementDate || rep.settlementType === 'DIRECT')
+                                                ? formatDate(rep.settlementType === 'DIRECT' ? rep.replacementDate : rep.settlementDate)
+                                                : '-'}
+                                        </p>
                                     </div>
                                 </div>
 

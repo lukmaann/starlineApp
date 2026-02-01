@@ -235,11 +235,149 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
+  // SETTLEMENT MODAL STATE
+  const [settlementModal, setSettlementModal] = useState<{
+    isOpen: boolean;
+    replacementId: string;
+    oldBatteryId: string;
+    method: 'CREDIT' | 'STOCK';
+    date: string;
+    replenishmentId: string;
+  }>({
+    isOpen: false,
+    replacementId: '',
+    oldBatteryId: '',
+    method: 'CREDIT',
+    date: new Date().toISOString().split('T')[0],
+    replenishmentId: ''
+  });
+  const [isSettling, setIsSettling] = useState(false);
+
+  const handleOpenSettlement = (repo: any) => {
+    setSettlementModal({
+      isOpen: true,
+      replacementId: repo.id,
+      oldBatteryId: repo.oldBatteryId,
+      method: 'CREDIT',
+      date: repo.replacementDate ? repo.replacementDate.split('T')[0] : new Date().toISOString().split('T')[0],
+      replenishmentId: ''
+    });
+  };
+
+
+
+  // --- RENDER ---
+  // ... (Modal code remains same, skipping for brevity in this tool call context if not targeted, but tool replaces context chunks so I must be careful)
+  // Actually I should just target the handleOpenSettlement and the specific table cell separately or in one large chunk if they are close.
+  // They are somewhat far apart. I will stick to targeting the chunks I see.
+
+  // Wait, I can't do multiple replace chunks in one `replace_file_content` call unless I use `multi_replace_file_content`.
+  // I will use `multi_replace_file_content` to update:
+  // 1. handleOpenSettlement (Line ~256)
+  // 2. The table cell content (Line ~580)
+
+
+  const handleResolveSettlement = async () => {
+    if (!settlementModal.replacementId) return;
+    setIsSettling(true);
+    try {
+      await Database.resolveSettlement(
+        settlementModal.replacementId,
+        settlementModal.method,
+        settlementModal.date,
+        settlementModal.method === 'STOCK' ? settlementModal.replenishmentId : undefined
+      );
+      setSettlementModal(prev => ({ ...prev, isOpen: false }));
+      fetchTabData(); // Reload table
+      window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: 'Settlement Resolved Successfully' } }));
+    } catch (e: any) {
+      window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: e.message || 'Settlement Failed', type: 'error' } }));
+    } finally {
+      setIsSettling(false);
+    }
+  };
+
   // --- RENDER ---
   if (viewMode === 'DETAIL' && selectedDealer) {
     // --- DETAIL VIEW ---
     return (
-      <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 pb-20 text-slate-900">
+      <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 pb-20 text-slate-900 relative">
+        {/* SETTLEMENT MODAL */}
+        {settlementModal.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="bg-slate-50 border-b border-slate-100 p-6 flex justify-between items-center">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900 uppercase tracking-tight">Resolve Settlement</h3>
+                  <p className="text-xs font-bold text-slate-500 uppercase mt-1">For Replacement of {settlementModal.oldBatteryId}</p>
+                </div>
+                <button onClick={() => setSettlementModal(prev => ({ ...prev, isOpen: false }))} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={20} className="text-slate-400 hover:text-slate-900" /></button>
+              </div>
+
+              <div className="p-8 space-y-6">
+                {/* 1. Method Selection */}
+                <div className="space-y-3">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">Settlement Method</label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      onClick={() => setSettlementModal(prev => ({ ...prev, method: 'CREDIT' }))}
+                      className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${settlementModal.method === 'CREDIT' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'}`}
+                    >
+                      <CreditCard size={24} />
+                      <span className="text-xs font-black uppercase">Paid Money / Credit</span>
+                    </button>
+                    <button
+                      onClick={() => setSettlementModal(prev => ({ ...prev, method: 'STOCK' }))}
+                      className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${settlementModal.method === 'STOCK' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'}`}
+                    >
+                      <Package size={24} />
+                      <span className="text-xs font-black uppercase">New Stock Given</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Date Selection */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">Settlement Date</label>
+                  <input
+                    type="date"
+                    className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-blue-500 transition-all uppercase text-slate-900"
+                    value={settlementModal.date}
+                    onChange={e => setSettlementModal(prev => ({ ...prev, date: e.target.value }))}
+                  />
+                </div>
+
+                {/* 3. Stock Scanner (Conditional) */}
+                {settlementModal.method === 'STOCK' && (
+                  <div className="space-y-2 animate-in slide-in-from-top-2">
+                    <label className="text-xs font-bold text-indigo-500 uppercase tracking-widest pl-1 flex items-center gap-2"><QrCode size={14} /> Scan New Battery ID</label>
+                    <input
+                      autoFocus
+                      placeholder="SCAN STOCK SERIAL..."
+                      className="w-full px-5 py-4 bg-indigo-50 border-2 border-indigo-200 rounded-xl font-black text-lg outline-none focus:border-indigo-500 transition-all uppercase text-indigo-900 placeholder:text-indigo-300"
+                      value={settlementModal.replenishmentId}
+                      onChange={e => setSettlementModal(prev => ({ ...prev, replenishmentId: e.target.value.toUpperCase().trim() }))}
+                    />
+                    <p className="text-[10px] text-indigo-400 font-bold px-1">This unit will be activated and assigned to dealer immediately.</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-4">
+                <button onClick={() => setSettlementModal(prev => ({ ...prev, isOpen: false }))} className="px-6 py-3 text-slate-400 font-bold text-sm hover:text-slate-600 transition-colors">Cancel</button>
+                <button
+                  onClick={handleResolveSettlement}
+                  disabled={isSettling || (settlementModal.method === 'STOCK' && !settlementModal.replenishmentId)}
+                  className="flex-1 px-6 py-3 bg-slate-900 text-white font-bold text-sm rounded-xl hover:bg-black transition-all shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSettling ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
+                  Confirm Settlement
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="flex items-center gap-4">
@@ -351,31 +489,40 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                           {formatDate(item.replacementDate)}
                         </td>
                         <td className="px-6 py-5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                          {item.settlementType === 'DIRECT' ? (
-                            <div className="flex flex-col">
-                              <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wide flex items-center gap-1">
-                                <CheckCircle2 size={10} /> Direct Settlement
+                          <div className="flex flex-col gap-1">
+                            {item.settlementType === 'DIRECT' ? (
+                              <div className="flex flex-col">
+                                <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wide flex items-center gap-1">
+                                  <CheckCircle2 size={10} /> Direct Settlement
+                                </span>
+                                <span className="text-xs font-bold text-slate-700 mono">{item.newBatteryId}</span>
+                              </div>
+                            ) : item.settlementType === 'STOCK' ? (
+                              <div className="flex flex-col">
+                                <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wide">Stock Given</span>
+                                <span className="text-xs font-bold text-slate-700 mono">{item.replenishmentBatteryId}</span>
+                              </div>
+                            ) : item.paidInAccount ? (
+                              <div className="flex flex-col text-emerald-600">
+                                <span className="text-[9px] font-bold uppercase tracking-wide flex items-center gap-1"><CheckCircle2 size={10} /> Paid / Credited</span>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => handleOpenSettlement(item)}
+                                className="px-3 py-1.5 text-[10px] font-bold border border-amber-200 bg-amber-50 text-amber-700 rounded-lg uppercase tracking-wide flex items-center gap-1 hover:bg-amber-100 transition-all shadow-sm"
+                              >
+                                <Clock size={12} />
+                                Resolve...
+                              </button>
+                            )}
+                            {(item.settlementDate || item.settlementType === 'DIRECT') && (
+                              <span className="text-[9px] font-bold text-slate-400 mono">
+                                {item.settlementType === 'DIRECT'
+                                  ? formatDate(item.replacementDate)
+                                  : formatDate(item.settlementDate)}
                               </span>
-                              <span className="text-xs font-bold text-slate-700 mono">{item.newBatteryId}</span>
-                            </div>
-                          ) : item.replenishmentBatteryId ? (
-                            <div className="flex flex-col">
-                              <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wide">Stock Given</span>
-                              <span className="text-xs font-bold text-slate-700 mono">{item.replenishmentBatteryId}</span>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={async () => {
-                                const newValue = !item.paidInAccount;
-                                await Database.updateReplacementPaidStatus(item.id, newValue);
-                                fetchTabData();
-                              }}
-                              className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide flex w-fit items-center gap-1 transition-all hover:shadow-md ${item.paidInAccount ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}
-                            >
-                              {item.paidInAccount ? <CheckCircle2 size={12} /> : <div className="w-3 h-3"><Clock size={12} /></div>}
-                              {item.paidInAccount ? 'PAID' : 'PENDING'}
-                            </button>
-                          )}
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-5 whitespace-nowrap">
                           <div className="flex flex-col gap-1">

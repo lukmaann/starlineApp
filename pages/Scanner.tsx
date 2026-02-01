@@ -1337,33 +1337,42 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
 
                           {/* Settlement */}
                           <td className="px-6 py-5 whitespace-nowrap">
-                            {next ? (
-                              <>
-                                {next.settlementType === 'DIRECT' ? (
-                                  <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wide flex items-center gap-1">
-                                      <CheckCircle2 size={10} /> Direct Settlement
+                            <div className="flex flex-col gap-1">
+                              {next ? (
+                                <>
+                                  {next.settlementType === 'DIRECT' ? (
+                                    <div className="flex flex-col">
+                                      <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wide flex items-center gap-1">
+                                        <CheckCircle2 size={10} /> Direct Settlement
+                                      </span>
+                                      <span className="text-xs font-bold text-slate-700 mono">{next.newBatteryId}</span>
+                                    </div>
+                                  ) : next.replenishmentBatteryId ? (
+                                    <div className="flex flex-col">
+                                      <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wide">Stock Given</span>
+                                      <span className="text-xs font-bold text-slate-700 mono">{next.replenishmentBatteryId}</span>
+                                    </div>
+                                  ) : (
+                                    <span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide flex w-fit items-center gap-1 ${next.paidInAccount ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                      {next.paidInAccount ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                                      {next.paidInAccount ? 'PAID' : 'PENDING'}
                                     </span>
-                                    <span className="text-xs font-bold text-slate-700 mono">{next.newBatteryId}</span>
-                                  </div>
-                                ) : next.replenishmentBatteryId ? (
-                                  <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wide">Stock Given</span>
-                                    <span className="text-xs font-bold text-slate-700 mono">{next.replenishmentBatteryId}</span>
-                                  </div>
-                                ) : (
-                                  <span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide flex w-fit items-center gap-1 ${next.paidInAccount ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                                    {next.paidInAccount ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                                    {next.paidInAccount ? 'PAID' : 'PENDING'}
-                                  </span>
-                                )}
-                              </>
-                            ) : (sale && !incoming) ? (
-                              <span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide flex w-fit items-center gap-1 ${sale.paidInAccount ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                                {sale.paidInAccount ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                                {sale.paidInAccount ? 'PAID' : 'PENDING'}
-                              </span>
-                            ) : <span className="text-slate-300 font-bold text-xs">-</span>}
+                                  )}
+                                </>
+                              ) : (sale && !incoming) ? (
+                                <span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide flex w-fit items-center gap-1 ${sale.paidInAccount ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                  {sale.paidInAccount ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                                  {sale.paidInAccount ? 'PAID' : 'PENDING'}
+                                </span>
+                              ) : <span className="text-slate-300 font-bold text-xs">-</span>}
+
+                              {/* Settlement Date Display */}
+                              {next && (next.settlementDate || next.settlementType === 'DIRECT') && (
+                                <span className="text-[9px] font-bold text-slate-400 mono pl-1">
+                                  {formatDate(next.settlementType === 'DIRECT' ? next.replacementDate : next.settlementDate)}
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           {/* Status */}

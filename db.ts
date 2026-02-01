@@ -616,6 +616,101 @@ export class Database {
     window.dispatchEvent(new CustomEvent('db-synced'));
   }
 
+  static async resolveSettlement(
+    replacementId: string,
+    method: 'CREDIT' | 'STOCK',
+    date: string,
+    replenishmentBatteryId?: string
+  ): Promise<void> {
+    const replacement = (await this.query<{ dealerId: string }>('SELECT dealerId FROM replacements WHERE id = ?', [replacementId]))[0];
+    if (!replacement) throw new Error('Replacement record not found');
+
+    try {
+      if (method === 'STOCK') {
+        if (!replenishmentBatteryId) throw new Error('Replenishment Battery ID is required for Stock settlement');
+        const replId = replenishmentBatteryId.toUpperCase().trim();
+
+        // 1. Validate Stock Unit
+        const stockUnit = await this.getBattery(replId);
+        if (stockUnit) {
+          // It exists - ensure it allows assignment (MANUFACTURED or Dealer's own active stock)
+          const isDealerStock = stockUnit.dealerId === replacement.dealerId;
+          const allowedStatus = ['MANUFACTURED', 'ACTIVE'];
+          if (!allowedStatus.includes(stockUnit.status) || (stockUnit.status === 'ACTIVE' && !isDealerStock)) {
+            throw new Error(`Stock Unit ${replId} is ${stockUnit.status}. Expected FRESH STOCK.`);
+          }
+        } else {
+          // If it doesn't exist, we'll create it on the fly (assume fresh scan)
+        }
+
+        await this.run('BEGIN TRANSACTION');
+
+        // 2. Activate/Assign Stock Unit
+        if (stockUnit) {
+          const today = getLocalDate();
+          const expiryDate = new Date(today);
+          expiryDate.setMonth(expiryDate.getMonth() + (stockUnit.warrantyMonths || 24));
+
+          await this.run(
+            `UPDATE batteries SET 
+              status = 'ACTIVE', 
+              dealerId = ?, 
+              activationDate = ?, 
+              warrantyExpiry = ?, 
+              customerName = 'DEALER STOCK',
+              replacementCount = 0
+            WHERE id = ?`,
+            [replacement.dealerId, date, expiryDate.toISOString().split('T')[0], replId]
+          );
+        } else {
+          // Create new unit
+          await this.addBattery({
+            id: replId,
+            model: 'UNKNOWN', // Ideally we'd need model input, but for settlement flow we assume scanned existing or generic
+            capacity: 'UNKNOWN',
+            manufactureDate: getLocalDate(),
+            status: BatteryStatus.ACTIVE,
+            replacementCount: 0,
+            warrantyMonths: 24, // Default
+            dealerId: replacement.dealerId,
+            activationDate: date,
+            customerName: 'DEALER STOCK'
+          });
+        }
+
+        // 3. Update Replacement Record
+        await this.run(
+          `UPDATE replacements SET 
+             settlementType = 'STOCK', 
+             replenishmentBatteryId = ?, 
+             paidInAccount = 0,
+             settlementDate = ?
+           WHERE id = ?`,
+          [replId, date, replacementId]
+        );
+
+        await this.run('COMMIT');
+
+      } else {
+        // CREDIT Settlement
+        await this.run(
+          `UPDATE replacements SET 
+             settlementType = 'CREDIT', 
+             paidInAccount = 1,
+             replenishmentBatteryId = NULL,
+             settlementDate = ?
+           WHERE id = ?`,
+          [date, replacementId]
+        );
+      }
+
+      window.dispatchEvent(new CustomEvent('db-synced'));
+    } catch (e) {
+      if (method === 'STOCK') await this.run('ROLLBACK');
+      throw e;
+    }
+  }
+
   static async getPaginatedReplacements(dealerId: string, page: number, limit: number, searchQuery?: string): Promise<{ data: any[], total: number }> {
     const offset = (page - 1) * limit;
     let where = 'WHERE r.dealerId = ?';

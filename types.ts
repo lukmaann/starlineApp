@@ -104,6 +104,7 @@ export interface Replacement {
   soldDate?: string; // Corrected Original Sale Date
   replenishmentBatteryId?: string;
   settlementType?: 'CREDIT' | 'STOCK' | 'DIRECT';
+  settlementDate?: string;
 }
 
 export interface Sale {
