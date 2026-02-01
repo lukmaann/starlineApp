@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Database } from '../db';
 import { Dealer, Battery, Replacement, BatteryStatus, BatteryModel } from '../types';
 import {
@@ -27,6 +28,119 @@ import {
 interface DealersProps {
   onNavigateToHub?: (serial: string) => void;
 }
+
+const DealerPrintTemplate: React.FC<{
+  dealer: Dealer;
+  data: any[];
+  type: 'ACTIVE' | 'EXPIRED' | 'EXCHANGES';
+  startDate?: string;
+  endDate?: string;
+}> = ({ dealer, data, type, startDate, endDate }) => {
+
+  const reportTitle = type === 'ACTIVE' ? 'Active Batteries' : type === 'EXPIRED' ? 'Expired Batteries' : 'Exchange History';
+  const dateRangeText = startDate && endDate
+    ? `from ${formatDate(startDate)} to ${formatDate(endDate)}`
+    : startDate
+      ? `from ${formatDate(startDate)} onwards`
+      : endDate
+        ? `up to ${formatDate(endDate)}`
+        : 'as of today';
+
+  return (
+    <div id="dealer-printable" className="w-full max-w-[210mm] mx-auto bg-white p-8 font-sans">
+      {/* Header */}
+      <div className="border-b-2 border-black pb-6 mb-6">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-black uppercase tracking-tight text-black">{dealer.name}</h1>
+            <p className="text-sm font-bold text-gray-600 uppercase tracking-widest mt-1">Partner ID: {dealer.id}</p>
+            <p className="text-xs font-bold text-gray-500 mt-1">{dealer.location}</p>
+          </div>
+          <div className="text-right">
+            <div className="text-black text-xs font-black uppercase tracking-widest inline-block border-2 border-black px-3 py-1">
+              {formatDate(new Date())}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8">
+          <p className="text-base font-bold text-black leading-relaxed">
+            This is the <span className="uppercase">{reportTitle}</span> record for starline batteries as of <span className="underline">{formatDate(new Date())}</span> {dateRangeText}.
+          </p>
+        </div>
+      </div>
+
+      {/* Table */}
+      <table className="w-full text-left text-xs text-black">
+        <thead>
+          <tr className="border-b-2 border-black">
+            {type === 'EXCHANGES' ? (
+              <>
+                <th className="py-3 px-2 font-black uppercase tracking-wider">Old Unit</th>
+                <th className="py-3 px-2 font-black uppercase tracking-wider">New Unit</th>
+                <th className="py-3 px-2 font-black uppercase tracking-wider">Settlement</th>
+                <th className="py-3 px-2 font-black uppercase tracking-wider text-right">Date</th>
+              </>
+            ) : (
+              <>
+                <th className="py-3 px-2 font-black uppercase tracking-wider">Serial No.</th>
+                <th className="py-3 px-2 font-black uppercase tracking-wider">Model</th>
+                <th className="py-3 px-2 font-black uppercase tracking-wider">Sold to Dealer</th>
+                <th className="py-3 px-2 font-black uppercase tracking-wider text-right">Warranty Period</th>
+              </>
+            )}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200">
+          {data.map((item, idx) => (
+            <tr key={idx} className="break-inside-avoid border-b border-gray-100">
+              {type === 'EXCHANGES' ? (
+                <>
+                  <td className="py-4 px-2 align-top">
+                    <div className="font-bold text-black text-sm">{item.oldBatteryId}</div>
+                    <div className="text-[10px] text-gray-500 uppercase font-bold">{item.batteryModel}</div>
+                  </td>
+                  <td className="py-4 px-2 align-top">
+                    <div className="font-bold text-black text-sm">{item.newBatteryId}</div>
+                    <div className="text-[10px] text-gray-500 uppercase font-bold">{item.reason}</div>
+                  </td>
+                  <td className="py-4 px-2 align-top">
+                    <div className="font-bold text-gray-800 uppercase text-[11px]">
+                      {item.settlementType === 'DIRECT' ? 'Direct Swap' : item.settlementType === 'STOCK' ? 'Stock Given' : 'Credit/Pay'}
+                    </div>
+                    {item.replenishmentBatteryId && <div className="text-[10px] text-gray-600 mono bg-gray-100 px-1 rounded inline-block mt-1 font-bold">{item.replenishmentBatteryId}</div>}
+                  </td>
+                  <td className="py-4 px-2 align-top text-right">
+                    <div className="font-bold text-black">{formatDate(item.replacementDate)}</div>
+                  </td>
+                </>
+              ) : (
+                <>
+                  <td className="py-4 px-2 align-top font-black text-black mono text-sm">{item.id}</td>
+                  <td className="py-4 px-2 align-top font-bold text-gray-700 text-sm">{item.model}</td>
+                  <td className="py-4 px-2 align-top font-medium text-black">
+                    {formatDate(item.activationDate)}
+                  </td>
+                  <td className="py-4 px-2 align-top text-right text-black font-bold">
+                    <span>{formatDate(item.activationDate)}</span>
+                    <span className="mx-2 text-gray-400">→</span>
+                    <span>{formatDate(item.warrantyExpiry)}</span>
+                  </td>
+                </>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* Footer */}
+      <div className="mt-8 pt-6 border-t border-black flex justify-between items-center text-[10px] font-black text-gray-500 uppercase tracking-widest">
+        <span>Starline Enterprise</span>
+        <span>Generated Report</span>
+      </div>
+    </div>
+  );
+};
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: string }> {
   constructor(props: any) {
@@ -73,6 +187,10 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
   // TABS
   const [activeLogTab, setActiveLogTab] = useState<'ACTIVE' | 'EXPIRED' | 'EXCHANGES'>('ACTIVE');
   const [logSearchQuery, setLogSearchQuery] = useState('');
+  const [filterDateStart, setFilterDateStart] = useState('');
+  const [filterDateEnd, setFilterDateEnd] = useState('');
+  const [filterModel, setFilterModel] = useState('');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const [unitPage, setUnitPage] = useState(0);
   const unitsLimit = 10;
@@ -124,7 +242,10 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
         selectedDealer.id,
         unitPage + 1,
         unitsLimit,
-        logSearchQuery || undefined
+        logSearchQuery || undefined,
+        filterDateStart || undefined,
+        filterDateEnd || undefined,
+        filterModel || undefined
       );
       setPaginatedData(result.data);
       setTotalItems(result.total);
@@ -143,6 +264,22 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
         params.push(`%${logSearchQuery}%`);
       }
 
+      if (filterDateStart) {
+        // Use activationDate for Active/Expired, or manufactureDate if null
+        where += ` AND date(COALESCE(activationDate, manufactureDate)) >= date(?)`;
+        params.push(filterDateStart);
+      }
+
+      if (filterDateEnd) {
+        where += ` AND date(COALESCE(activationDate, manufactureDate)) <= date(?)`;
+        params.push(filterDateEnd);
+      }
+
+      if (filterModel) {
+        where += ` AND model = ?`;
+        params.push(filterModel);
+      }
+
       const result = await Database.getPaginated<any>('batteries', unitPage + 1, unitsLimit, where, params);
       setPaginatedData(result.data);
       setTotalItems(result.total);
@@ -151,7 +288,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
 
   useEffect(() => {
     fetchTabData();
-  }, [selectedDealer, activeLogTab, unitPage, logSearchQuery]);
+  }, [selectedDealer, activeLogTab, unitPage, logSearchQuery, filterDateStart, filterDateEnd, filterModel]);
 
   // --- ACTIONS ---
 
@@ -208,6 +345,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
     setSelectedDealer(dealer);
     setUnitPage(0);
     setLogSearchQuery('');
+    setFilterDateStart('');
+    setFilterDateEnd('');
     setActiveLogTab('ACTIVE');
     const data = await Database.getDealerAnalytics(dealer.id);
     setAnalytics(data);
@@ -300,8 +439,51 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
   // --- RENDER ---
   if (viewMode === 'DETAIL' && selectedDealer) {
     // --- DETAIL VIEW ---
+
+    const handlePrint = () => {
+      const originalTitle = document.title;
+      document.title = `${selectedDealer.name}_${activeLogTab}_Report`;
+      window.print();
+      document.title = originalTitle;
+    };
+
     return (
       <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 pb-20 text-slate-900 relative">
+        <style>
+          {`
+                @media print {
+                    @page { size: A4; margin: 10mm; }
+                    body > *:not(#dealer-print-portal) { display: none !important; }
+                    html, body { background: white !important; height: auto !important; overflow: visible !important; }
+                    #dealer-print-portal { 
+                        display: block !important; 
+                        position: absolute !important; 
+                        top: 0 !important; 
+                        left: 0 !important; 
+                        width: 100% !important; 
+                        z-index: 9999 !important; 
+                    }
+                    /* Ensure table breaks page correctly */
+                    tr { break-inside: avoid; }
+                }
+                #dealer-print-portal { display: none; }
+            `}
+        </style>
+
+        {/* PRINT PORTAL */}
+        {createPortal(
+          <div id="dealer-print-portal">
+            <DealerPrintTemplate
+              dealer={selectedDealer}
+              data={paginatedData}
+              type={activeLogTab}
+              startDate={filterDateStart}
+              endDate={filterDateEnd}
+            />
+          </div>,
+          document.body
+        )}
+
         {/* SETTLEMENT MODAL */}
         {settlementModal.isOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -427,6 +609,97 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
               <button onClick={() => { setActiveLogTab('ACTIVE'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'ACTIVE' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}>Active</button>
               <button onClick={() => { setActiveLogTab('EXCHANGES'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'EXCHANGES' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}>Exchanges</button>
               <button onClick={() => { setActiveLogTab('EXPIRED'); setUnitPage(0); }} className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeLogTab === 'EXPIRED' ? 'bg-rose-500 text-white shadow-md' : 'text-slate-500 hover:text-rose-600 hover:bg-rose-50'}`}>Expired</button>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <button
+                  onClick={() => setIsFilterOpen(!isFilterOpen)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all text-sm font-bold uppercase tracking-tight shadow-sm ${isFilterOpen || filterDateStart || filterDateEnd || filterModel ? 'bg-slate-900 border-slate-900 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+                >
+                  <Filter size={16} />
+                  <span>Filters {(filterDateStart || filterDateEnd || filterModel) ? '(Active)' : ''}</span>
+                  <ChevronDown size={14} className={`transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isFilterOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setIsFilterOpen(false)}></div>
+                    <div className="absolute right-0 mt-3 w-80 bg-white border border-slate-200 rounded-2xl shadow-2xl z-20 p-6 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="space-y-6">
+                        <div className="flex justify-between items-center">
+                          <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Refine Records</h4>
+                          <button
+                            onClick={() => {
+                              setFilterDateStart('');
+                              setFilterDateEnd('');
+                              setFilterModel('');
+                              setIsFilterOpen(false);
+                              setUnitPage(0);
+                            }}
+                            className="text-[10px] font-black text-rose-500 uppercase hover:underline"
+                          >
+                            Reset All
+                          </button>
+                        </div>
+
+                        {/* Date Range */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Date Range</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="date"
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold uppercase outline-none focus:border-blue-500 transition-all text-slate-900"
+                              value={filterDateStart}
+                              onChange={e => { setFilterDateStart(e.target.value); setUnitPage(0); }}
+                              title="From Date"
+                            />
+                            <input
+                              type="date"
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold uppercase outline-none focus:border-blue-500 transition-all text-slate-900"
+                              value={filterDateEnd}
+                              onChange={e => { setFilterDateEnd(e.target.value); setUnitPage(0); }}
+                              title="To Date"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Model Filter */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Product Model</label>
+                          <select
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold uppercase outline-none focus:border-blue-500 transition-all text-slate-900 appearance-none cursor-pointer"
+                            value={filterModel}
+                            onChange={e => { setFilterModel(e.target.value); setUnitPage(0); }}
+                          >
+                            <option value="">ALL MODELS</option>
+                            {models.map(m => (
+                              <option key={m.id} value={m.name}>{m.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <button
+                          onClick={() => setIsFilterOpen(false)}
+                          className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-black transition-all shadow-md active:scale-95"
+                        >
+                          Apply Filters
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="h-6 w-px bg-slate-200 mx-2"></div>
+
+              {/* PRINT BUTTON */}
+              <button
+                onClick={handlePrint}
+                className="p-2.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all text-slate-500 hover:text-slate-900 shadow-sm"
+                title="Print Table"
+              >
+                <Printer size={18} />
+              </button>
             </div>
             <div className="relative">
               <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -611,7 +884,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Business Name</label>
                     <div className="relative group">
                       <Store className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" />
-                      <input autoFocus className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-all uppercase placeholder:text-slate-300" placeholder="e.g. STAR BATTERIES" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                      <input autoFocus className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-all uppercase placeholder:text-slate-300" placeholder="e.g. STARLINE BATTERIES" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                     </div>
                   </div>
 
@@ -619,7 +892,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Owner Full Name</label>
                     <div className="relative group">
                       <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" />
-                      <input className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-base outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="e.g. JOHN DOE" value={formData.owner} onChange={e => setFormData({ ...formData, owner: e.target.value })} />
+                      <input className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-base outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="e.g. Salid Nadaf" value={formData.owner} onChange={e => setFormData({ ...formData, owner: e.target.value })} />
                     </div>
                   </div>
 
@@ -656,7 +929,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                   </div>
                   <div className="space-y-2 col-span-2 md:col-span-1">
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Pincode</label>
-                    <input className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="000000" value={formData.pincode} onChange={e => setFormData({ ...formData, pincode: e.target.value })} />
+                    <input className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="591313" value={formData.pincode} onChange={e => setFormData({ ...formData, pincode: e.target.value })} />
                   </div>
                 </div>
               </div>

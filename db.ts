@@ -711,7 +711,15 @@ export class Database {
     }
   }
 
-  static async getPaginatedReplacements(dealerId: string, page: number, limit: number, searchQuery?: string): Promise<{ data: any[], total: number }> {
+  static async getPaginatedReplacements(
+    dealerId: string,
+    page: number,
+    limit: number,
+    searchQuery?: string,
+    startDate?: string,
+    endDate?: string,
+    modelFilter?: string
+  ): Promise<{ data: any[], total: number }> {
     const offset = (page - 1) * limit;
     let where = 'WHERE r.dealerId = ?';
     let params: any[] = [dealerId];
@@ -719,6 +727,21 @@ export class Database {
     if (searchQuery) {
       where += ' AND (r.oldBatteryId LIKE ? OR r.newBatteryId LIKE ?)';
       params.push(`%${searchQuery}%`, `%${searchQuery}%`);
+    }
+
+    if (startDate) {
+      where += ' AND date(r.replacementDate) >= date(?)';
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      where += ' AND date(r.replacementDate) <= date(?)';
+      params.push(endDate);
+    }
+
+    if (modelFilter) {
+      where += ' AND b.model = ?';
+      params.push(modelFilter);
     }
 
     const [data, countResult] = await Promise.all([
