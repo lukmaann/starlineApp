@@ -35,16 +35,18 @@ const DealerPrintTemplate: React.FC<{
   type: 'ACTIVE' | 'EXPIRED' | 'EXCHANGES';
   startDate?: string;
   endDate?: string;
-}> = ({ dealer, data, type, startDate, endDate }) => {
+  filterModel?: string;
+}> = ({ dealer, data, type, startDate, endDate, filterModel }) => {
 
   const reportTitle = type === 'ACTIVE' ? 'Active Batteries' : type === 'EXPIRED' ? 'Expired Batteries' : 'Exchange History';
+  const modelText = filterModel ? `[Model: ${filterModel}]` : 'for all models';
   const dateRangeText = startDate && endDate
     ? `from ${formatDate(startDate)} to ${formatDate(endDate)}`
     : startDate
       ? `from ${formatDate(startDate)} onwards`
       : endDate
         ? `up to ${formatDate(endDate)}`
-        : 'as of today';
+        : '';
 
   return (
     <div id="dealer-printable" className="w-full max-w-[210mm] mx-auto bg-white p-8 font-sans">
@@ -65,7 +67,7 @@ const DealerPrintTemplate: React.FC<{
 
         <div className="mt-8">
           <p className="text-base font-bold text-black leading-relaxed">
-            This is the <span className="uppercase">{reportTitle}</span> record for starline batteries as of <span className="underline">{formatDate(new Date())}</span> {dateRangeText}.
+            This is the <span className="uppercase">{reportTitle}</span> record {modelText} sold to dealer {dateRangeText}.
           </p>
         </div>
       </div>
@@ -119,7 +121,7 @@ const DealerPrintTemplate: React.FC<{
                   <td className="py-4 px-2 align-top font-black text-black mono text-sm">{item.id}</td>
                   <td className="py-4 px-2 align-top font-bold text-gray-700 text-sm">{item.model}</td>
                   <td className="py-4 px-2 align-top font-medium text-black">
-                    {formatDate(item.activationDate)}
+                    {formatDate(item.manufactureDate)}
                   </td>
                   <td className="py-4 px-2 align-top text-right text-black font-bold">
                     <span>{formatDate(item.activationDate)}</span>
@@ -465,9 +467,85 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
   };
 
   // --- RENDER ---
-  if (viewMode === 'DETAIL' && selectedDealer) {
-    // --- DETAIL VIEW ---
+  if (isLocked) {
+    return (
+      <div className="max-w-4xl mx-auto animate-in slide-in-from-bottom-4 duration-500 pb-20">
+        <button
+          onClick={() => { setIsLocked(false); setPendingDealer(null); setLockPassword(''); setLockError(''); }}
+          className="mb-8 flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold text-sm transition-all group"
+        >
+          <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" /> Back to Partners
+        </button>
 
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl p-0 max-w-md mx-auto animate-in zoom-in-95 duration-300 relative overflow-hidden text-slate-900">
+          {/* Header Bar */}
+          <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
+              <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Access Restricted</span>
+            </div>
+            <div className="text-[10px] font-mono text-slate-400">AUTH_LVL_2</div>
+          </div>
+
+          <div className="p-8 space-y-8">
+            <div className="text-center space-y-2">
+              <div className="w-16 h-16 bg-slate-50 border border-slate-200 text-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+                <Lock size={28} strokeWidth={2} />
+              </div>
+              <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">Partner Vault</h3>
+              <p className="text-xs text-slate-500 font-medium">Authorization required for <span className="text-slate-900 font-bold">{pendingDealer?.name || 'Partner'}</span></p>
+            </div>
+
+            {lockError && (
+              <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 text-rose-600 animate-shake">
+                <ShieldAlert size={18} />
+                <span className="text-[10px] font-black">{lockError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUnlockDealer} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Identity Verification</label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Fingerprint className="text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+                  </div>
+                  <input
+                    type="password"
+                    autoFocus
+                    placeholder="ENTER ACCESS KEY"
+                    className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-xl font-mono text-base text-slate-900 outline-none focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-300 uppercase tracking-widest"
+                    value={lockPassword}
+                    onChange={e => setLockPassword(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  className="w-full py-4 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-slate-900/10 active:scale-95 flex items-center justify-center gap-2"
+                >
+                  Authorize Access
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Footer Status */}
+          <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center text-[9px] font-mono text-slate-400">
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={10} className="text-emerald-500" />
+              <span>SECURE ENDPOINT</span>
+            </div>
+            <div>LOC: {pendingDealer?.id || 'Unknown'}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (viewMode === 'DETAIL' && selectedDealer) {
     const handlePrint = () => {
       const originalTitle = document.title;
       document.title = `${selectedDealer.name}_${activeLogTab}_Report`;
@@ -481,10 +559,49 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
           <style>
             {`
             @media print {
-              body * { visibility: hidden; }
-              #dealer-printable, #dealer-printable * { visibility: visible; }
-              #dealer-printable { position: absolute; left: 0; top: 0; width: 100%; }
+              /* HIDE EVERYTHING ELSE */
+              body > *:not(#print-portal-root) {
+                display: none !important;
+              }
+
+              /* Reset Body for Print */
+              html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background-color: white !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                height: auto !important;
+                overflow: visible !important;
+              }
+
+              /* Ensure Portal is Visible and positioned correctly */
+              #print-portal-root {
+                display: block !important;
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                z-index: 9999 !important;
+                background-color: white !important;
+              }
+
+              #dealer-printable {
+                background-color: white !important;
+                width: 100% !important;
+                max-width: none !important;
+                height: auto !important;
+                overflow: visible !important;
+                margin: 0 auto !important;
+              }
+
               .no-print { display: none !important; }
+            }
+
+            /* Hide Print Portal on Screen */
+            #print-portal-root {
+              display: none;
             }
           `}
           </style>
@@ -728,8 +845,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                               <ArrowRight size={12} />
                             </div>
                           </td>
-                          <td className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.model}</td>
-                          <td className="px-6 py-5 font-bold text-slate-500 mono text-[10px]">{formatDate(item.replacementDate)}</td>
+                          <td className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.batteryModel}</td>
+                          <td className="px-6 py-5 font-bold text-slate-500 mono text-[10px]">{formatDate(item.soldDate)}</td>
                           <td className="px-6 py-5 font-bold text-slate-500 mono text-[10px]">{formatDate(item.replacementDate)}</td>
                           <td className="px-6 py-5">
                             {item.replenishmentBatteryId ? (
@@ -798,80 +915,21 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
           </div>
         </div>
 
-        {/* Hidden Report Template (for print) */}
-        {
-          selectedDealer && (
-            <div className="hidden">
+        {/* Print Mode (Detached Portal) */}
+        {createPortal(
+          <div id="print-portal-root">
+            {selectedDealer && (
               <DealerPrintTemplate
                 dealer={selectedDealer}
                 data={paginatedData}
                 type={activeLogTab}
                 startDate={filterDateStart}
                 endDate={filterDateEnd}
+                filterModel={filterModel}
               />
-            </div>
-          )
-        }
-
-        {/* Authorization Lock Screen Overlay */}
-        {isLocked && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/40 backdrop-blur-xl animate-in fade-in duration-300 no-print">
-            <div className="max-w-md w-full bg-white rounded-[2.5rem] p-10 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300">
-              <div className="flex flex-col items-center text-center space-y-6">
-                <div className="w-20 h-20 bg-slate-900 text-white rounded-3xl flex items-center justify-center shadow-xl shadow-slate-900/20">
-                  <Lock size={40} />
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="text-2xl font-black text-slate-900">Partner Access Secured</h3>
-                  <p className="text-slate-500 text-xs font-bold leading-relaxed">
-                    Administrative authorization is required to view sensitive partner analytics for <span className="text-slate-900 font-black uppercase text-[10px] break-all">{pendingDealer?.name}</span>.
-                  </p>
-                </div>
-
-                {lockError && (
-                  <div className="w-full p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600 animate-shake">
-                    <ShieldAlert size={18} />
-                    <span className="text-[10px] font-black text-rose-600/80">{lockError}</span>
-                  </div>
-                )}
-
-                <form onSubmit={handleUnlockDealer} className="w-full space-y-4">
-                  <div className="space-y-1.5 text-left">
-                    <label className="text-[10px] font-black text-slate-400 ml-1">Administrative Passkey</label>
-                    <div className="relative group">
-                      <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={20} />
-                      <input
-                        autoFocus
-                        type="password"
-                        placeholder="••••••••"
-                        className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xl outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all mono placeholder:text-slate-300"
-                        value={lockPassword}
-                        onChange={e => setLockPassword(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => { setIsLocked(false); setLockPassword(''); setLockError(''); setPendingDealer(null); }}
-                      className="flex-1 py-4 bg-slate-100 text-slate-500 font-black text-xs rounded-2xl hover:bg-slate-200 transition-all active:scale-95"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex-[2] py-4 bg-slate-900 text-white font-black text-xs rounded-2xl hover:bg-black transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 group"
-                    >
-                      <span>Unlock Partner</span>
-                      <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
+            )}
+          </div>,
+          document.body
         )}
       </>
     );
@@ -1071,66 +1129,6 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
           </div>
         </div>
 
-        {/* Authorization Lock Screen Overlay */}
-        {isLocked && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/40 backdrop-blur-xl animate-in fade-in duration-300 no-print">
-            <div className="max-w-md w-full bg-white rounded-[2.5rem] p-10 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300">
-              <div className="flex flex-col items-center text-center space-y-6">
-                <div className="w-20 h-20 bg-slate-900 text-white rounded-3xl flex items-center justify-center shadow-xl shadow-slate-900/20">
-                  <Lock size={40} />
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="text-2xl font-black text-slate-900">Partner Access Secured</h3>
-                  <p className="text-slate-500 text-xs font-bold leading-relaxed">
-                    Administrative authorization is required to view sensitive partner analytics for <span className="text-slate-900 font-black uppercase text-[10px] break-all">{pendingDealer?.name}</span>.
-                  </p>
-                </div>
-
-                {lockError && (
-                  <div className="w-full p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600 animate-shake">
-                    <ShieldAlert size={18} />
-                    <span className="text-[10px] font-black text-rose-600/80">{lockError}</span>
-                  </div>
-                )}
-
-                <form onSubmit={handleUnlockDealer} className="w-full space-y-4">
-                  <div className="space-y-1.5 text-left">
-                    <label className="text-[10px] font-black text-slate-400 ml-1">Administrative Passkey</label>
-                    <div className="relative group">
-                      <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={20} />
-                      <input
-                        autoFocus
-                        type="password"
-                        placeholder="••••••••"
-                        className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xl outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all mono placeholder:text-slate-300"
-                        value={lockPassword}
-                        onChange={e => setLockPassword(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => { setIsLocked(false); setLockPassword(''); setLockError(''); setPendingDealer(null); }}
-                      className="flex-1 py-4 bg-slate-100 text-slate-500 font-black text-xs rounded-2xl hover:bg-slate-200 transition-all active:scale-95"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex-[2] py-4 bg-slate-900 text-white font-black text-xs rounded-2xl hover:bg-black transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 group"
-                    >
-                      <span>Unlock Partner</span>
-                      <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
       </>
     );
   } else {
@@ -1140,10 +1138,10 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
         <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 pb-20 text-slate-900">
           <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm space-y-6">
             <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-900 tracking-tight uppercase">Partner Network</h2>
-                <p className="text-sm font-medium text-slate-400 mt-1 uppercase tracking-widest">Authorized Distribution Nodes</p>
-              </div>
+              {/* <div> */}
+              {/* <h2 className="text-xl font-bold text-slate-700 tracking-tight ">Partner Network</h2> */}
+              {/* <p className="text-sm font-medium text-slate-400 mt-1  tracking-widest">Authorized Distribution Nodes</p> */}
+              {/* </div> */}
             </div>
 
             <div className="flex flex-col md:flex-row items-center gap-4">
@@ -1186,7 +1184,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <div className="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-sm">ID: {dealer.id}</div>
-                      <div className="text-[9px] font-black text-emerald-500 uppercase tracking-widest pl-1 border-l-2 border-emerald-500/20">Active Node</div>
+                      {/* <div className="text-[9px] font-black text-emerald-500 uppercase tracking-widest pl-1 border-l-2 border-emerald-500/20">Active Node</div> */}
                     </div>
                   </div>
 
@@ -1202,7 +1200,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                 </div>
 
                 <div className="relative z-10 pt-8 mt-10 border-t border-slate-100 flex flex-col gap-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Regional HQ</label>
+                  {/* <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Regional HQ</label> */}
                   <p className="text-[11px] font-bold text-slate-600 uppercase truncate leading-none flex items-center gap-1.5">
                     <MapPin size={12} className="text-blue-500 shrink-0" />
                     {dealer.location}
@@ -1210,11 +1208,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                 </div>
 
                 {/* Interaction Indicator */}
-                <div className="absolute bottom-6 right-8 opacity-0 group-hover:opacity-100 translate-x-4 group-hover:translate-x-0 transition-all duration-300">
-                  <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg shadow-blue-500/40">
-                    <ArrowRight size={20} />
-                  </div>
-                </div>
+
               </div>
             ))}
             {filteredDealers.length === 0 && <div className="col-span-full py-20 flex flex-col items-center justify-center opacity-40"><Store size={64} className="text-slate-300 mb-4" /><p className="text-sm font-black text-slate-400 uppercase tracking-widest">No partners found matching criteria</p></div>}
@@ -1222,66 +1216,6 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
 
         </div>
 
-        {/* Authorization Lock Screen Overlay */}
-        {isLocked && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/40 backdrop-blur-xl animate-in fade-in duration-300 no-print">
-            <div className="max-w-md w-full bg-white rounded-[2.5rem] p-10 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300">
-              <div className="flex flex-col items-center text-center space-y-6">
-                <div className="w-20 h-20 bg-slate-900 text-white rounded-3xl flex items-center justify-center shadow-xl shadow-slate-900/20">
-                  <Lock size={40} />
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="text-2xl font-black text-slate-900">Partner Access Secured</h3>
-                  <p className="text-slate-500 text-xs font-bold leading-relaxed">
-                    Administrative authorization is required to view sensitive partner analytics for <span className="text-slate-900 font-black uppercase text-[10px] break-all">{pendingDealer?.name}</span>.
-                  </p>
-                </div>
-
-                {lockError && (
-                  <div className="w-full p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600 animate-shake">
-                    <ShieldAlert size={18} />
-                    <span className="text-[10px] font-black text-rose-600/80">{lockError}</span>
-                  </div>
-                )}
-
-                <form onSubmit={handleUnlockDealer} className="w-full space-y-4">
-                  <div className="space-y-1.5 text-left">
-                    <label className="text-[10px] font-black text-slate-400 ml-1">Administrative Passkey</label>
-                    <div className="relative group">
-                      <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={20} />
-                      <input
-                        autoFocus
-                        type="password"
-                        placeholder="••••••••"
-                        className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xl outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all mono placeholder:text-slate-300"
-                        value={lockPassword}
-                        onChange={e => setLockPassword(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => { setIsLocked(false); setLockPassword(''); setLockError(''); setPendingDealer(null); }}
-                      className="flex-1 py-4 bg-slate-100 text-slate-500 font-black text-xs rounded-2xl hover:bg-slate-200 transition-all active:scale-95"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex-[2] py-4 bg-slate-900 text-white font-black text-xs rounded-2xl hover:bg-black transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 group"
-                    >
-                      <span>Unlock Partner</span>
-                      <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
       </>
     );
   }

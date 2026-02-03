@@ -906,7 +906,7 @@ export class Database {
     const today = new Date();
     const originalExpiry = new Date(battery.warrantyExpiry || '');
     const gracePeriodEnd = new Date(originalExpiry);
-    gracePeriodEnd.setDate(gracePeriodEnd.getDate() + 60);
+    gracePeriodEnd.setDate(gracePeriodEnd.getDate() + 600);
     const isInGracePeriod = today > originalExpiry && today <= gracePeriodEnd;
 
     // Update current battery

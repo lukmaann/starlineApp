@@ -948,8 +948,82 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
               ) : !isExpired && activeAsset.battery.status !== BatteryStatus.RETURNED ? (
                 <div className="space-y-6">
 
-                  {!isReplacing && !isConfirmingReplacement && (
+                  {!isReplacing && !isConfirmingReplacement && !isLocked && (
                     <button onClick={() => setIsLocked(true)} className="w-full py-8 text-2xl bg-slate-900 text-white rounded-3xl font-black flex items-center justify-center space-x-4 hover:bg-black transition-all shadow-2xl active:scale-[0.98] uppercase tracking-[0.2em] animate-in fade-in slide-in-from-bottom-2 border-4 border-slate-900 hover:border-white/20"><RefreshCw size={28} /><span>Start Warranty Exchange</span></button>
+                  )}
+
+                  {isLocked && (
+                    <div className="max-w-md mx-auto bg-white rounded-3xl border border-slate-200 shadow-2xl p-0 animate-in zoom-in-95 duration-300 relative overflow-hidden text-slate-900">
+                      {/* Header Bar */}
+                      <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
+                          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Protocol Lock</span>
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-400">EXCH_AUTH_REQ</div>
+                      </div>
+
+                      <div className="p-8 space-y-8">
+                        <div className="text-center space-y-2">
+                          <div className="w-16 h-16 bg-slate-50 border border-slate-200 text-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+                            <Lock size={28} strokeWidth={2} />
+                          </div>
+                          <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">Security Protocol</h3>
+                          <p className="text-xs text-slate-500 font-medium">Authorization required for <span className="text-slate-900 font-bold">WARRANTY_SWAP</span></p>
+                        </div>
+
+                        {lockError && (
+                          <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 text-rose-600 animate-shake">
+                            <ShieldAlert size={18} />
+                            <span className="text-[10px] font-black">{lockError}</span>
+                          </div>
+                        )}
+
+                        <form onSubmit={handleUnlockAndExchange} className="space-y-4">
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Identity Verification</label>
+                            <div className="relative group">
+                              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <Fingerprint className="text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+                              </div>
+                              <input
+                                type="password"
+                                autoFocus
+                                placeholder="ENTER ACCESS KEY"
+                                className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-xl font-mono text-base text-slate-900 outline-none focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-300 uppercase tracking-widest"
+                                value={lockPassword}
+                                onChange={e => setLockPassword(e.target.value)}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex gap-3">
+                            <button
+                              type="button"
+                              onClick={() => { setIsLocked(false); setLockPassword(''); setLockError(''); }}
+                              className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs uppercase tracking-widest transition-all active:scale-95"
+                            >
+                              Abort
+                            </button>
+                            <button
+                              type="submit"
+                              className="flex-[2] py-4 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-slate-900/10 active:scale-95 flex items-center justify-center gap-2"
+                            >
+                              Authorize
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+
+                      {/* Footer Status */}
+                      <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center text-[9px] font-mono text-slate-400">
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck size={10} className="text-emerald-500" />
+                          <span>SECURE ENDPOINT</span>
+                        </div>
+                        <div>REF: {activeAsset.battery.id}</div>
+                      </div>
+                    </div>
                   )}
 
                   {isReplacing && !isConfirmingReplacement && (
@@ -1427,66 +1501,6 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
           </div>
         )
       })()}
-      {/* Authorization Lock Screen Overlay */}
-      {isLocked && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/40 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="max-w-md w-full bg-white rounded-[2.5rem] p-10 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300">
-            <div className="flex flex-col items-center text-center space-y-6">
-              <div className="w-20 h-20 bg-slate-900 text-white rounded-3xl flex items-center justify-center shadow-xl shadow-slate-900/20">
-                <Lock size={40} />
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-2xl font-black text-slate-900">Security Protocol</h3>
-                <p className="text-slate-500 text-xs font-bold leading-relaxed">
-                  Administrative authorization is required to proceed with warranty exchange.
-                </p>
-              </div>
-
-              {lockError && (
-                <div className="w-full p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600 animate-shake">
-                  <ShieldAlert size={18} />
-                  <span className="text-[10px] font-black">{lockError}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleUnlockAndExchange} className="w-full space-y-4">
-                <div className="space-y-1.5 text-left">
-                  <label className="text-[10px] font-black text-slate-400 ml-1">Access Passkey</label>
-                  <div className="relative group">
-                    <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={20} />
-                    <input
-                      autoFocus
-                      type="password"
-                      placeholder="••••••••"
-                      className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xl outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all mono placeholder:text-slate-300"
-                      value={lockPassword}
-                      onChange={e => setLockPassword(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => { setIsLocked(false); setLockPassword(''); setLockError(''); }}
-                    className="flex-1 py-4 bg-slate-100 text-slate-500 font-black text-xs rounded-2xl hover:bg-slate-200 transition-all active:scale-95"
-                  >
-                    Abort
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-[2] py-4 bg-slate-900 text-white font-black text-xs rounded-2xl hover:bg-black transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 group"
-                  >
-                    <span>Authorize</span>
-                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
