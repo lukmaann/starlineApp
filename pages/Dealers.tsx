@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { formatDate } from '../utils';
 import { StatusDisplay } from '../components/StatusDisplay';
+import { AuthSession } from '../utils/AuthSession';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area
@@ -355,8 +356,12 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
   };
 
   const loadDealerDetail = (dealer: Dealer) => {
-    setPendingDealer(dealer);
-    setIsLocked(true);
+    if (AuthSession.isValid()) {
+      executeLoadDealerDetail(dealer);
+    } else {
+      setPendingDealer(dealer);
+      setIsLocked(true);
+    }
   };
 
   const executeLoadDealerDetail = async (dealer: Dealer) => {
@@ -379,6 +384,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
       setLockPassword('');
       setLockError('');
       setPendingDealer(null);
+      AuthSession.saveSession();
       if (dealerToLoad) {
         executeLoadDealerDetail(dealerToLoad);
       }

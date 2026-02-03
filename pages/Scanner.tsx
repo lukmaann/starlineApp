@@ -18,6 +18,7 @@ import { StatusDisplay } from '../components/StatusDisplay';
 import { Sheet, SheetContent, SheetTrigger } from '../components/ui/sheet';
 import BatteryReportSheet from '../components/BatteryReportSheet';
 import { BatteryStatus, type Battery, type Dealer, WarrantyCardStatus, type Sale, Replacement, BatteryModel, WarrantyStatus } from '../types';
+import { AuthSession } from '../utils/AuthSession';
 
 interface ScannerProps {
   initialSearch?: string | null;
@@ -296,6 +297,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
       setLockError('');
       setIsReplacing(true);
       setReplacementStep(1);
+      AuthSession.saveSession();
       notify('Security Clearance Approved', 'success');
     } else {
       setLockError('Invalid Access Key. Authorization Denied.');
@@ -949,7 +951,14 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                 <div className="space-y-6">
 
                   {!isReplacing && !isConfirmingReplacement && !isLocked && (
-                    <button onClick={() => setIsLocked(true)} className="w-full py-8 text-2xl bg-slate-900 text-white rounded-3xl font-black flex items-center justify-center space-x-4 hover:bg-black transition-all shadow-2xl active:scale-[0.98] uppercase tracking-[0.2em] animate-in fade-in slide-in-from-bottom-2 border-4 border-slate-900 hover:border-white/20"><RefreshCw size={28} /><span>Start Warranty Exchange</span></button>
+                    <button onClick={() => {
+                      if (AuthSession.isValid()) {
+                        setIsReplacing(true);
+                        setReplacementStep(1);
+                      } else {
+                        setIsLocked(true);
+                      }
+                    }} className="w-full py-8 text-2xl bg-slate-900 text-white rounded-3xl font-black flex items-center justify-center space-x-4 hover:bg-black transition-all shadow-2xl active:scale-[0.98] uppercase tracking-[0.2em] animate-in fade-in slide-in-from-bottom-2 border-4 border-slate-900 hover:border-white/20"><RefreshCw size={28} /><span>Start Warranty Exchange</span></button>
                   )}
 
                   {isLocked && (

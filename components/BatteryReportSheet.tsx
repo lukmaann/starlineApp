@@ -236,7 +236,7 @@ const BatteryReportTemplate: React.FC<{
 const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineage, replacements, dealers, saleDate, onPrint }) => {
     const isExpired = battery.warrantyExpiry ? new Date() > new Date(battery.warrantyExpiry) : false;
     const originalBattery = lineage.find(b => b.status === BatteryStatus.MANUFACTURED) || lineage[0];
-    const effectiveSaleDate = saleDate || originalBattery?.activationDate;
+    const effectiveSaleDate = battery.actualSaleDate || originalBattery?.actualSaleDate || saleDate || originalBattery?.activationDate;
     const reportDate = formatDate(new Date());
 
     // Sort replacements topologically based on lineage order (A -> B -> C)
