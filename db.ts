@@ -749,6 +749,7 @@ export class Database {
         SELECT 
           r.*,
           COALESCE(s.warrantyStartDate, b.actualSaleDate, b.activationDate) as soldDate,
+          b.manufactureDate as sentDate,
           b.model as batteryModel
         FROM replacements r
         LEFT JOIN sales s ON s.batteryId = r.oldBatteryId

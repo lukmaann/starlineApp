@@ -79,9 +79,10 @@ const DealerPrintTemplate: React.FC<{
             {type === 'EXCHANGES' ? (
               <>
                 <th className="py-3 px-2 font-black uppercase tracking-wider">Old Unit</th>
+                <th className="py-3 px-2 font-black uppercase tracking-wider text-center">Dates (Sent / Sold)</th>
+                <th className="py-3 px-2 font-black uppercase tracking-wider">Replacement Date</th>
                 <th className="py-3 px-2 font-black uppercase tracking-wider">New Unit</th>
                 <th className="py-3 px-2 font-black uppercase tracking-wider">Settlement</th>
-                <th className="py-3 px-2 font-black uppercase tracking-wider text-right">Date</th>
               </>
             ) : (
               <>
@@ -102,6 +103,13 @@ const DealerPrintTemplate: React.FC<{
                     <div className="font-bold text-black text-sm">{item.oldBatteryId}</div>
                     <div className="text-[10px] text-gray-500 uppercase font-bold">{item.batteryModel}</div>
                   </td>
+                  <td className="py-4 px-2 align-top text-center">
+                    <div className="text-[10px] font-black">{formatDate(item.sentDate)}</div>
+                    <div className="text-[10px] font-bold text-gray-500 mt-1">{formatDate(item.soldDate)}</div>
+                  </td>
+                  <td className="py-4 px-2 align-top">
+                    <div className="font-bold text-black text-xs">{formatDate(item.replacementDate)}</div>
+                  </td>
                   <td className="py-4 px-2 align-top">
                     <div className="font-bold text-black text-sm">{item.newBatteryId}</div>
                     <div className="text-[10px] text-gray-500 uppercase font-bold">{item.reason}</div>
@@ -111,9 +119,6 @@ const DealerPrintTemplate: React.FC<{
                       {item.settlementType === 'DIRECT' ? 'Direct Swap' : item.settlementType === 'STOCK' ? 'Stock Given' : 'Credit/Pay'}
                     </div>
                     {item.replenishmentBatteryId && <div className="text-[10px] text-gray-600 mono bg-gray-100 px-1 rounded inline-block mt-1 font-bold">{item.replenishmentBatteryId}</div>}
-                  </td>
-                  <td className="py-4 px-2 align-top text-right">
-                    <div className="font-bold text-black">{formatDate(item.replacementDate)}</div>
                   </td>
                 </>
               ) : (
@@ -273,13 +278,13 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
       }
 
       if (filterDateStart) {
-        // Use activationDate for Active/Expired, or manufactureDate if null
-        where += ` AND date(COALESCE(activationDate, manufactureDate)) >= date(?)`;
+        // Strictly use Dealer Dispatch Date (manufactureDate)
+        where += ` AND date(manufactureDate) >= date(?)`;
         params.push(filterDateStart);
       }
 
       if (filterDateEnd) {
-        where += ` AND date(COALESCE(activationDate, manufactureDate)) <= date(?)`;
+        where += ` AND date(manufactureDate) <= date(?)`;
         params.push(filterDateEnd);
       }
 
@@ -812,10 +817,11 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                     {activeLogTab === 'EXCHANGES' ? (
                       <>
                         <th className="px-6 py-4 whitespace-nowrap">Old Battery</th>
-                        <th className="px-6 py-4 whitespace-nowrap">Replaced By</th>
                         <th className="px-6 py-4 whitespace-nowrap">Model</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Sent Date</th>
                         <th className="px-6 py-4 whitespace-nowrap">Sold Date</th>
                         <th className="px-6 py-4 whitespace-nowrap">Replaced On</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Replaced By</th>
                         <th className="px-6 py-4 whitespace-nowrap">Settlement</th>
                         <th className="px-6 py-4 whitespace-nowrap">Outcome / Evidence</th>
                       </>
@@ -839,15 +845,16 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                       {activeLogTab === 'EXCHANGES' ? (
                         <>
                           <td className="px-6 py-5 font-bold text-slate-900 mono text-xs">{item.oldBatteryId}</td>
+                          <td className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.batteryModel}</td>
+                          <td className="px-6 py-5 font-bold text-slate-500 mono text-[10px]">{formatDate(item.sentDate)}</td>
+                          <td className="px-6 py-5 font-bold text-slate-500 mono text-[10px]">{formatDate(item.soldDate)}</td>
+                          <td className="px-6 py-5 font-bold text-slate-500 mono text-[10px]">{formatDate(item.replacementDate)}</td>
                           <td className="px-6 py-5 font-black text-blue-600 mono text-xs">
                             <div className="flex items-center gap-2">
                               {item.newBatteryId}
                               <ArrowRight size={12} />
                             </div>
                           </td>
-                          <td className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.batteryModel}</td>
-                          <td className="px-6 py-5 font-bold text-slate-500 mono text-[10px]">{formatDate(item.soldDate)}</td>
-                          <td className="px-6 py-5 font-bold text-slate-500 mono text-[10px]">{formatDate(item.replacementDate)}</td>
                           <td className="px-6 py-5">
                             {item.replenishmentBatteryId ? (
                               <div className="flex flex-col">
