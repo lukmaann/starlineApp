@@ -15,6 +15,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [pendingSearch, setPendingSearch] = useState<string | null>(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -57,10 +58,15 @@ const App: React.FC = () => {
     return () => window.removeEventListener('app-notify' as any, handleNotify);
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('starline_auth');
+  const handleLogoutClick = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = () => {
+    localStorage.clear();
     setIsLoggedIn(false);
     setActiveTab('scanner');
+    setShowLogoutConfirm(false);
   };
 
   const renderContent = () => {
@@ -142,10 +148,10 @@ const App: React.FC = () => {
             <SessionLock />
             <div className="w-px h-6 bg-slate-200 mx-1" />
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 overflow-hidden">
+              {/* <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 overflow-hidden">
                 <div className="bg-blue-600 w-full h-full flex items-center justify-center text-white text-[10px] font-bold">AD</div>
-              </div>
-              <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all">
+              </div> */}
+              <button onClick={handleLogoutClick} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all">
                 <LogOut size={18} />
               </button>
             </div>
@@ -158,6 +164,38 @@ const App: React.FC = () => {
           </div>
         </main>
       </div>
+
+      {showLogoutConfirm && (
+        <>
+          <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[2000] animate-in fade-in duration-200" onClick={() => setShowLogoutConfirm(false)} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 z-[2100] animate-in zoom-in-95 slide-in-from-bottom-4 duration-200 border border-slate-200">
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mb-2">
+                <LogOut size={24} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">End Session?</h3>
+                <p className="text-xs text-slate-500 font-medium px-4">Return to the login screen.</p>
+              </div>
+
+              <div className="flex gap-3 w-full pt-2">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs uppercase tracking-widest transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmLogout}
+                  className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-rose-200 active:scale-95"
+                >
+                  Confirm Exit
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };

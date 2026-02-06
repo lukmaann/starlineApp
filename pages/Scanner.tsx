@@ -18,6 +18,7 @@ import { StatusDisplay } from '../components/StatusDisplay';
 import { Sheet, SheetContent, SheetTrigger } from '../components/ui/sheet';
 import BatteryReportSheet from '../components/BatteryReportSheet';
 import BatteryEdit from '../components/BatteryEdit';
+import SessionLock from '../components/SessionLock';
 import { BatteryStatus, type Battery, type Dealer, WarrantyCardStatus, type Sale, Replacement, BatteryModel, WarrantyStatus } from '../types';
 import { AuthSession } from '../utils/AuthSession';
 
@@ -118,9 +119,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
         setIsLocked(false);
         setLockError('');
       } else {
-        // Optionally lock the screen if session expires globally
-        // But maybe we only lock on action? 
-        // For now, let's just support remote unlocking.
+        setIsLocked(true); // LOCK INSTANTLY when global session clears
       }
     };
     window.addEventListener('session-changed' as any, handleSessionChange);
@@ -140,6 +139,27 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
 
   const notify = (message: string, type: 'success' | 'error' = 'success') => {
     window.dispatchEvent(new CustomEvent('app-notify', { detail: { message, type } }));
+  };
+
+  // Session Lock State
+  // const [isLocked, setIsLocked] = useState(false); // Already declared above
+  // const [pendingAction, setPendingAction] = useState<string | null>(null); // Already declared above
+
+  const handleLockToggle = (locked: boolean) => {
+    if (!locked) {
+      // Unlocked successfully
+      setIsLocked(false);
+      if (pendingAction === 'EDIT' && activeAsset) {
+        setShowEdit(true);
+      }
+      setPendingAction(null);
+      notify('Security Clearance Approved', 'success');
+    } else {
+      // Locked manually
+      setIsLocked(true);
+      AuthSession.clearSession();
+      setPendingAction(null);
+    }
   };
 
   const handleSearch = async (id: string, isAutoScan = false) => {
@@ -760,8 +780,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
               </div>
             )}
 
-            {/* Warranty Date Correction Section */}
-            {isExp && !showDateCorrection && (
+            {/* Warranty Date Correction Section - Only if Unlocked */}
+            {isExp && !showDateCorrection && !isLocked && (
               <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-6 animate-in slide-in-from-top-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -783,7 +803,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
               </div>
             )}
 
-            {isExp && showDateCorrection && (
+            {isExp && showDateCorrection && !isLocked && (
               <div className="bg-white border-2 border-amber-300 rounded-2xl p-8 shadow-xl animate-in zoom-in-95">
                 <div className="flex items-center justify-between mb-6 pb-4 border-b border-amber-100">
                   <div className="flex items-center gap-3">
@@ -953,17 +973,20 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                       <p className="text-slate-500 font-bold text-lg uppercase">{activeAsset.battery.model} • {activeAsset.battery.capacity}</p>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => {
-                        if (AuthSession.isValid()) {
-                          setShowEdit(true);
-                        } else {
-                          setPendingAction('EDIT');
-                          setIsLocked(true);
-                        }
-                      }} className="p-2.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all border border-slate-100 no-print flex items-center gap-2">
-                        <Edit size={20} />
-                        <span className="text-xs font-bold uppercase">Edit Record</span>
-                      </button>
+                      {/* Hide Edit Button if Locked */}
+                      {!isLocked && (
+                        <button onClick={() => {
+                          if (AuthSession.isValid()) {
+                            setShowEdit(true);
+                          } else {
+                            setPendingAction('EDIT');
+                            setIsLocked(true);
+                          }
+                        }} className="p-2.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all border border-slate-100 no-print flex items-center gap-2">
+                          <Edit size={20} />
+                          <span className="text-xs font-bold uppercase">Edit Record</span>
+                        </button>
+                      )}
                       <Sheet>
                         <SheetTrigger asChild>
                           <button className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all border border-slate-100 no-print flex items-center gap-2">
@@ -1009,79 +1032,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                         }} className="w-full py-8 text-2xl bg-slate-900 text-white rounded-3xl font-black flex items-center justify-center space-x-4 hover:bg-black transition-all shadow-2xl active:scale-[0.98] uppercase tracking-[0.2em] animate-in fade-in slide-in-from-bottom-2 border-4 border-slate-900 hover:border-white/20"><RefreshCw size={28} /><span>Start Warranty Exchange</span></button>
                       )}
 
-                      {isLocked && (
-                        <div className="max-w-md mx-auto bg-white rounded-3xl border border-slate-200 shadow-2xl p-0 animate-in zoom-in-95 duration-300 relative overflow-hidden text-slate-900">
-                          {/* Header Bar */}
-                          <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
-                              <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Protocol Lock</span>
-                            </div>
-                            <div className="text-[10px] font-mono text-slate-400">EXCH_AUTH_REQ</div>
-                          </div>
-
-                          <div className="p-8 space-y-8">
-                            <div className="text-center space-y-2">
-                              <div className="w-16 h-16 bg-slate-50 border border-slate-200 text-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
-                                <Lock size={28} strokeWidth={2} />
-                              </div>
-                              <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">Security Protocol</h3>
-                              <p className="text-xs text-slate-500 font-medium">Authorization required for <span className="text-slate-900 font-bold">WARRANTY_SWAP</span></p>
-                            </div>
-
-                            {lockError && (
-                              <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 text-rose-600 animate-shake">
-                                <ShieldAlert size={18} />
-                                <span className="text-[10px] font-black">{lockError}</span>
-                              </div>
-                            )}
-
-                            <form onSubmit={handleUnlockAndExchange} className="space-y-4">
-                              <div className="space-y-1">
-                                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Identity Verification</label>
-                                <div className="relative group">
-                                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                    <Fingerprint className="text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
-                                  </div>
-                                  <input
-                                    type="password"
-                                    autoFocus
-                                    placeholder="ENTER ACCESS KEY"
-                                    className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-xl font-mono text-base text-slate-900 outline-none focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-300 uppercase tracking-widest"
-                                    value={lockPassword}
-                                    onChange={e => setLockPassword(e.target.value)}
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="flex gap-3">
-                                <button
-                                  type="button"
-                                  onClick={() => { setIsLocked(false); setLockPassword(''); setLockError(''); }}
-                                  className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs uppercase tracking-widest transition-all active:scale-95"
-                                >
-                                  Abort
-                                </button>
-                                <button
-                                  type="submit"
-                                  className="flex-[2] py-4 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-slate-900/10 active:scale-95 flex items-center justify-center gap-2"
-                                >
-                                  Authorize
-                                </button>
-                              </div>
-                            </form>
-                          </div>
-
-                          {/* Footer Status */}
-                          <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center text-[9px] font-mono text-slate-400">
-                            <div className="flex items-center gap-2">
-                              <ShieldCheck size={10} className="text-emerald-500" />
-                              <span>SECURE ENDPOINT</span>
-                            </div>
-                            <div>REF: {activeAsset.battery.id}</div>
-                          </div>
-                        </div>
-                      )}
+                      {/* SessionLock component now handles this overlay */}
 
                       {isReplacing && !isConfirmingReplacement && (
                         <div className="bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-2xl shadow-slate-200/50 animate-in slide-in-from-bottom-6 space-y-8 relative overflow-hidden">
@@ -1558,10 +1509,19 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
               </>
             )
             }
-          </div >
+          </div>
         )
       })()}
-    </div >
+
+      {/* Footer Info */}
+      <div className="absolute inset-x-0 bottom-0 pointer-events-none p-4 flex justify-between items-end opacity-20 hover:opacity-100 transition-opacity">
+        <div className="bg-white/50 backdrop-blur-md p-2 rounded-lg text-[10px] font-mono text-slate-500 pointer-events-auto">
+          {dealers.length}DL • {models.length}MD • v2.4.0
+        </div>
+      </div>
+
+      {/* Session Lock handled via Navigation */}
+    </div>
   );
 };
 

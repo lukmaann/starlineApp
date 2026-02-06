@@ -711,6 +711,80 @@ export class Database {
     }
   }
 
+  static async deleteReplacement(replacementId: string): Promise<void> {
+    const replacement = (await this.query<{
+      id: string, oldBatteryId: string, newBatteryId: string,
+      replenishmentBatteryId?: string, settlementType?: string
+    }>('SELECT * FROM replacements WHERE id = ?', [replacementId]))[0];
+
+    if (!replacement) throw new Error('Replacement record not found');
+
+    // 1. Safety Check: End-of-Chain
+    // Ensure the new battery hasn't been used in a subsequent replacement
+    const newBattery = await this.getBattery(replacement.newBatteryId);
+    if (newBattery && newBattery.nextBatteryId) {
+      throw new Error(`Cannot delete this record because the replacement unit (${replacement.newBatteryId}) has already been replaced in a later transaction. Please delete the subsequent record first.`);
+    }
+
+    try {
+      await this.run('BEGIN TRANSACTION');
+
+      // 2. Revert Old Battery (Failed Unit)
+      // It goes back to ACTIVE status (assuming it was active before failure)
+      // We clear the link to the next battery
+      // We DO NOT change dealer/customer as it returns to their ownership state
+      await this.run(
+        `UPDATE batteries SET status = 'ACTIVE', nextBatteryId = NULL, warrantyExpiry = date(activationDate, '+' || warrantyMonths || ' months') WHERE id = ?`,
+        [replacement.oldBatteryId]
+      );
+      // Recalculate expiry based on original logic? 
+      // Simplified: If it was RETURNED, we just make it ACTIVE. 
+      // Ideally we should know its previous status, but ACTIVE is the only logical state for a battery that "wasn't replaced".
+
+      // 3. Reset New Battery (The Replacement Unit)
+      // This goes back to being fresh stock (MANUFACTURED)
+      // We strip it of all assignment data
+      await this.run(
+        `UPDATE batteries SET 
+           status = 'MANUFACTURED', 
+           previousBatteryId = NULL, 
+           activationDate = NULL, 
+           dealerId = NULL, 
+           customerName = NULL, 
+           customerPhone = NULL, 
+           warrantyExpiry = NULL
+         WHERE id = ?`,
+        [replacement.newBatteryId]
+      );
+
+      // 4. Revert Settlement (If Stock)
+      // If a replenishment unit was given to the dealer, we must take it back (make it Manufactured again)
+      if (replacement.replenishmentBatteryId) {
+        await this.run(
+          `UPDATE batteries SET 
+             status = 'MANUFACTURED', 
+             dealerId = NULL, 
+             activationDate = NULL, 
+             customerName = NULL, 
+             warrantyExpiry = NULL 
+           WHERE id = ?`,
+          [replacement.replenishmentBatteryId]
+        );
+      }
+
+      // 5. Delete the Transaction Record
+      await this.run('DELETE FROM replacements WHERE id = ?', [replacementId]);
+
+      await this.run('COMMIT');
+      window.dispatchEvent(new CustomEvent('db-synced')); // Notify UI to refresh
+
+    } catch (error) {
+      await this.run('ROLLBACK');
+      console.error('Delete Replacement Failed:', error);
+      throw error;
+    }
+  }
+
   static async getPaginatedReplacements(
     dealerId: string,
     page: number,

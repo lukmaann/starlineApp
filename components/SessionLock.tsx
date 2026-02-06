@@ -3,25 +3,36 @@ import { Lock, Unlock, Key, Loader2, ShieldCheck, ShieldAlert, X } from 'lucide-
 import { AuthSession } from '../utils/AuthSession';
 import { Database } from '../db';
 
-const SessionLock: React.FC = () => {
-    const [isLocked, setIsLocked] = useState(true);
+const SessionLock: React.FC<{
+    isLocked?: boolean;
+    onToggle?: (locked: boolean) => void;
+    className?: string;
+    popoverDirection?: 'up' | 'down';
+}> = ({ isLocked: propIsLocked, onToggle, className, popoverDirection = 'down' }) => {
+    const [internalIsLocked, setInternalIsLocked] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
+    const isLocked = propIsLocked !== undefined ? propIsLocked : internalIsLocked;
+
     useEffect(() => {
         const checkStatus = () => {
-            setIsLocked(!AuthSession.isValid());
+            const valid = AuthSession.isValid();
+            if (propIsLocked === undefined) setInternalIsLocked(!valid);
         };
 
         checkStatus();
 
         // Listen for global session changes
         const handleSessionChange = (e: any) => {
-            setIsLocked(!e.detail.isAuthenticated);
+            if (propIsLocked === undefined) {
+                setInternalIsLocked(!e.detail.isAuthenticated);
+            }
             if (e.detail.isAuthenticated) {
-                setShowModal(false); // Close modal if unlocked externally (or by this component)
+                setShowModal(false);
+                if (onToggle) onToggle(false);
             }
         };
 
@@ -49,8 +60,11 @@ const SessionLock: React.FC = () => {
             const adminPass = await Database.getConfig('starline_admin_pass') || 'starline@2025';
 
             if (password === adminPass) {
-                AuthSession.saveSession(); // This will trigger the event listener and update state
+                AuthSession.saveSession();
                 setPassword('');
+                if (onToggle) onToggle(false);
+                else setInternalIsLocked(false);
+                setShowModal(false);
             } else {
                 setError('Invalid Access Key');
                 setPassword('');
@@ -63,7 +77,7 @@ const SessionLock: React.FC = () => {
     };
 
     return (
-        <div className="relative">
+        <div className={`relative ${className || ''}`}>
             <button
                 onClick={handleToggle}
                 className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg font-bold text-xs transition-all border ${isLocked
@@ -79,7 +93,7 @@ const SessionLock: React.FC = () => {
             {showModal && (
                 <>
                     <div className="fixed inset-0 z-[100] cursor-default" onClick={() => setShowModal(false)} />
-                    <div className="absolute top-full right-0 mt-3 w-80 z-[200] bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className={`absolute right-0 w-80 z-[200] bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${popoverDirection === 'up' ? 'bottom-full mb-3 slide-in-from-bottom-2' : 'top-full mt-3 slide-in-from-top-2'}`}>
                         <div className="bg-slate-50 p-3 border-b border-slate-100 flex justify-between items-center">
                             <div className="flex items-center gap-2 text-slate-500 font-bold text-[10px] uppercase tracking-wider">
                                 <ShieldCheck size={14} />

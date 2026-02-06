@@ -5,7 +5,7 @@ import { getLocalDate, formatDate } from '../utils';
 import {
     Save, ShieldCheck, X, Calendar, User, Phone,
     CreditCard, CheckCircle2, AlertCircle, Loader2,
-    Store, Barcode, ChevronDown, History, Zap
+    Store, Barcode, ChevronDown, History, Zap, Trash2, AlertTriangle
 } from 'lucide-react';
 
 interface BatteryEditProps {
@@ -13,6 +13,66 @@ interface BatteryEditProps {
     onClose: () => void;
     onUpdate: () => void;
 }
+
+const DeleteConfirmation: React.FC<{
+    onConfirm: () => void;
+    onCancel: () => void;
+    isLoading: boolean;
+}> = ({ onConfirm, onCancel, isLoading }) => (
+    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in scale-95 duration-200">
+            <div className="p-6 bg-rose-50 border-b border-rose-100 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                    <AlertTriangle size={24} />
+                </div>
+                <div>
+                    <h3 className="text-lg font-black text-rose-900 uppercase tracking-tight">Danger: Permanent Deletion</h3>
+                    <p className="text-xs font-bold text-rose-600 uppercase">You are about to revert a transaction</p>
+                </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+                <p className="text-sm text-slate-600 font-medium">
+                    This action will <strong>Cascade Delete</strong> this replacement record and revert all associated data.
+                </p>
+
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-2">
+                    <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span className="font-bold text-slate-700">Old Battery Reverts to ACTIVE</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                        <span className="font-bold text-slate-700">New Battery Reverts to STOCK</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                        <span className="font-bold text-slate-700">Settlement/Credits are CANCELLED</span>
+                    </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                    <button
+                        onClick={onCancel}
+                        disabled={isLoading}
+                        className="flex-1 py-3 bg-white border-2 border-slate-200 text-slate-600 font-bold uppercase text-xs rounded-xl hover:bg-slate-50 transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        disabled={isLoading}
+                        className="flex-1 py-3 bg-rose-600 text-white font-bold uppercase text-xs rounded-xl hover:bg-rose-700 transition-colors flex items-center justify-center gap-2"
+                    >
+                        {isLoading ? <Loader2 size={16} className="animate-spin" /> : <>
+                            <Trash2 size={16} /> Confirm Delete
+                        </>}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+);
 
 const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate }) => {
     const [isLoading, setIsLoading] = useState(true);
@@ -24,6 +84,9 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         replacement?: Replacement;
     } | null>(null);
 
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleteLoading, setDeleteLoading] = useState(false);
+
     const [formData, setFormData] = useState({
         customerName: '',
         customerPhone: '',
@@ -33,7 +96,8 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         paidInAccount: false,
         replenishmentBatteryId: '',
         warrantyCardStatus: 'RECEIVED' as WarrantyCardStatus,
-        reason: ''
+        reason: '',
+        settlementDate: ''
     });
 
     useEffect(() => {
@@ -61,7 +125,8 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                         paidInAccount: incomingReplacement?.paidInAccount || false,
                         replenishmentBatteryId: incomingReplacement?.replenishmentBatteryId || '',
                         warrantyCardStatus: incomingReplacement?.warrantyCardStatus || 'RECEIVED',
-                        reason: incomingReplacement?.reason || ''
+                        reason: incomingReplacement?.reason || '',
+                        settlementDate: incomingReplacement?.settlementDate || ''
                     });
                 }
             } catch (error) {
@@ -117,7 +182,8 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                         paidInAccount = ?, 
                         replenishmentBatteryId = ?,
                         warrantyCardStatus = ?,
-                        reason = ?
+                        reason = ?,
+                        settlementDate = ?
                      WHERE id = ?`,
                     [
                         formData.settlementMethod,
@@ -125,6 +191,7 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                         replId,
                         formData.warrantyCardStatus,
                         formData.reason,
+                        formData.settlementDate,
                         activeAsset.replacement.id
                     ]
                 );
@@ -137,6 +204,22 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
             alert('Failed to update record');
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!activeAsset?.replacement) return;
+        setDeleteLoading(true);
+        try {
+            await Database.deleteReplacement(activeAsset.replacement.id);
+            onUpdate();
+            onClose();
+        } catch (error: any) {
+            console.error('Delete Failed:', error);
+            alert(error.message || 'Failed to delete record');
+        } finally {
+            setDeleteLoading(false);
+            setShowDeleteConfirm(false);
         }
     };
 
@@ -258,9 +341,20 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                     {/* 3. Settlement / Replacement Logic */}
                     {activeAsset?.replacement && (
                         <div className="p-6 bg-slate-50 border-2 border-slate-200 rounded-2xl space-y-4">
-                            <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
-                                <Store size={18} className="text-blue-600" /> Dealer Settlement (Editing)
-                            </h4>
+                            <div className="flex justify-between items-center">
+                                <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                                    <Store size={18} className="text-blue-600" /> Dealer Settlement (Editing)
+                                </h4>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Settlement Date:</label>
+                                    <input
+                                        type="date"
+                                        className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-blue-500 transition-all uppercase"
+                                        value={formData.settlementDate}
+                                        onChange={(e) => setFormData({ ...formData, settlementDate: e.target.value })}
+                                    />
+                                </div>
+                            </div>
 
                             <div className="grid grid-cols-3 gap-4">
                                 <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col gap-2 ${formData.settlementMethod === 'CREDIT' ? 'bg-blue-50 border-blue-500 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
@@ -329,6 +423,16 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
 
                     {/* Actions */}
                     <div className="flex gap-4 pt-4 border-t border-slate-100">
+                        {/* {activeAsset?.replacement && (
+                            <button
+                                onClick={() => setShowDeleteConfirm(true)}
+                                className="px-4 py-5 bg-rose-50 text-rose-600 border border-rose-100 font-bold uppercase tracking-widest text-xs hover:bg-rose-100 hover:border-rose-200 rounded-xl transition-all flex items-center gap-2"
+                                title="Delete this record and revert changes"
+                            >
+                                <Trash2 size={18} />
+                            </button>
+                        )} */}
+
                         <button onClick={onClose} className="px-8 py-5 text-slate-400 font-bold uppercase tracking-widest text-xs hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
                             Cancel
                         </button>
@@ -348,6 +452,14 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                     </div>
                 </div>
             </div>
+
+            {showDeleteConfirm && (
+                <DeleteConfirmation
+                    onConfirm={handleDelete}
+                    onCancel={() => setShowDeleteConfirm(false)}
+                    isLoading={deleteLoading}
+                />
+            )}
         </div>
     );
 };
