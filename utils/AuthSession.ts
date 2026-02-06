@@ -8,6 +8,7 @@ export const AuthSession = {
      */
     saveSession: () => {
         localStorage.setItem(SESSION_KEY, Date.now().toString());
+        window.dispatchEvent(new CustomEvent('session-changed', { detail: { isAuthenticated: true } }));
     },
 
     /**
@@ -29,5 +30,6 @@ export const AuthSession = {
      */
     clearSession: () => {
         localStorage.removeItem(SESSION_KEY);
+        window.dispatchEvent(new CustomEvent('session-changed', { detail: { isAuthenticated: false } }));
     }
 };

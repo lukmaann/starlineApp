@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Navigation from './components/Navigation';
 import Scanner from './pages/Scanner';
+import SessionLock from './components/SessionLock';
 import Dealers from './pages/Dealers';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
@@ -137,7 +138,9 @@ const App: React.FC = () => {
               <Download size={14} />
               <span>Backup to SSD</span>
             </button>
-            <div className="w-px h-6 bg-slate-200 mx-2" />
+            <div className="w-px h-6 bg-slate-200 mx-1" />
+            <SessionLock />
+            <div className="w-px h-6 bg-slate-200 mx-1" />
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 overflow-hidden">
                 <div className="bg-blue-600 w-full h-full flex items-center justify-center text-white text-[10px] font-bold">AD</div>

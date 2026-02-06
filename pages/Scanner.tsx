@@ -11,12 +11,13 @@ import {
   User, ChevronRight, Layers, FileText, Smartphone, Copy,
   Printer, Download, FileSpreadsheet, FileJson, StickyNote,
   ArrowDownCircle, HelpCircle, ArrowRightLeft, AlertOctagon,
-  ShieldQuestion, CheckCircle2, FileCheck, ClipboardList, Activity, ChevronDown
+  ShieldQuestion, CheckCircle2, FileCheck, ClipboardList, Activity, ChevronDown, Edit
 } from 'lucide-react';
 import { formatDate, getLocalDate } from '../utils';
 import { StatusDisplay } from '../components/StatusDisplay';
 import { Sheet, SheetContent, SheetTrigger } from '../components/ui/sheet';
 import BatteryReportSheet from '../components/BatteryReportSheet';
+import BatteryEdit from '../components/BatteryEdit';
 import { BatteryStatus, type Battery, type Dealer, WarrantyCardStatus, type Sale, Replacement, BatteryModel, WarrantyStatus } from '../types';
 import { AuthSession } from '../utils/AuthSession';
 
@@ -39,6 +40,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
   const [showAddStock, setShowAddStock] = useState(false);
   const [missingSerial, setMissingSerial] = useState('');
   const [stockForm, setStockForm] = useState({ modelId: '', capacity: '', warranty: 0 });
+  const [showEdit, setShowEdit] = useState(false);
 
   // Batch Assignment Mode State
   const [batchMode, setBatchMode] = useState(false);
@@ -59,6 +61,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
   const [isReplacing, setIsReplacing] = useState(false);
   const [replacementStep, setReplacementStep] = useState(1);
   const [isConfirmingReplacement, setIsConfirmingReplacement] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'EXCHANGE' | 'EDIT' | null>(null);
   const [replacementData, setReplacementData] = useState({
     newBatteryId: '',
     dealerId: dealers[0]?.id || '',
@@ -107,6 +110,22 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
       if (onSearchHandled) onSearchHandled();
     }
   }, [initialSearch]);
+
+  // Global Session Sync
+  useEffect(() => {
+    const handleSessionChange = (e: any) => {
+      if (e.detail.isAuthenticated) {
+        setIsLocked(false);
+        setLockError('');
+      } else {
+        // Optionally lock the screen if session expires globally
+        // But maybe we only lock on action? 
+        // For now, let's just support remote unlocking.
+      }
+    };
+    window.addEventListener('session-changed' as any, handleSessionChange);
+    return () => window.removeEventListener('session-changed' as any, handleSessionChange);
+  }, []);
 
   useEffect(() => {
     if (isReplacing && activeAsset?.battery?.dealerId) {
@@ -295,10 +314,17 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
       setIsLocked(false);
       setLockPassword('');
       setLockError('');
-      setIsReplacing(true);
-      setReplacementStep(1);
+
       AuthSession.saveSession();
       notify('Security Clearance Approved', 'success');
+
+      if (pendingAction === 'EDIT') {
+        setShowEdit(true);
+      } else {
+        setIsReplacing(true);
+        setReplacementStep(1);
+      }
+      setPendingAction(null);
     } else {
       setLockError('Invalid Access Key. Authorization Denied.');
       setLockPassword('');
@@ -901,616 +927,641 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
               </div>
             )}
 
-            {/* Status Banner System */}
-            {!isExp && (
-              <StatusDisplay
-                status={activeAsset.battery.status}
-                isExpired={isExp}
-                dealerId={activeAsset.battery.dealerId}
-                variant="banner"
-                className="rounded-t-2xl"
+            {showEdit ? (
+              <BatteryEdit
+                batteryId={activeAsset.battery.id}
+                onClose={() => setShowEdit(false)}
+                onUpdate={() => handleSearch(activeAsset.battery.id)}
               />
-            )}
+            ) : (
+              <>
+                {/* Status Banner System */}
+                {!isExp && (
+                  <StatusDisplay
+                    status={activeAsset.battery.status}
+                    isExpired={isExp}
+                    dealerId={activeAsset.battery.dealerId}
+                    variant="banner"
+                    className="rounded-t-2xl"
+                  />
+                )}
 
-            <div className={`border rounded-2xl rounded-t-none shadow-sm overflow-hidden transition-colors duration-500 ${getCardColor()}`}>
-              <div className="p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-slate-100">
-                <div className="space-y-1">
-                  <div className="flex items-center space-x-4"><h1 className="text-4xl font-black tracking-tight text-slate-900 mono uppercase">{activeAsset.battery.id}</h1></div>
-                  <p className="text-slate-500 font-bold text-lg uppercase">{activeAsset.battery.model} • {activeAsset.battery.capacity}</p>
-                </div>
-                <Sheet>
-                  <SheetTrigger asChild>
-                    <button className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all border border-slate-100 no-print flex items-center gap-2">
-                      <FileText size={20} />
-                      <span className="text-xs font-bold uppercase">Create Report</span>
-                    </button>
-                  </SheetTrigger>
-                  <SheetContent className="w-full sm:max-w-[50vw] p-0">
-                    <BatteryReportSheet
-                      battery={activeAsset.battery}
-                      lineage={activeAsset.lineage}
-                      replacements={activeAsset.replacements}
-                      dealers={dealers}
-                      saleDate={activeAsset.lineageSales?.find((s: any) => s.batteryId === activeAsset.battery.id)?.saleDate}
-                      onPrint={handlePrintReport}
-                    />
-                  </SheetContent>
-                </Sheet>
-              </div>
-              <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div className="space-y-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Ownership record</p><div className="flex items-center space-x-3">{activeAsset.battery.customerName ? <><div className="p-2 bg-slate-50 rounded-lg"><User size={18} /></div><span className="font-bold text-slate-900 uppercase">{activeAsset.battery.customerName}</span></> : <p className="text-sm font-bold text-slate-300 italic">Inventory Stock</p>}</div></div>
-                <div className="space-y-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Lifecycle timeline</p><div className="space-y-2 text-xs font-bold"><div className="flex justify-between"><span className="text-slate-400">Sold On</span><span className="mono">{formatDate(activeAsset.battery.activationDate)}</span></div><div className="flex justify-between"><span className="text-slate-400">Expiry</span><span className="mono text-rose-600 font-black">{formatDate(activeAsset.battery.warrantyExpiry)}</span></div></div></div>
-                <div className="space-y-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Dispatch metadata</p><div className="space-y-2 text-xs font-bold"><div className="flex justify-between"><span className="text-slate-400">Dealer</span><span className="text-blue-600 truncate max-w-[120px] uppercase">{dealers.find(d => d.id === activeAsset.battery.dealerId)?.name || 'Central'}</span></div><div className="flex justify-between"><span className="text-slate-400">Swap count</span><span className="mono">{activeAsset.battery.replacementCount}</span></div></div></div>
-              </div>
-            </div>
-
-            <div className="no-print">
-              {activeAsset.battery.status === BatteryStatus.MANUFACTURED ? (
-                <div className="bg-blue-600 p-8 rounded-2xl shadow-xl flex justify-between items-center text-white"><div><h3 className="text-xl font-bold uppercase tracking-tight mb-2">Central Stock Unit</h3><p className="text-blue-100 text-xs font-bold uppercase tracking-widest opacity-80">This unit is currently in central stock. Use Batch Mode to dispatch and activate.</p></div><Package size={32} className="opacity-40" /></div>
-              ) : !isExpired && activeAsset.battery.status !== BatteryStatus.RETURNED ? (
-                <div className="space-y-6">
-
-                  {!isReplacing && !isConfirmingReplacement && !isLocked && (
-                    <button onClick={() => {
-                      if (AuthSession.isValid()) {
-                        setIsReplacing(true);
-                        setReplacementStep(1);
-                      } else {
-                        setIsLocked(true);
-                      }
-                    }} className="w-full py-8 text-2xl bg-slate-900 text-white rounded-3xl font-black flex items-center justify-center space-x-4 hover:bg-black transition-all shadow-2xl active:scale-[0.98] uppercase tracking-[0.2em] animate-in fade-in slide-in-from-bottom-2 border-4 border-slate-900 hover:border-white/20"><RefreshCw size={28} /><span>Start Warranty Exchange</span></button>
-                  )}
-
-                  {isLocked && (
-                    <div className="max-w-md mx-auto bg-white rounded-3xl border border-slate-200 shadow-2xl p-0 animate-in zoom-in-95 duration-300 relative overflow-hidden text-slate-900">
-                      {/* Header Bar */}
-                      <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
-                          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Protocol Lock</span>
-                        </div>
-                        <div className="text-[10px] font-mono text-slate-400">EXCH_AUTH_REQ</div>
-                      </div>
-
-                      <div className="p-8 space-y-8">
-                        <div className="text-center space-y-2">
-                          <div className="w-16 h-16 bg-slate-50 border border-slate-200 text-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
-                            <Lock size={28} strokeWidth={2} />
-                          </div>
-                          <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">Security Protocol</h3>
-                          <p className="text-xs text-slate-500 font-medium">Authorization required for <span className="text-slate-900 font-bold">WARRANTY_SWAP</span></p>
-                        </div>
-
-                        {lockError && (
-                          <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 text-rose-600 animate-shake">
-                            <ShieldAlert size={18} />
-                            <span className="text-[10px] font-black">{lockError}</span>
-                          </div>
-                        )}
-
-                        <form onSubmit={handleUnlockAndExchange} className="space-y-4">
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Identity Verification</label>
-                            <div className="relative group">
-                              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                <Fingerprint className="text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
-                              </div>
-                              <input
-                                type="password"
-                                autoFocus
-                                placeholder="ENTER ACCESS KEY"
-                                className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-xl font-mono text-base text-slate-900 outline-none focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-300 uppercase tracking-widest"
-                                value={lockPassword}
-                                onChange={e => setLockPassword(e.target.value)}
-                              />
-                            </div>
-                          </div>
-
-                          <div className="flex gap-3">
-                            <button
-                              type="button"
-                              onClick={() => { setIsLocked(false); setLockPassword(''); setLockError(''); }}
-                              className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs uppercase tracking-widest transition-all active:scale-95"
-                            >
-                              Abort
-                            </button>
-                            <button
-                              type="submit"
-                              className="flex-[2] py-4 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-slate-900/10 active:scale-95 flex items-center justify-center gap-2"
-                            >
-                              Authorize
-                            </button>
-                          </div>
-                        </form>
-                      </div>
-
-                      {/* Footer Status */}
-                      <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center text-[9px] font-mono text-slate-400">
-                        <div className="flex items-center gap-2">
-                          <ShieldCheck size={10} className="text-emerald-500" />
-                          <span>SECURE ENDPOINT</span>
-                        </div>
-                        <div>REF: {activeAsset.battery.id}</div>
-                      </div>
+                <div className={`border rounded-2xl rounded-t-none shadow-sm overflow-hidden transition-colors duration-500 ${getCardColor()}`}>
+                  <div className="p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-slate-100">
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-4"><h1 className="text-4xl font-black tracking-tight text-slate-900 mono uppercase">{activeAsset.battery.id}</h1></div>
+                      <p className="text-slate-500 font-bold text-lg uppercase">{activeAsset.battery.model} • {activeAsset.battery.capacity}</p>
                     </div>
-                  )}
-
-                  {isReplacing && !isConfirmingReplacement && (
-                    <div className="bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-2xl shadow-slate-200/50 animate-in slide-in-from-bottom-6 space-y-8 relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-600"></div>
-                      <div className="flex justify-between items-center pb-6 border-b border-slate-100">
-                        <div>
-                          <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Exchange Protocol</h3>
-                          <p className="text-xs font-bold text-amber-600 uppercase mt-1 tracking-widest bg-amber-50 px-2 py-1 rounded-md inline-block border border-amber-100">Swapping Model: {activeAsset.battery.model}</p>
-                        </div>
-                        <button onClick={() => { setIsReplacing(false); setReplacementStep(1); }} className="p-3 bg-slate-100 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-2xl transition-all"><X size={24} /></button>
-                      </div>
-
-                      {replacementStep === 1 ? (
-                        <form onSubmit={handleReplacementRequest} className="space-y-8 py-4">
-                          <div className="space-y-4">
-                            <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Step 1: Scan Replacement Unit</label>
-                            <div className="relative group">
-                              <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors">
-                                <Barcode size={32} />
-                              </div>
-                              <input
-                                ref={replacementInputRef}
-                                required
-                                autoFocus
-                                placeholder="SCAN NEW SERIAL..."
-                                className="w-full pl-20 pr-6 py-8 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-3xl outline-none focus:border-blue-500 focus:bg-white focus:shadow-xl focus:shadow-blue-500/10 uppercase transition-all mono placeholder:text-slate-300"
-                                value={replacementData.newBatteryId}
-                                onChange={e => setReplacementData({ ...replacementData, newBatteryId: e.target.value.toUpperCase() })}
-                              />
-                            </div>
-                          </div>
-                          <button type="submit" className="w-full bg-blue-600 text-white font-black py-6 rounded-2xl hover:bg-blue-700 transition-all uppercase text-lg tracking-[0.2em] flex items-center justify-center gap-4 shadow-xl shadow-blue-500/20 group">
-                            Validate Unit <ArrowRight size={24} className="group-hover:translate-x-1 transition-transform" />
+                    <div className="flex gap-2">
+                      <button onClick={() => {
+                        if (AuthSession.isValid()) {
+                          setShowEdit(true);
+                        } else {
+                          setPendingAction('EDIT');
+                          setIsLocked(true);
+                        }
+                      }} className="p-2.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all border border-slate-100 no-print flex items-center gap-2">
+                        <Edit size={20} />
+                        <span className="text-xs font-bold uppercase">Edit Record</span>
+                      </button>
+                      <Sheet>
+                        <SheetTrigger asChild>
+                          <button className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all border border-slate-100 no-print flex items-center gap-2">
+                            <FileText size={20} />
+                            <span className="text-xs font-bold uppercase">Create Report</span>
                           </button>
-                        </form>
-                      ) : (
-                        <div className="space-y-8">
-                          {/* Battery Comparison */}
-                          <div className="grid grid-cols-2 gap-0 border-2 border-slate-100 rounded-2xl overflow-hidden shadow-sm">
-                            <div className="bg-slate-50 p-6 flex flex-col justify-center border-r border-slate-200">
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2"> Old Battery</p>
-                              <p className="text-2xl font-black mono text-rose-600 break-all">{activeAsset.battery.id}</p>
+                        </SheetTrigger>
+                        <SheetContent className="w-full sm:max-w-[50vw] p-0">
+                          <BatteryReportSheet
+                            battery={activeAsset.battery}
+                            lineage={activeAsset.lineage}
+                            replacements={activeAsset.replacements}
+                            dealers={dealers}
+                            saleDate={activeAsset.lineageSales?.find((s: any) => s.batteryId === activeAsset.battery.id)?.saleDate}
+                            onPrint={handlePrintReport}
+                          />
+                        </SheetContent>
+                      </Sheet>
+                    </div>
+                  </div>
+                  <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="space-y-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Ownership record</p><div className="flex items-center space-x-3">{activeAsset.battery.customerName ? <><div className="p-2 bg-slate-50 rounded-lg"><User size={18} /></div><span className="font-bold text-slate-900 uppercase">{activeAsset.battery.customerName}</span></> : <p className="text-sm font-bold text-slate-300 italic">Inventory Stock</p>}</div></div>
+                    <div className="space-y-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Lifecycle timeline</p><div className="space-y-2 text-xs font-bold"><div className="flex justify-between"><span className="text-slate-400">Sold On</span><span className="mono">{formatDate(activeAsset.battery.activationDate)}</span></div><div className="flex justify-between"><span className="text-slate-400">Expiry</span><span className="mono text-rose-600 font-black">{formatDate(activeAsset.battery.warrantyExpiry)}</span></div></div></div>
+                    <div className="space-y-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Dispatch metadata</p><div className="space-y-2 text-xs font-bold"><div className="flex justify-between"><span className="text-slate-400">Dealer</span><span className="text-blue-600 truncate max-w-[120px] uppercase">{dealers.find(d => d.id === activeAsset.battery.dealerId)?.name || 'Central'}</span></div><div className="flex justify-between"><span className="text-slate-400">Swap count</span><span className="mono">{activeAsset.battery.replacementCount}</span></div></div></div>
+                  </div>
+                </div>
+
+                <div className="no-print">
+                  {activeAsset.battery.status === BatteryStatus.MANUFACTURED ? (
+                    <div className="bg-blue-600 p-8 rounded-2xl shadow-xl flex justify-between items-center text-white"><div><h3 className="text-xl font-bold uppercase tracking-tight mb-2">Central Stock Unit</h3><p className="text-blue-100 text-xs font-bold uppercase tracking-widest opacity-80">This unit is currently in central stock. Use Batch Mode to dispatch and activate.</p></div><Package size={32} className="opacity-40" /></div>
+                  ) : !isExpired && activeAsset.battery.status !== BatteryStatus.RETURNED ? (
+                    <div className="space-y-6">
+
+                      {!isReplacing && !isConfirmingReplacement && !isLocked && (
+                        <button onClick={() => {
+                          if (AuthSession.isValid()) {
+                            setIsReplacing(true);
+                            setReplacementStep(1);
+                          } else {
+                            setPendingAction('EXCHANGE');
+                            setIsLocked(true);
+                          }
+                        }} className="w-full py-8 text-2xl bg-slate-900 text-white rounded-3xl font-black flex items-center justify-center space-x-4 hover:bg-black transition-all shadow-2xl active:scale-[0.98] uppercase tracking-[0.2em] animate-in fade-in slide-in-from-bottom-2 border-4 border-slate-900 hover:border-white/20"><RefreshCw size={28} /><span>Start Warranty Exchange</span></button>
+                      )}
+
+                      {isLocked && (
+                        <div className="max-w-md mx-auto bg-white rounded-3xl border border-slate-200 shadow-2xl p-0 animate-in zoom-in-95 duration-300 relative overflow-hidden text-slate-900">
+                          {/* Header Bar */}
+                          <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
+                              <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Protocol Lock</span>
                             </div>
-                            <div className="bg-emerald-50/50 p-6 flex flex-col justify-center items-end text-right">
-                              <p className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest mb-2">New Battery</p>
-                              <p className="text-2xl font-black mono text-emerald-600 break-all">{replacementData.newBatteryId}</p>
+                            <div className="text-[10px] font-mono text-slate-400">EXCH_AUTH_REQ</div>
+                          </div>
+
+                          <div className="p-8 space-y-8">
+                            <div className="text-center space-y-2">
+                              <div className="w-16 h-16 bg-slate-50 border border-slate-200 text-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+                                <Lock size={28} strokeWidth={2} />
+                              </div>
+                              <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">Security Protocol</h3>
+                              <p className="text-xs text-slate-500 font-medium">Authorization required for <span className="text-slate-900 font-bold">WARRANTY_SWAP</span></p>
+                            </div>
+
+                            {lockError && (
+                              <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 text-rose-600 animate-shake">
+                                <ShieldAlert size={18} />
+                                <span className="text-[10px] font-black">{lockError}</span>
+                              </div>
+                            )}
+
+                            <form onSubmit={handleUnlockAndExchange} className="space-y-4">
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Identity Verification</label>
+                                <div className="relative group">
+                                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <Fingerprint className="text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+                                  </div>
+                                  <input
+                                    type="password"
+                                    autoFocus
+                                    placeholder="ENTER ACCESS KEY"
+                                    className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-xl font-mono text-base text-slate-900 outline-none focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-300 uppercase tracking-widest"
+                                    value={lockPassword}
+                                    onChange={e => setLockPassword(e.target.value)}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => { setIsLocked(false); setLockPassword(''); setLockError(''); }}
+                                  className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs uppercase tracking-widest transition-all active:scale-95"
+                                >
+                                  Abort
+                                </button>
+                                <button
+                                  type="submit"
+                                  className="flex-[2] py-4 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-slate-900/10 active:scale-95 flex items-center justify-center gap-2"
+                                >
+                                  Authorize
+                                </button>
+                              </div>
+                            </form>
+                          </div>
+
+                          {/* Footer Status */}
+                          <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center text-[9px] font-mono text-slate-400">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck size={10} className="text-emerald-500" />
+                              <span>SECURE ENDPOINT</span>
+                            </div>
+                            <div>REF: {activeAsset.battery.id}</div>
+                          </div>
+                        </div>
+                      )}
+
+                      {isReplacing && !isConfirmingReplacement && (
+                        <div className="bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-2xl shadow-slate-200/50 animate-in slide-in-from-bottom-6 space-y-8 relative overflow-hidden">
+                          <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-600"></div>
+                          <div className="flex justify-between items-center pb-6 border-b border-slate-100">
+                            <div>
+                              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Exchange Protocol</h3>
+                              <p className="text-xs font-bold text-amber-600 uppercase mt-1 tracking-widest bg-amber-50 px-2 py-1 rounded-md inline-block border border-amber-100">Swapping Model: {activeAsset.battery.model}</p>
+                            </div>
+                            <button onClick={() => { setIsReplacing(false); setReplacementStep(1); }} className="p-3 bg-slate-100 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-2xl transition-all"><X size={24} /></button>
+                          </div>
+
+                          {replacementStep === 1 ? (
+                            <form onSubmit={handleReplacementRequest} className="space-y-8 py-4">
+                              <div className="space-y-4">
+                                <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Step 1: Scan Replacement Unit</label>
+                                <div className="relative group">
+                                  <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors">
+                                    <Barcode size={32} />
+                                  </div>
+                                  <input
+                                    ref={replacementInputRef}
+                                    required
+                                    autoFocus
+                                    placeholder="SCAN NEW SERIAL..."
+                                    className="w-full pl-20 pr-6 py-8 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-3xl outline-none focus:border-blue-500 focus:bg-white focus:shadow-xl focus:shadow-blue-500/10 uppercase transition-all mono placeholder:text-slate-300"
+                                    value={replacementData.newBatteryId}
+                                    onChange={e => setReplacementData({ ...replacementData, newBatteryId: e.target.value.toUpperCase() })}
+                                  />
+                                </div>
+                              </div>
+                              <button type="submit" className="w-full bg-blue-600 text-white font-black py-6 rounded-2xl hover:bg-blue-700 transition-all uppercase text-lg tracking-[0.2em] flex items-center justify-center gap-4 shadow-xl shadow-blue-500/20 group">
+                                Validate Unit <ArrowRight size={24} className="group-hover:translate-x-1 transition-transform" />
+                              </button>
+                            </form>
+                          ) : (
+                            <div className="space-y-8">
+                              {/* Battery Comparison */}
+                              <div className="grid grid-cols-2 gap-0 border-2 border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                                <div className="bg-slate-50 p-6 flex flex-col justify-center border-r border-slate-200">
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2"> Old Battery</p>
+                                  <p className="text-2xl font-black mono text-rose-600 break-all">{activeAsset.battery.id}</p>
+                                </div>
+                                <div className="bg-emerald-50/50 p-6 flex flex-col justify-center items-end text-right">
+                                  <p className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest mb-2">New Battery</p>
+                                  <p className="text-2xl font-black mono text-emerald-600 break-all">{replacementData.newBatteryId}</p>
+                                </div>
+                              </div>
+
+                              {/* Details Form */}
+                              <form onSubmit={handleReplacementRequest} className="space-y-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                  <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Failure Reason</label>
+                                    <div className="relative">
+                                      <select required className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-lg uppercase outline-none focus:border-amber-500 transition-all cursor-pointer appearance-none text-slate-700" value={replacementData.reason} onChange={e => setReplacementData({ ...replacementData, reason: e.target.value })}>
+                                        <option value="DEAD CELL">Dead Cell</option>
+                                        <option value="INTERNAL SHORT">Internal Short</option>
+                                        <option value="BULGE">Casing Bulge</option>
+                                        <option value="LOW GRAVITY">Low Gravity</option>
+                                        <option value="LEAKAGE">Leakage</option>
+                                      </select>
+                                      <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Card Status</label>
+                                    <div className="relative">
+                                      <select required className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-lg uppercase outline-none focus:border-amber-500 transition-all cursor-pointer appearance-none text-slate-700" value={replacementData.warrantyCardStatus} onChange={e => setReplacementData({ ...replacementData, warrantyCardStatus: e.target.value as WarrantyCardStatus })}>
+                                        <option value="RECEIVED">Original Card Collected</option>
+                                        <option value="XEROX">Xerox Only</option>
+                                        <option value="WHATSAPP">Digital / WhatsApp</option>
+                                      </select>
+                                      <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="p-6 bg-amber-50 rounded-2xl border-2 border-amber-100 space-y-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-amber-100 rounded-lg text-amber-600"><Calendar size={20} /></div>
+                                    <h4 className="text-sm font-black text-amber-900 uppercase tracking-wide">Original Sale Date Validation</h4>
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                      <label className="text-[10px] font-bold text-amber-700  ml-1">Battery Selling Date By Dealer</label>
+                                      <input
+                                        required
+                                        type="date"
+                                        className="w-full px-6 py-4 bg-white border-2 border-amber-200 rounded-xl outline-none font-black text-xl text-slate-900 focus:border-amber-500 focus:shadow-lg focus:shadow-amber-500/10 transition-all"
+                                        value={replacementData.soldDate}
+                                        onChange={(e) => setReplacementData({ ...replacementData, soldDate: e.target.value })}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <label className="text-[10px] font-bold text-amber-700 uppercase ml-1">Exchange Date</label>
+                                      <input
+                                        required
+                                        type="date"
+                                        className="w-full px-6 py-4 bg-white/50 border-2 border-amber-200/50 rounded-xl outline-none font-bold text-lg text-slate-500 focus:border-amber-500 transition-all"
+                                        value={replacementData.replacementDate}
+                                        onChange={e => setReplacementData({ ...replacementData, replacementDate: e.target.value })}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="p-6 bg-slate-50 border-2 border-slate-200 rounded-2xl space-y-4">
+                                  <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                                    <Store size={18} className="text-blue-600" /> Dealer Settlement Method
+                                  </h4>
+
+                                  <div className="grid grid-cols-3 gap-4">
+                                    <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col gap-2 ${replacementData.settlementMethod === 'CREDIT' ? 'bg-blue-50 border-blue-500 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                      <input
+                                        type="radio"
+                                        name="settlementMethod"
+                                        value="CREDIT"
+                                        className="hidden"
+                                        checked={replacementData.settlementMethod === 'CREDIT'}
+                                        onChange={() => setReplacementData(prev => ({ ...prev, settlementMethod: 'CREDIT' }))}
+                                      />
+                                      <div className="flex items-center gap-2">
+                                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${replacementData.settlementMethod === 'CREDIT' ? 'border-blue-600' : 'border-slate-300'}`}>
+                                          {replacementData.settlementMethod === 'CREDIT' && <div className="w-2 h-2 rounded-full bg-blue-600" />}
+                                        </div>
+                                        <span className={`font-bold uppercase text-xs ${replacementData.settlementMethod === 'CREDIT' ? 'text-blue-700' : 'text-slate-500'}`}>Account Credit</span>
+                                      </div>
+                                      <p className="text-[10px] text-slate-400 font-medium pl-6">Value credited. Pending/Paid status.</p>
+                                    </label>
+
+                                    <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col gap-2 ${replacementData.settlementMethod === 'STOCK' ? 'bg-indigo-50 border-indigo-500 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                      <input
+                                        type="radio"
+                                        name="settlementMethod"
+                                        value="STOCK"
+                                        className="hidden"
+                                        checked={replacementData.settlementMethod === 'STOCK'}
+                                        onChange={() => setReplacementData(prev => ({ ...prev, settlementMethod: 'STOCK' }))}
+                                      />
+                                      <div className="flex items-center gap-2">
+                                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${replacementData.settlementMethod === 'STOCK' ? 'border-indigo-600' : 'border-slate-300'}`}>
+                                          {replacementData.settlementMethod === 'STOCK' && <div className="w-2 h-2 rounded-full bg-indigo-600" />}
+                                        </div>
+                                        <span className={`font-bold uppercase text-xs ${replacementData.settlementMethod === 'STOCK' ? 'text-indigo-700' : 'text-slate-500'}`}>Stock Replacement</span>
+                                      </div>
+                                      <p className="text-[10px] text-slate-400 font-medium pl-6">Physical battery given to dealer now.</p>
+                                    </label>
+
+                                    <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col gap-2 ${replacementData.settlementMethod === 'DIRECT' ? 'bg-emerald-50 border-emerald-500 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                      <input
+                                        type="radio"
+                                        name="settlementMethod"
+                                        value="DIRECT"
+                                        className="hidden"
+                                        checked={replacementData.settlementMethod === 'DIRECT'}
+                                        onChange={() => setReplacementData(prev => ({ ...prev, settlementMethod: 'DIRECT' }))}
+                                      />
+                                      <div className="flex items-center gap-2">
+                                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${replacementData.settlementMethod === 'DIRECT' ? 'border-emerald-600' : 'border-slate-300'}`}>
+                                          {replacementData.settlementMethod === 'DIRECT' && <div className="w-2 h-2 rounded-full bg-emerald-600" />}
+                                        </div>
+                                        <span className={`font-bold uppercase text-xs ${replacementData.settlementMethod === 'DIRECT' ? 'text-emerald-700' : 'text-slate-500'}`}>Direct Settlement</span>
+                                      </div>
+                                      <p className="text-[10px] text-slate-400 font-medium pl-6">Immediate handover of {replacementData.newBatteryId}. No tracking.</p>
+                                    </label>
+                                  </div>
+
+                                  {replacementData.settlementMethod === 'CREDIT' && (
+                                    <div className="p-4 bg-blue-100/50 rounded-xl border border-blue-200 transition-all animate-in fade-in slide-in-from-top-1 cursor-pointer" onClick={() => setReplacementData(prev => ({ ...prev, paidInAccount: !prev.paidInAccount }))}>
+                                      <label className="flex items-center gap-4 cursor-pointer select-none">
+                                        <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${replacementData.paidInAccount ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-300'}`}>
+                                          {replacementData.paidInAccount && <CheckCircle2 size={16} />}
+                                        </div>
+                                        <div>
+                                          <span className="text-xs font-black text-blue-900 uppercase block">Mark as Paid?</span>
+                                          <span className="text-xs font-bold text-blue-500 uppercase tracking-wide">Tick to confirm payment settled</span>
+                                        </div>
+                                      </label>
+                                    </div>
+                                  )}
+
+                                  {replacementData.settlementMethod === 'STOCK' && (
+                                    <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
+                                      <label className="text-xs font-bold text-indigo-900 uppercase tracking-wider ml-1 flex items-center gap-2">
+                                        <Barcode size={14} /> Scan Replenishment Unit (For Dealer)
+                                      </label>
+                                      <input
+                                        required
+                                        placeholder="SCAN DEALER UNIT..."
+                                        className="w-full px-6 py-4 bg-indigo-50 border-2 border-indigo-200 rounded-xl font-bold text-xl outline-none focus:border-indigo-500 focus:shadow-lg focus:shadow-indigo-500/10 uppercase transition-all mono placeholder:text-indigo-300 text-indigo-900"
+                                        value={replacementData.replenishmentBatteryId}
+                                        onChange={e => setReplacementData({ ...replacementData, replenishmentBatteryId: e.target.value.toUpperCase() })}
+                                      />
+                                    </div>
+                                  )}
+
+                                  {replacementData.settlementMethod === 'DIRECT' && (
+                                    <div className="p-4 bg-emerald-100/50 rounded-xl border border-emerald-200 transition-all animate-in fade-in slide-in-from-top-1">
+                                      <div className="flex items-center gap-3 text-emerald-800">
+                                        <CheckCircle2 size={20} />
+                                        <div>
+                                          <span className="text-xs font-black uppercase block">Settled Directly</span>
+                                          <span className="text-[10px] font-bold uppercase tracking-wide opacity-80">Transaction will be marked as fully settled.</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="flex gap-4 pt-4">
+                                  <button type="button" onClick={() => setReplacementStep(1)} className="px-8 py-5 text-slate-400 font-bold uppercase tracking-widest text-xs hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">Back</button>
+                                  <button type="submit" className="flex-1 bg-gradient-to-r from-slate-900 to-slate-800 text-white font-black py-5 rounded-xl hover:from-black hover:to-slate-900 transition-all uppercase text-sm tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl transform active:scale-[0.99]">
+                                    Review & Authorize Swap <ArrowRight size={20} />
+                                  </button>
+                                </div>
+                              </form>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {isConfirmingReplacement && (
+                        <div className="bg-slate-900 text-white rounded-[2rem] p-12 border-4 border-amber-500 shadow-2xl animate-in zoom-in-95 duration-300 space-y-12 max-w-4xl mx-auto">
+                          <div className="flex flex-col items-center text-center space-y-4 border-b border-white/10 pb-8">
+                            <div className="p-5 bg-amber-500 text-slate-900 rounded-3xl shadow-lg shadow-amber-500/20 mb-2">
+                              <ShieldCheck size={48} />
+                            </div>
+                            <div>
+                              <h3 className="text-4xl font-black tracking-tighter uppercase leading-none mb-2">Final Authorization</h3>
+                              <p className="text-amber-500 text-xs font-black uppercase tracking-[0.4em]">Please confirm exchange details</p>
                             </div>
                           </div>
 
-                          {/* Details Form */}
-                          <form onSubmit={handleReplacementRequest} className="space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                              <div className="space-y-2">
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Failure Reason</label>
-                                <div className="relative">
-                                  <select required className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-lg uppercase outline-none focus:border-amber-500 transition-all cursor-pointer appearance-none text-slate-700" value={replacementData.reason} onChange={e => setReplacementData({ ...replacementData, reason: e.target.value })}>
-                                    <option value="DEAD CELL">Dead Cell</option>
-                                    <option value="INTERNAL SHORT">Internal Short</option>
-                                    <option value="BULGE">Casing Bulge</option>
-                                    <option value="LOW GRAVITY">Low Gravity</option>
-                                    <option value="LEAKAGE">Leakage</option>
-                                  </select>
-                                  <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
+                          <div className="space-y-8">
+                            {/* Visual Comparison Block */}
+                            <div className="bg-white/5 rounded-3xl p-2 border border-white/10">
+                              <div className="grid grid-cols-2 divide-x divide-white/5">
+                                <div className="p-8 text-center bg-rose-500/10 rounded-l-2xl">
+                                  <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest mb-2">Old battery number</p>
+                                  <p className="text-3xl font-black mono text-white">{activeAsset.battery.id}</p>
                                 </div>
-                              </div>
-                              <div className="space-y-2">
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Card Status</label>
-                                <div className="relative">
-                                  <select required className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-lg uppercase outline-none focus:border-amber-500 transition-all cursor-pointer appearance-none text-slate-700" value={replacementData.warrantyCardStatus} onChange={e => setReplacementData({ ...replacementData, warrantyCardStatus: e.target.value as WarrantyCardStatus })}>
-                                    <option value="RECEIVED">Original Card Collected</option>
-                                    <option value="XEROX">Xerox Only</option>
-                                    <option value="WHATSAPP">Digital / WhatsApp</option>
-                                  </select>
-                                  <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
+                                <div className="p-8 text-center bg-emerald-500/10 rounded-r-2xl">
+                                  <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest mb-2">new battery number</p>
+                                  <p className="text-3xl font-black mono text-white">{replacementData.newBatteryId}</p>
                                 </div>
                               </div>
                             </div>
 
-                            <div className="p-6 bg-amber-50 rounded-2xl border-2 border-amber-100 space-y-4">
-                              <div className="flex items-center gap-3">
-                                <div className="p-2 bg-amber-100 rounded-lg text-amber-600"><Calendar size={20} /></div>
-                                <h4 className="text-sm font-black text-amber-900 uppercase tracking-wide">Original Sale Date Validation</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              <div className="p-4 bg-white/5 border border-white/10 rounded-2xl text-center">
+                                <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Failure Reason</p>
+                                <p className="text-xs font-black text-amber-400 uppercase tracking-wide">{replacementData.reason}</p>
                               </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                  <label className="text-[10px] font-bold text-amber-700  ml-1">Battery Selling Date By Dealer</label>
-                                  <input
-                                    required
-                                    type="date"
-                                    className="w-full px-6 py-4 bg-white border-2 border-amber-200 rounded-xl outline-none font-black text-xl text-slate-900 focus:border-amber-500 focus:shadow-lg focus:shadow-amber-500/10 transition-all"
-                                    value={replacementData.soldDate}
-                                    onChange={(e) => setReplacementData({ ...replacementData, soldDate: e.target.value })}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <label className="text-[10px] font-bold text-amber-700 uppercase ml-1">Exchange Date</label>
-                                  <input
-                                    required
-                                    type="date"
-                                    className="w-full px-6 py-4 bg-white/50 border-2 border-amber-200/50 rounded-xl outline-none font-bold text-lg text-slate-500 focus:border-amber-500 transition-all"
-                                    value={replacementData.replacementDate}
-                                    onChange={e => setReplacementData({ ...replacementData, replacementDate: e.target.value })}
-                                  />
-                                </div>
+                              <div className="p-4 bg-white/5 border border-white/10 rounded-2xl text-center">
+                                <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Exchange Date</p>
+                                <p className="text-xs font-black text-white mono">{formatDate(replacementData.replacementDate)}</p>
+                              </div>
+                              <div className="p-4 bg-white/5 border border-white/10 rounded-2xl text-center">
+                                <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Evidence Status</p>
+                                <p className="text-xs font-black text-blue-400 uppercase tracking-wide">{replacementData.warrantyCardStatus.replace('_', ' ')}</p>
+                              </div>
+                              <div className="p-4 bg-white/5 border border-white/10 rounded-2xl text-center">
+                                <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Dealer Settlement</p>
+                                {replacementData.settlementMethod === 'STOCK' ? (
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] font-bold text-indigo-400 uppercase">Stock Replaced</span>
+                                    <span className="text-xs font-black text-white mono">{replacementData.replenishmentBatteryId}</span>
+                                  </div>
+                                ) : replacementData.settlementMethod === 'DIRECT' ? (
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] font-bold text-emerald-400 uppercase">Method</span>
+                                    <span className="text-xs font-black text-white uppercase tracking-wider">DIRECT SETTLEMENT</span>
+                                  </div>
+                                ) : (
+                                  <div className={`text-xs font-black uppercase tracking-wide justify-center flex items-center gap-2 ${replacementData.paidInAccount ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                    {replacementData.paidInAccount ? <><CheckCircle2 size={14} /> PAID</> : 'PENDING'}
+                                  </div>
+                                )}
                               </div>
                             </div>
 
-                            <div className="p-6 bg-slate-50 border-2 border-slate-200 rounded-2xl space-y-4">
-                              <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
-                                <Store size={18} className="text-blue-600" /> Dealer Settlement Method
-                              </h4>
-
-                              <div className="grid grid-cols-3 gap-4">
-                                <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col gap-2 ${replacementData.settlementMethod === 'CREDIT' ? 'bg-blue-50 border-blue-500 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
-                                  <input
-                                    type="radio"
-                                    name="settlementMethod"
-                                    value="CREDIT"
-                                    className="hidden"
-                                    checked={replacementData.settlementMethod === 'CREDIT'}
-                                    onChange={() => setReplacementData(prev => ({ ...prev, settlementMethod: 'CREDIT' }))}
-                                  />
-                                  <div className="flex items-center gap-2">
-                                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${replacementData.settlementMethod === 'CREDIT' ? 'border-blue-600' : 'border-slate-300'}`}>
-                                      {replacementData.settlementMethod === 'CREDIT' && <div className="w-2 h-2 rounded-full bg-blue-600" />}
-                                    </div>
-                                    <span className={`font-bold uppercase text-xs ${replacementData.settlementMethod === 'CREDIT' ? 'text-blue-700' : 'text-slate-500'}`}>Account Credit</span>
-                                  </div>
-                                  <p className="text-[10px] text-slate-400 font-medium pl-6">Value credited. Pending/Paid status.</p>
-                                </label>
-
-                                <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col gap-2 ${replacementData.settlementMethod === 'STOCK' ? 'bg-indigo-50 border-indigo-500 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
-                                  <input
-                                    type="radio"
-                                    name="settlementMethod"
-                                    value="STOCK"
-                                    className="hidden"
-                                    checked={replacementData.settlementMethod === 'STOCK'}
-                                    onChange={() => setReplacementData(prev => ({ ...prev, settlementMethod: 'STOCK' }))}
-                                  />
-                                  <div className="flex items-center gap-2">
-                                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${replacementData.settlementMethod === 'STOCK' ? 'border-indigo-600' : 'border-slate-300'}`}>
-                                      {replacementData.settlementMethod === 'STOCK' && <div className="w-2 h-2 rounded-full bg-indigo-600" />}
-                                    </div>
-                                    <span className={`font-bold uppercase text-xs ${replacementData.settlementMethod === 'STOCK' ? 'text-indigo-700' : 'text-slate-500'}`}>Stock Replacement</span>
-                                  </div>
-                                  <p className="text-[10px] text-slate-400 font-medium pl-6">Physical battery given to dealer now.</p>
-                                </label>
-
-                                <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col gap-2 ${replacementData.settlementMethod === 'DIRECT' ? 'bg-emerald-50 border-emerald-500 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
-                                  <input
-                                    type="radio"
-                                    name="settlementMethod"
-                                    value="DIRECT"
-                                    className="hidden"
-                                    checked={replacementData.settlementMethod === 'DIRECT'}
-                                    onChange={() => setReplacementData(prev => ({ ...prev, settlementMethod: 'DIRECT' }))}
-                                  />
-                                  <div className="flex items-center gap-2">
-                                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${replacementData.settlementMethod === 'DIRECT' ? 'border-emerald-600' : 'border-slate-300'}`}>
-                                      {replacementData.settlementMethod === 'DIRECT' && <div className="w-2 h-2 rounded-full bg-emerald-600" />}
-                                    </div>
-                                    <span className={`font-bold uppercase text-xs ${replacementData.settlementMethod === 'DIRECT' ? 'text-emerald-700' : 'text-slate-500'}`}>Direct Settlement</span>
-                                  </div>
-                                  <p className="text-[10px] text-slate-400 font-medium pl-6">Immediate handover of {replacementData.newBatteryId}. No tracking.</p>
-                                </label>
-                              </div>
-
-                              {replacementData.settlementMethod === 'CREDIT' && (
-                                <div className="p-4 bg-blue-100/50 rounded-xl border border-blue-200 transition-all animate-in fade-in slide-in-from-top-1 cursor-pointer" onClick={() => setReplacementData(prev => ({ ...prev, paidInAccount: !prev.paidInAccount }))}>
-                                  <label className="flex items-center gap-4 cursor-pointer select-none">
-                                    <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${replacementData.paidInAccount ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-300'}`}>
-                                      {replacementData.paidInAccount && <CheckCircle2 size={16} />}
-                                    </div>
-                                    <div>
-                                      <span className="text-xs font-black text-blue-900 uppercase block">Mark as Paid?</span>
-                                      <span className="text-xs font-bold text-blue-500 uppercase tracking-wide">Tick to confirm payment settled</span>
-                                    </div>
-                                  </label>
-                                </div>
-                              )}
-
-                              {replacementData.settlementMethod === 'STOCK' && (
-                                <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
-                                  <label className="text-xs font-bold text-indigo-900 uppercase tracking-wider ml-1 flex items-center gap-2">
-                                    <Barcode size={14} /> Scan Replenishment Unit (For Dealer)
-                                  </label>
-                                  <input
-                                    required
-                                    placeholder="SCAN DEALER UNIT..."
-                                    className="w-full px-6 py-4 bg-indigo-50 border-2 border-indigo-200 rounded-xl font-bold text-xl outline-none focus:border-indigo-500 focus:shadow-lg focus:shadow-indigo-500/10 uppercase transition-all mono placeholder:text-indigo-300 text-indigo-900"
-                                    value={replacementData.replenishmentBatteryId}
-                                    onChange={e => setReplacementData({ ...replacementData, replenishmentBatteryId: e.target.value.toUpperCase() })}
-                                  />
-                                </div>
-                              )}
-
-                              {replacementData.settlementMethod === 'DIRECT' && (
-                                <div className="p-4 bg-emerald-100/50 rounded-xl border border-emerald-200 transition-all animate-in fade-in slide-in-from-top-1">
-                                  <div className="flex items-center gap-3 text-emerald-800">
-                                    <CheckCircle2 size={20} />
-                                    <div>
-                                      <span className="text-xs font-black uppercase block">Settled Directly</span>
-                                      <span className="text-[10px] font-bold uppercase tracking-wide opacity-80">Transaction will be marked as fully settled.</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
+                            <div className="p-5 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-center">
+                              <p className="text-[10px] font-bold text-amber-500/60 uppercase mb-2">battery selling date by dealer </p>
+                              <p className="text-xl font-black text-amber-400 mono">{formatDate(replacementData.soldDate)}</p>
                             </div>
+                          </div>
 
-                            <div className="flex gap-4 pt-4">
-                              <button type="button" onClick={() => setReplacementStep(1)} className="px-8 py-5 text-slate-400 font-bold uppercase tracking-widest text-xs hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">Back</button>
-                              <button type="submit" className="flex-1 bg-gradient-to-r from-slate-900 to-slate-800 text-white font-black py-5 rounded-xl hover:from-black hover:to-slate-900 transition-all uppercase text-sm tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl transform active:scale-[0.99]">
-                                Review & Authorize Swap <ArrowRight size={20} />
-                              </button>
-                            </div>
-                          </form>
+                          <div className="flex flex-col gap-4 pt-4">
+                            <button onClick={executeReplacement} disabled={isActionLoading} className="w-full py-6 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-extrabold rounded-2xl transition-all shadow-xl shadow-emerald-500/20 uppercase tracking-[0.2em] text-lg flex items-center justify-center gap-4 transform active:scale-[0.98]">
+                              {isActionLoading ? <Loader2 className="animate-spin" size={24} /> : <CheckCircle2 size={24} />}
+                              Confirm & Finalize Swap
+                            </button>
+                            <button onClick={() => setIsConfirmingReplacement(false)} className="w-full py-4 bg-white/5 text-slate-400 font-bold rounded-2xl hover:bg-white/10 hover:text-white uppercase tracking-widest text-xs transition-all border border-white/5">
+                              Cancel & Back
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
-                  )}
-
-                  {isConfirmingReplacement && (
-                    <div className="bg-slate-900 text-white rounded-[2rem] p-12 border-4 border-amber-500 shadow-2xl animate-in zoom-in-95 duration-300 space-y-12 max-w-4xl mx-auto">
-                      <div className="flex flex-col items-center text-center space-y-4 border-b border-white/10 pb-8">
-                        <div className="p-5 bg-amber-500 text-slate-900 rounded-3xl shadow-lg shadow-amber-500/20 mb-2">
-                          <ShieldCheck size={48} />
-                        </div>
-                        <div>
-                          <h3 className="text-4xl font-black tracking-tighter uppercase leading-none mb-2">Final Authorization</h3>
-                          <p className="text-amber-500 text-xs font-black uppercase tracking-[0.4em]">Please confirm exchange details</p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-8">
-                        {/* Visual Comparison Block */}
-                        <div className="bg-white/5 rounded-3xl p-2 border border-white/10">
-                          <div className="grid grid-cols-2 divide-x divide-white/5">
-                            <div className="p-8 text-center bg-rose-500/10 rounded-l-2xl">
-                              <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest mb-2">Old battery number</p>
-                              <p className="text-3xl font-black mono text-white">{activeAsset.battery.id}</p>
-                            </div>
-                            <div className="p-8 text-center bg-emerald-500/10 rounded-r-2xl">
-                              <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest mb-2">new battery number</p>
-                              <p className="text-3xl font-black mono text-white">{replacementData.newBatteryId}</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div className="p-4 bg-white/5 border border-white/10 rounded-2xl text-center">
-                            <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Failure Reason</p>
-                            <p className="text-xs font-black text-amber-400 uppercase tracking-wide">{replacementData.reason}</p>
-                          </div>
-                          <div className="p-4 bg-white/5 border border-white/10 rounded-2xl text-center">
-                            <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Exchange Date</p>
-                            <p className="text-xs font-black text-white mono">{formatDate(replacementData.replacementDate)}</p>
-                          </div>
-                          <div className="p-4 bg-white/5 border border-white/10 rounded-2xl text-center">
-                            <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Evidence Status</p>
-                            <p className="text-xs font-black text-blue-400 uppercase tracking-wide">{replacementData.warrantyCardStatus.replace('_', ' ')}</p>
-                          </div>
-                          <div className="p-4 bg-white/5 border border-white/10 rounded-2xl text-center">
-                            <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Dealer Settlement</p>
-                            {replacementData.settlementMethod === 'STOCK' ? (
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-indigo-400 uppercase">Stock Replaced</span>
-                                <span className="text-xs font-black text-white mono">{replacementData.replenishmentBatteryId}</span>
-                              </div>
-                            ) : replacementData.settlementMethod === 'DIRECT' ? (
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-emerald-400 uppercase">Method</span>
-                                <span className="text-xs font-black text-white uppercase tracking-wider">DIRECT SETTLEMENT</span>
-                              </div>
-                            ) : (
-                              <div className={`text-xs font-black uppercase tracking-wide justify-center flex items-center gap-2 ${replacementData.paidInAccount ? 'text-emerald-400' : 'text-slate-500'}`}>
-                                {replacementData.paidInAccount ? <><CheckCircle2 size={14} /> PAID</> : 'PENDING'}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="p-5 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-center">
-                          <p className="text-[10px] font-bold text-amber-500/60 uppercase mb-2">battery selling date by dealer </p>
-                          <p className="text-xl font-black text-amber-400 mono">{formatDate(replacementData.soldDate)}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-4 pt-4">
-                        <button onClick={executeReplacement} disabled={isActionLoading} className="w-full py-6 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-extrabold rounded-2xl transition-all shadow-xl shadow-emerald-500/20 uppercase tracking-[0.2em] text-lg flex items-center justify-center gap-4 transform active:scale-[0.98]">
-                          {isActionLoading ? <Loader2 className="animate-spin" size={24} /> : <CheckCircle2 size={24} />}
-                          Confirm & Finalize Swap
-                        </button>
-                        <button onClick={() => setIsConfirmingReplacement(false)} className="w-full py-4 bg-white/5 text-slate-400 font-bold rounded-2xl hover:bg-white/10 hover:text-white uppercase tracking-widest text-xs transition-all border border-white/5">
-                          Cancel & Back
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
-              <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2 uppercase tracking-tight">
-                  <History size={18} className="text-slate-400" /> Asset Audit History
-                </h3>
-                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Protocol Segments: {activeAsset.lineage.length}</span>
-              </div>
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+                  <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2 uppercase tracking-tight">
+                      <History size={18} className="text-slate-400" /> Asset Audit History
+                    </h3>
+                    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Protocol Segments: {activeAsset.lineage.length}</span>
+                  </div>
 
-              <div className="overflow-x-auto w-full">
-                <table className="w-full text-left border-collapse min-w-[1400px]">
-                  <thead>
-                    <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-bold uppercase tracking-widest border-b border-slate-100">
-                      <th className="px-6 py-4 whitespace-nowrap">Battery ID</th>
-                      <th className="px-6 py-4 whitespace-nowrap">Replaced By</th>
-                      <th className="px-6 py-4 whitespace-nowrap">Dispatched to Dealer</th>
-                      <th className="px-6 py-4 whitespace-nowrap">Sold to Customer</th>
-                      <th className="px-6 py-4 whitespace-nowrap">Replaced On</th>
-                      <th className="px-6 py-4 whitespace-nowrap">Settlement</th>
-                      <th className="px-6 py-4 whitespace-nowrap">Status</th>
-                      <th className="px-6 py-4 whitespace-nowrap">Outcome / Evidence</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {activeAsset.lineage.map((item: any, index: number) => {
-                      const next = activeAsset.replacements.find((r: any) => r.oldBatteryId === item.id);
-                      const incoming = activeAsset.replacements.find((r: any) => r.newBatteryId === item.id);
-                      const sale = activeAsset.lineageSales?.find((s: any) => s.batteryId === item.id);
-                      const isCurrent = item.id === activeAsset.battery.id;
-                      const isFirst = index === 0;
-                      const isLast = index === activeAsset.lineage.length - 1;
+                  <div className="overflow-x-auto w-full">
+                    <table className="w-full text-left border-collapse min-w-[1400px]">
+                      <thead>
+                        <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-bold uppercase tracking-widest border-b border-slate-100">
+                          <th className="px-6 py-4 whitespace-nowrap">Battery ID</th>
+                          <th className="px-6 py-4 whitespace-nowrap">Replaced By</th>
+                          <th className="px-6 py-4 whitespace-nowrap">Dispatched to Dealer</th>
+                          <th className="px-6 py-4 whitespace-nowrap">Sold to Customer</th>
+                          <th className="px-6 py-4 whitespace-nowrap">Replaced On</th>
+                          <th className="px-6 py-4 whitespace-nowrap">Settlement</th>
+                          <th className="px-6 py-4 whitespace-nowrap">Status</th>
+                          <th className="px-6 py-4 whitespace-nowrap">Outcome / Evidence</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {activeAsset.lineage.map((item: any, index: number) => {
+                          const next = activeAsset.replacements.find((r: any) => r.oldBatteryId === item.id);
+                          const incoming = activeAsset.replacements.find((r: any) => r.newBatteryId === item.id);
+                          const sale = activeAsset.lineageSales?.find((s: any) => s.batteryId === item.id);
+                          const isCurrent = item.id === activeAsset.battery.id;
+                          const isFirst = index === 0;
+                          const isLast = index === activeAsset.lineage.length - 1;
 
-                      const itemExpired = item.warrantyExpiry ? new Date() > new Date(item.warrantyExpiry) : false;
+                          const itemExpired = item.warrantyExpiry ? new Date() > new Date(item.warrantyExpiry) : false;
 
-                      // Determine when customer received this battery
-                      let customerReceivedDate;
-                      if (incoming) {
-                        // This is a replacement - customer got it on replacement date
-                        customerReceivedDate = incoming.replacementDate;
-                      } else if (item.actualSaleDate) {
-                        // Corrected sale date
-                        customerReceivedDate = item.actualSaleDate;
-                      } else if (sale) {
-                        // Original sale
-                        customerReceivedDate = sale.saleDate;
-                      } else {
-                        // Fallback to activation
-                        customerReceivedDate = item.activationDate;
-                      }
+                          // Determine when customer received this battery
+                          let customerReceivedDate;
+                          if (incoming) {
+                            // This is a replacement - customer got it on replacement date
+                            customerReceivedDate = incoming.replacementDate;
+                          } else if (item.actualSaleDate) {
+                            // Corrected sale date
+                            customerReceivedDate = item.actualSaleDate;
+                          } else if (sale) {
+                            // Original sale
+                            customerReceivedDate = sale.saleDate;
+                          } else {
+                            // Fallback to activation
+                            customerReceivedDate = item.activationDate;
+                          }
 
-                      return (
-                        <tr key={item.id} className={`${isCurrent ? 'bg-blue-50/30' : 'hover:bg-slate-50/50'} transition-all text-xs`}>
-                          {/* Battery ID */}
-                          <td className="px-6 py-5 font-bold text-slate-900 mono text-sm flex items-center gap-3 whitespace-nowrap">
-                            {!isFirst && <span className="text-slate-300 mr-2">↳</span>}
-                            {item.id}
-                            {isCurrent && <span className="bg-blue-100 text-blue-700 text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider">Current</span>}
-                          </td>
+                          return (
+                            <tr key={item.id} className={`${isCurrent ? 'bg-blue-50/30' : 'hover:bg-slate-50/50'} transition-all text-xs`}>
+                              {/* Battery ID */}
+                              <td className="px-6 py-5 font-bold text-slate-900 mono text-sm flex items-center gap-3 whitespace-nowrap">
+                                {!isFirst && <span className="text-slate-300 mr-2">↳</span>}
+                                {item.id}
+                                {isCurrent && <span className="bg-blue-100 text-blue-700 text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider">Current</span>}
+                              </td>
 
-                          {/* Replaced By */}
-                          <td className="px-6 py-5 font-bold text-blue-600 mono text-sm whitespace-nowrap cursor-pointer hover:underline" onClick={(e) => {
-                            if (next) { e.stopPropagation(); handleSearch(next.newBatteryId); }
-                          }}>
-                            {next ? (
-                              <div className="flex items-center gap-2">
-                                {next.newBatteryId}
-                                <span className="text-slate-400">→</span>
-                              </div>
-                            ) : isLast ? (
-                              <span className="text-emerald-600 font-bold text-xs">CURRENT UNIT</span>
-                            ) : '-'}
-                          </td>
-
-                          {/* Dispatched to Dealer (when you scanned it) */}
-                          <td className="px-6 py-5 font-bold text-slate-500 text-xs mono whitespace-nowrap">
-                            {formatDate(item.manufactureDate)}
-                          </td>
-
-                          {/* Sold to Customer */}
-                          <td className="px-6 py-5 text-xs whitespace-nowrap">
-                            <div className="flex flex-col gap-1">
-                              {item.actualSaleDate && item.warrantyCalculationBase === 'ACTUAL_SALE' ? (
-                                <>
+                              {/* Replaced By */}
+                              <td className="px-6 py-5 font-bold text-blue-600 mono text-sm whitespace-nowrap cursor-pointer hover:underline" onClick={(e) => {
+                                if (next) { e.stopPropagation(); handleSearch(next.newBatteryId); }
+                              }}>
+                                {next ? (
                                   <div className="flex items-center gap-2">
-                                    <span className="font-bold text-emerald-600 mono">{formatDate(item.actualSaleDate)}</span>
-                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-black rounded uppercase border border-amber-200">
-                                      Corrected
-                                    </span>
+                                    {next.newBatteryId}
+                                    <span className="text-slate-400">→</span>
                                   </div>
-                                  <span className="text-slate-400 text-[10px] line-through">{formatDate(item.activationDate)}</span>
-                                </>
-                              ) : (
-                                <span className="font-bold text-slate-900 mono">{customerReceivedDate ? formatDate(customerReceivedDate) : '-'}</span>
-                              )}
-                            </div>
-                          </td>
+                                ) : isLast ? (
+                                  <span className="text-emerald-600 font-bold text-xs">CURRENT UNIT</span>
+                                ) : '-'}
+                              </td>
 
-                          {/* Replaced On */}
-                          <td className="px-6 py-5 font-bold text-slate-500 text-xs mono whitespace-nowrap">
-                            {next ? formatDate(next.replacementDate) : '-'}
-                          </td>
+                              {/* Dispatched to Dealer (when you scanned it) */}
+                              <td className="px-6 py-5 font-bold text-slate-500 text-xs mono whitespace-nowrap">
+                                {formatDate(item.manufactureDate)}
+                              </td>
 
-                          {/* Settlement */}
-                          <td className="px-6 py-5 whitespace-nowrap">
-                            <div className="flex flex-col gap-1">
-                              {next ? (
-                                <>
-                                  {next.settlementType === 'DIRECT' ? (
-                                    <div className="flex flex-col">
-                                      <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wide flex items-center gap-1">
-                                        <CheckCircle2 size={10} /> Direct Settlement
-                                      </span>
-                                      <span className="text-xs font-bold text-slate-700 mono">{next.newBatteryId}</span>
-                                    </div>
-                                  ) : next.replenishmentBatteryId ? (
-                                    <div className="flex flex-col">
-                                      <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wide">Stock Given</span>
-                                      <span className="text-xs font-bold text-slate-700 mono">{next.replenishmentBatteryId}</span>
-                                    </div>
+                              {/* Sold to Customer */}
+                              <td className="px-6 py-5 text-xs whitespace-nowrap">
+                                <div className="flex flex-col gap-1">
+                                  {item.actualSaleDate && item.warrantyCalculationBase === 'ACTUAL_SALE' ? (
+                                    <>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-bold text-emerald-600 mono">{formatDate(item.actualSaleDate)}</span>
+                                        <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-black rounded uppercase border border-amber-200">
+                                          Corrected
+                                        </span>
+                                      </div>
+                                      <span className="text-slate-400 text-[10px] line-through">{formatDate(item.activationDate)}</span>
+                                    </>
                                   ) : (
-                                    <span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide flex w-fit items-center gap-1 ${next.paidInAccount ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                                      {next.paidInAccount ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                                      {next.paidInAccount ? 'PAID' : 'PENDING'}
+                                    <span className="font-bold text-slate-900 mono">{customerReceivedDate ? formatDate(customerReceivedDate) : '-'}</span>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Replaced On */}
+                              <td className="px-6 py-5 font-bold text-slate-500 text-xs mono whitespace-nowrap">
+                                {next ? formatDate(next.replacementDate) : '-'}
+                              </td>
+
+                              {/* Settlement */}
+                              <td className="px-6 py-5 whitespace-nowrap">
+                                <div className="flex flex-col gap-1">
+                                  {next ? (
+                                    <>
+                                      {next.settlementType === 'DIRECT' ? (
+                                        <div className="flex flex-col">
+                                          <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wide flex items-center gap-1">
+                                            <CheckCircle2 size={10} /> Direct Settlement
+                                          </span>
+                                          <span className="text-xs font-bold text-slate-700 mono">{next.newBatteryId}</span>
+                                        </div>
+                                      ) : next.replenishmentBatteryId ? (
+                                        <div className="flex flex-col">
+                                          <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wide">Stock Given</span>
+                                          <span className="text-xs font-bold text-slate-700 mono">{next.replenishmentBatteryId}</span>
+                                        </div>
+                                      ) : (
+                                        <span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide flex w-fit items-center gap-1 ${next.paidInAccount ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                          {next.paidInAccount ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                                          {next.paidInAccount ? 'PAID' : 'PENDING'}
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : (sale && !incoming) ? (
+                                    <span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide flex w-fit items-center gap-1 ${sale.paidInAccount ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                      {sale.paidInAccount ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                                      {sale.paidInAccount ? 'PAID' : 'PENDING'}
+                                    </span>
+                                  ) : <span className="text-slate-300 font-bold text-xs">-</span>}
+
+                                  {/* Settlement Date Display */}
+                                  {next && (next.settlementDate || next.settlementType === 'DIRECT') && (
+                                    <span className="text-[9px] font-bold text-slate-400 mono pl-1">
+                                      {formatDate(next.settlementType === 'DIRECT' ? next.replacementDate : next.settlementDate)}
                                     </span>
                                   )}
-                                </>
-                              ) : (sale && !incoming) ? (
-                                <span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide flex w-fit items-center gap-1 ${sale.paidInAccount ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                                  {sale.paidInAccount ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                                  {sale.paidInAccount ? 'PAID' : 'PENDING'}
+                                </div>
+                              </td>
+
+                              {/* Status */}
+                              <td className="px-6 py-5 whitespace-nowrap">
+                                <span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide ${getStatusBadge(item.status, itemExpired)}`}>
+                                  {itemExpired ? 'EXPIRED' : item.status}
                                 </span>
-                              ) : <span className="text-slate-300 font-bold text-xs">-</span>}
+                              </td>
 
-                              {/* Settlement Date Display */}
-                              {next && (next.settlementDate || next.settlementType === 'DIRECT') && (
-                                <span className="text-[9px] font-bold text-slate-400 mono pl-1">
-                                  {formatDate(next.settlementType === 'DIRECT' ? next.replacementDate : next.settlementDate)}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* Status */}
-                          <td className="px-6 py-5 whitespace-nowrap">
-                            <span className={`px-2 py-1 text-[10px] font-bold border rounded-full uppercase tracking-wide ${getStatusBadge(item.status, itemExpired)}`}>
-                              {itemExpired ? 'EXPIRED' : item.status}
-                            </span>
-                          </td>
-
-                          {/* Outcome / Evidence */}
-                          <td className="px-6 py-5 whitespace-nowrap">
-                            {next ? (
-                              <div className="flex flex-col gap-1">
-                                <div className="text-xs font-bold text-amber-700 flex items-center gap-1 uppercase"><AlertCircle size={14} /> FAILED: {next.reason}</div>
-                                <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1 uppercase pl-5"><FileText size={10} /> Doc: {formatReference(next.warrantyCardStatus)}</div>
-                              </div>
-                            ) : item.status === BatteryStatus.ACTIVE ? (
-                              itemExpired ? (
-                                <div className="text-xs font-bold text-rose-600 flex items-center gap-1 uppercase"><X size={14} /> Warranty Expired</div>
-                              ) : (
-                                <div className="text-xs font-bold text-emerald-600 flex items-center gap-1 uppercase"><CheckCircle2 size={14} /> Healthy / Active</div>
-                              )
-                            ) : <span className="text-slate-300 font-bold text-xs">-</span>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+                              {/* Outcome / Evidence */}
+                              <td className="px-6 py-5 whitespace-nowrap">
+                                {next ? (
+                                  <div className="flex flex-col gap-1">
+                                    <div className="text-xs font-bold text-amber-700 flex items-center gap-1 uppercase"><AlertCircle size={14} /> FAILED: {next.reason}</div>
+                                    <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1 uppercase pl-5"><FileText size={10} /> Doc: {formatReference(next.warrantyCardStatus)}</div>
+                                  </div>
+                                ) : item.status === BatteryStatus.ACTIVE ? (
+                                  itemExpired ? (
+                                    <div className="text-xs font-bold text-rose-600 flex items-center gap-1 uppercase"><X size={14} /> Warranty Expired</div>
+                                  ) : (
+                                    <div className="text-xs font-bold text-emerald-600 flex items-center gap-1 uppercase"><CheckCircle2 size={14} /> Healthy / Active</div>
+                                  )
+                                ) : <span className="text-slate-300 font-bold text-xs">-</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )
+            }
+          </div >
         )
       })()}
-    </div>
+    </div >
   );
 };
 
