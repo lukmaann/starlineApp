@@ -33,13 +33,13 @@ interface DealersProps {
 const DealerPrintTemplate: React.FC<{
   dealer: Dealer;
   data: any[];
-  type: 'ACTIVE' | 'EXPIRED' | 'EXCHANGES';
+  type: 'ACTIVE' | 'EXPIRED' | 'EXCHANGES' | 'RETURNED';
   startDate?: string;
   endDate?: string;
   filterModel?: string;
 }> = ({ dealer, data, type, startDate, endDate, filterModel }) => {
 
-  const reportTitle = type === 'ACTIVE' ? 'Active Batteries' : type === 'EXPIRED' ? 'Expired Batteries' : 'Exchange History';
+  const reportTitle = type === 'ACTIVE' ? 'Active Batteries' : type === 'EXPIRED' ? 'Expired Batteries' : type === 'RETURNED' ? 'Returned Batteries (Pending)' : 'Exchange History';
   const modelText = filterModel ? `[Model: ${filterModel}]` : 'for all models';
   const dateRangeText = startDate && endDate
     ? `from ${formatDate(startDate)} to ${formatDate(endDate)}`
@@ -209,7 +209,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
   const [pendingDealer, setPendingDealer] = useState<Dealer | null>(null);
 
   // TABS
-  const [activeLogTab, setActiveLogTab] = useState<'ACTIVE' | 'EXPIRED' | 'EXCHANGES'>('ACTIVE');
+  const [activeLogTab, setActiveLogTab] = useState<'ACTIVE' | 'EXPIRED' | 'EXCHANGES' | 'RETURNED'>('ACTIVE');
   const [logSearchQuery, setLogSearchQuery] = useState('');
   const [filterDateStart, setFilterDateStart] = useState('');
   const [filterDateEnd, setFilterDateEnd] = useState('');
@@ -280,6 +280,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
         where += ` AND (status = 'ACTIVE' OR status = 'REPLACEMENT') AND datetime(warrantyExpiry) >= datetime('now')`;
       } else if (activeLogTab === 'EXPIRED') {
         where += ` AND (status = 'EXPIRED' OR datetime(warrantyExpiry) < datetime('now'))`;
+      } else if (activeLogTab === 'RETURNED') {
+        where += ` AND (status = 'RETURNED_PENDING' OR status = 'RETURNED')`;
       }
 
       if (logSearchQuery) {
@@ -303,7 +305,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
         params.push(filterModel);
       }
 
-      const result = await Database.getPaginated<any>('batteries', unitPage + 1, unitsLimit, where, params);
+      const orderBy = activeLogTab === 'RETURNED' ? 'activationDate DESC' : 'rowid DESC';
+      const result = await Database.getPaginated<any>('batteries', unitPage + 1, unitsLimit, where, params, orderBy);
       setPaginatedData(result.data);
       setTotalItems(result.total);
     }
@@ -740,6 +743,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                 {[
                   { id: 'ACTIVE', label: 'Active Warranty', icon: Box },
                   { id: 'EXCHANGES', label: 'Exchange Log', icon: RefreshCw },
+                  { id: 'RETURNED', label: 'Returned Units', icon: Landmark },
                   { id: 'EXPIRED', label: 'Expired Units', icon: Clock }
                 ].map((tab) => (
                   <button
@@ -840,12 +844,19 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                         <th className="px-6 py-4 whitespace-nowrap">Settlement</th>
                         <th className="px-6 py-4 whitespace-nowrap">Outcome / Evidence</th>
                       </>
+                    ) : activeLogTab === 'RETURNED' ? (
+                      <>
+                        <th className="px-8 py-5 pl-10 font-black uppercase tracking-widest text-left">Identifier</th>
+                        <th className="px-8 py-5 font-black uppercase tracking-widest text-left">Returning Date</th>
+                        <th className="px-8 py-5 font-black uppercase tracking-widest text-left">Status Info</th>
+                        <th className="px-8 py-5 font-black uppercase tracking-widest text-right pr-10">Action</th>
+                      </>
                     ) : (
                       <>
-                        <th className="px-8 py-5 pl-10">Identifier</th>
-                        <th className="px-8 py-5">Product Model</th>
-                        <th className="px-8 py-5">Status Info</th>
-                        <th className="px-8 py-5 text-right pr-10">Timeline</th>
+                        <th className="px-8 py-5 pl-10 font-black uppercase tracking-widest text-left">Units In Warranty</th>
+                        <th className="px-8 py-5 font-black uppercase tracking-widest text-left">Model Summary</th>
+                        <th className="px-8 py-5 font-black uppercase tracking-widest text-left">Status Badge</th>
+                        <th className="px-8 py-5 font-black uppercase tracking-widest text-right pr-10">Lifespan Timeline</th>
                       </>
                     )}
                   </tr>
@@ -853,7 +864,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                 <tbody className="divide-y divide-slate-50">
                   {paginatedData.map((item: any) => (
                     <tr
-                      key={item.id}
+                      key={item.id || item.rowid}
                       onClick={() => onNavigateToHub?.(activeLogTab === 'EXCHANGES' ? item.oldBatteryId : item.id)}
                       className="group/row hover:bg-slate-50/80 transition-all cursor-pointer"
                     >
@@ -894,10 +905,47 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                             </div>
                           </td>
                         </>
+                      ) : activeLogTab === 'RETURNED' ? (
+                        <>
+                          <td className="px-8 py-6 pl-10">
+                            <div className="flex flex-col">
+                              <span className="font-bold text-slate-900 mono text-xs">{item.id}</span>
+                              <span className="text-[10px] text-slate-400 font-bold uppercase">{item.model}</span>
+                            </div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-slate-900">{formatDate(item.activationDate)}</span>
+                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Returned Date</span>
+                            </div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <StatusDisplay
+                              status={item.status}
+                              isExpired={false}
+                              dealerId={item.dealerId}
+                              variant="badge"
+                            />
+                          </td>
+                          <td className="px-8 py-6 text-right pr-10">
+                            {item.status === BatteryStatus.RETURNED_PENDING ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onNavigateToHub && onNavigateToHub(item.id); }}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-md active:scale-95 flex items-center gap-2 justify-end ml-auto"
+                              >
+                                Complete Exchange <ArrowRight size={14} />
+                              </button>
+                            ) : (
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 text-slate-400 rounded-full border border-slate-100 text-[10px] font-black uppercase ml-auto">
+                                <CheckCircle2 size={12} /> Exchanged
+                              </div>
+                            )}
+                          </td>
+                        </>
                       ) : (
                         <>
                           <td className="px-8 py-5 pl-10 font-bold text-slate-900 mono text-xs flex items-center gap-3">
-                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 group-hover/row:scale-150 transition-transform"></div>
+                            <div className="w-1.5 h-1.5 rounded-full group-hover/row:scale-150 transition-transform bg-blue-500"></div>
                             {item.id}
                           </td>
                           <td className="px-8 py-5">
@@ -915,7 +963,15 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                             />
                           </td>
                           <td className="px-8 py-5 text-right pr-10 font-mono text-xs text-slate-500 font-bold">
-                            <div><span className="text-slate-900">{formatDate(item.activationDate)}</span><span className="text-slate-300 mx-2">→</span><span className="text-rose-600">{formatDate(item.warrantyExpiry)}</span></div>
+                            <div>
+                              <span className="text-slate-900">{formatDate(item.activationDate || item.manufactureDate)}</span>
+                              {item.warrantyExpiry && (
+                                <>
+                                  <span className="text-slate-300 mx-2">→</span>
+                                  <span className="text-rose-600">{formatDate(item.warrantyExpiry)}</span>
+                                </>
+                              )}
+                            </div>
                           </td>
                         </>
                       )}

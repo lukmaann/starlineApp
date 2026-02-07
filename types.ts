@@ -2,6 +2,7 @@ export enum BatteryStatus {
   MANUFACTURED = 'Manufactured', // Kept generic title case as per existing data
   ACTIVE = 'ACTIVE',
   RETURNED = 'RETURNED',
+  RETURNED_PENDING = 'RETURNED_PENDING',
   REPLACEMENT = 'REPLACEMENT',
   EXPIRED = 'EXPIRED'
 }

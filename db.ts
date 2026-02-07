@@ -54,12 +54,13 @@ export class Database {
     page: number = 1,
     limit: number = 50,
     where: string = '',
-    params: any[] = []
+    params: any[] = [],
+    orderBy: string = 'rowid DESC'
   ): Promise<{ data: T[], total: number }> {
     const offset = (page - 1) * limit;
     const whereClause = where ? `WHERE ${where}` : '';
 
-    const dataSql = `SELECT * FROM ${table} ${whereClause} ORDER BY rowid DESC LIMIT ? OFFSET ?`;
+    const dataSql = `SELECT * FROM ${table} ${whereClause} ORDER BY ${orderBy} LIMIT ? OFFSET ?`;
     const countSql = `SELECT COUNT(*) as count FROM ${table} ${whereClause}`;
 
     const [data, countResult] = await Promise.all([
@@ -411,6 +412,23 @@ export class Database {
     await this.run(
       `UPDATE batteries SET status = ?, dealerId = ? WHERE id = ?`,
       [status, dealerId, id]
+    );
+  }
+
+  static async markAsPendingExchange(id: string, dealerId: string, returnDate?: string): Promise<void> {
+    const battery = await this.getBattery(id);
+    if (!battery) throw new Error('Battery not found');
+
+    // Only allow marking as pending if it's currently ACTIVE or REPLACEMENT
+    if (battery.status !== BatteryStatus.ACTIVE && battery.status !== BatteryStatus.REPLACEMENT) {
+      throw new Error(`Cannot mark battery with status ${battery.status} as pending exchange`);
+    }
+
+    const finalReturnDate = returnDate || getLocalDate();
+
+    await this.run(
+      `UPDATE batteries SET status = ?, dealerId = ?, activationDate = ? WHERE id = ?`,
+      [BatteryStatus.RETURNED_PENDING, dealerId, finalReturnDate, id]
     );
   }
 

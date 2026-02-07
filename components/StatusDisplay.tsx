@@ -59,6 +59,14 @@ export const StatusDisplay: React.FC<StatusDisplayProps> = ({
                     text: isBanner ? 'text-white' : 'text-slate-600',
                     border: isBanner ? 'border-transparent' : 'border-slate-200'
                 };
+            case BatteryStatus.RETURNED_PENDING:
+                return {
+                    label: 'Exchange Pending',
+                    icon: Clock,
+                    bg: isBanner ? 'bg-orange-600' : 'bg-orange-50',
+                    text: isBanner ? 'text-white' : 'text-orange-600',
+                    border: isBanner ? 'border-transparent' : 'border-orange-100'
+                };
             case BatteryStatus.MANUFACTURED:
                 const isPartner = !!dealerId;
                 return {

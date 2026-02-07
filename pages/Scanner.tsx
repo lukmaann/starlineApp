@@ -5,7 +5,7 @@ import { WarrantyCalculator } from '../utils/warrantyCalculator';
 import {
   Barcode, Search, ShieldCheck, History,
   RefreshCw, Store, Phone, Calendar,
-  X, CheckCircle, ArrowRight, PackagePlus,
+  X, CheckCircle, Check, ArrowRight, PackagePlus,
   Loader2, Zap, LayoutGrid, Package, ArrowDown,
   AlertCircle, ShieldAlert, BadgeCheck, Clock, Lock, Fingerprint,
   User, ChevronRight, Layers, FileText, Smartphone, Copy,
@@ -75,6 +75,9 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
     replenishmentBatteryId: '',
     settlementMethod: 'CREDIT' as 'CREDIT' | 'STOCK' | 'DIRECT'
   });
+
+  const [pendingReturnDate, setPendingReturnDate] = useState(getLocalDate());
+  const [showReturnDatePicker, setShowReturnDatePicker] = useState(false);
 
   // Warranty Date Correction State
   const [showDateCorrection, setShowDateCorrection] = useState(false);
@@ -597,6 +600,29 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
     }
   };
 
+  const handleMarkPending = async () => {
+    if (!activeAsset) return;
+
+    if (!showReturnDatePicker) {
+      setShowReturnDatePicker(true);
+      return;
+    }
+
+    setIsActionLoading(true);
+    try {
+      await Database.markAsPendingExchange(activeAsset.battery.id, activeAsset.battery.dealerId || 'CENTRAL', pendingReturnDate);
+      notify(`${activeAsset.battery.id} marked as pending exchange`);
+      setActiveAsset(null);
+      setIsReplacing(false);
+      setReplacementStep(1);
+      setShowReturnDatePicker(false);
+    } catch (e: any) {
+      notify(e.message || 'Failed to mark as pending', 'error');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   const isExpired = activeAsset?.battery?.warrantyExpiry ? new Date() > new Date(activeAsset.battery.warrantyExpiry) : false;
 
   const getStatusBadge = (status: BatteryStatus, expired: boolean) => {
@@ -605,6 +631,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
       case BatteryStatus.ACTIVE: return "bg-emerald-50 text-emerald-700 border-emerald-200";
       case BatteryStatus.REPLACEMENT: return "bg-amber-50 text-amber-700 border-amber-200";
       case BatteryStatus.RETURNED: return "bg-slate-100 text-slate-700 border-slate-300";
+      case BatteryStatus.RETURNED_PENDING: return "bg-orange-50 text-orange-700 border-orange-200";
       default: return "bg-blue-50 text-blue-700 border-blue-200";
     }
   };
@@ -1021,15 +1048,41 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                     <div className="space-y-6">
 
                       {!isReplacing && !isConfirmingReplacement && !isLocked && (
-                        <button onClick={() => {
-                          if (AuthSession.isValid()) {
-                            setIsReplacing(true);
-                            setReplacementStep(1);
-                          } else {
-                            setPendingAction('EXCHANGE');
-                            setIsLocked(true);
-                          }
-                        }} className="w-full py-8 text-2xl bg-slate-900 text-white rounded-3xl font-black flex items-center justify-center space-x-4 hover:bg-black transition-all shadow-2xl active:scale-[0.98] uppercase tracking-[0.2em] animate-in fade-in slide-in-from-bottom-2 border-4 border-slate-900 hover:border-white/20"><RefreshCw size={28} /><span>Start Warranty Exchange</span></button>
+                        <div className="space-y-4">
+                          {activeAsset.battery.status === BatteryStatus.RETURNED_PENDING ? (
+                            <button
+                              onClick={() => {
+                                if (AuthSession.isValid()) {
+                                  setIsReplacing(true);
+                                  setReplacementStep(1);
+                                } else {
+                                  setPendingAction('EXCHANGE');
+                                  setIsLocked(true);
+                                }
+                              }}
+                              className="w-full py-8 text-2xl bg-orange-600 text-white rounded-3xl font-black flex items-center justify-center space-x-4 hover:bg-orange-700 transition-all shadow-2xl active:scale-[0.98] uppercase tracking-[0.2em] animate-pulse border-4 border-orange-600 hover:border-white/20"
+                            >
+                              <RefreshCw size={28} />
+                              <span>Resume Exchange</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                if (AuthSession.isValid()) {
+                                  setIsReplacing(true);
+                                  setReplacementStep(1);
+                                } else {
+                                  setPendingAction('EXCHANGE');
+                                  setIsLocked(true);
+                                }
+                              }}
+                              className="w-full py-8 text-2xl bg-slate-900 text-white rounded-3xl font-black flex items-center justify-center space-x-4 hover:bg-black transition-all shadow-2xl active:scale-[0.98] uppercase tracking-[0.2em] animate-in fade-in slide-in-from-bottom-2 border-4 border-slate-900 hover:border-white/20"
+                            >
+                              <RefreshCw size={28} />
+                              <span>Start Warranty Exchange</span>
+                            </button>
+                          )}
+                        </div>
                       )}
 
                       {/* SessionLock component now handles this overlay */}
@@ -1064,9 +1117,44 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                                   />
                                 </div>
                               </div>
-                              <button type="submit" className="w-full bg-blue-600 text-white font-black py-6 rounded-2xl hover:bg-blue-700 transition-all uppercase text-lg tracking-[0.2em] flex items-center justify-center gap-4 shadow-xl shadow-blue-500/20 group">
-                                Validate Unit <ArrowRight size={24} className="group-hover:translate-x-1 transition-transform" />
-                              </button>
+                              {showReturnDatePicker && (
+                                <div className="space-y-4 animate-in slide-in-from-top-2">
+                                  <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Confirm Returning Date</label>
+                                  <input
+                                    type="date"
+                                    className="w-full px-7 py-6 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-xl outline-none focus:border-blue-500 focus:bg-white focus:shadow-xl focus:shadow-blue-500/10 transition-all mono shadow-inner"
+                                    value={pendingReturnDate}
+                                    onChange={e => setPendingReturnDate(e.target.value)}
+                                  />
+                                </div>
+                              )}
+                              <div className="flex gap-4">
+                                <button
+                                  type="button"
+                                  onClick={handleMarkPending}
+                                  disabled={isActionLoading}
+                                  className={`px-8 py-6 font-bold rounded-2xl transition-all uppercase text-sm tracking-widest flex items-center justify-center gap-2 ${showReturnDatePicker ? 'bg-orange-600 text-white hover:bg-orange-700 shadow-lg shadow-orange-500/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                >
+                                  {showReturnDatePicker ? (
+                                    <>
+                                      <Check size={20} strokeWidth={3} />
+                                      Confirm & Mark Pending
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Clock size={20} />
+                                      Keep Pending
+                                    </>
+                                  )}
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={isActionLoading}
+                                  className="flex-1 bg-blue-600 text-white font-black py-6 rounded-2xl hover:bg-blue-700 transition-all uppercase text-lg tracking-[0.2em] flex items-center justify-center gap-4 shadow-xl shadow-blue-500/20 group"
+                                >
+                                  {isActionLoading ? <Loader2 className="animate-spin" size={24} /> : <>Validate Unit <ArrowRight size={24} className="group-hover:translate-x-1 transition-transform" /></>}
+                                </button>
+                              </div>
                             </form>
                           ) : (
                             <div className="space-y-8">
