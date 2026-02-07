@@ -938,8 +938,11 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                                 Complete Exchange <ArrowRight size={14} />
                               </button>
                             ) : (
-                              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 text-slate-400 rounded-full border border-slate-100 text-[10px] font-black uppercase ml-auto">
-                                <CheckCircle2 size={12} /> Exchanged
+                              <div className="flex flex-col items-end gap-1">
+                                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 text-slate-400 rounded-full border border-slate-100 text-[10px] font-black uppercase ml-auto">
+                                  <CheckCircle2 size={12} /> Exchanged
+                                </div>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mr-2">{formatDate(item.activationDate)}</span>
                               </div>
                             )}
                           </td>
