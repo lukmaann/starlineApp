@@ -87,9 +87,14 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteLoading, setDeleteLoading] = useState(false);
 
+    const [dealers, setDealers] = useState<any[]>([]);
+    const [originalDealerId, setOriginalDealerId] = useState('');
+
     const [formData, setFormData] = useState({
-        customerName: '',
-        customerPhone: '',
+        // customerName: '', // REPLACED BY DEALER SELECT
+        // customerPhone: '', // REMOVED
+        newBatteryId: '',
+        dealerId: '',
         soldDate: '',
         // Replacement specific fields
         settlementMethod: 'CREDIT' as 'CREDIT' | 'STOCK' | 'DIRECT',
@@ -104,7 +109,13 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         const loadData = async () => {
             setIsLoading(true);
             try {
-                const data = await Database.searchBattery(batteryId);
+                const [data, allDealers] = await Promise.all([
+                    Database.searchBattery(batteryId),
+                    Database.getAll<{ id: string, name: string, location: string }>('dealers')
+                ]);
+
+                setDealers(allDealers);
+
                 if (data && data.battery) {
                     const incomingReplacement = data.replacements.find(r => r.newBatteryId === batteryId);
                     const saleRecord = data.sale || data.originalSale;
@@ -116,9 +127,11 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                         replacement: incomingReplacement
                     });
 
+                    setOriginalDealerId(data.battery.dealerId || '');
+
                     setFormData({
-                        customerName: data.battery.customerName || saleRecord?.customerName || '',
-                        customerPhone: data.battery.customerPhone || saleRecord?.customerPhone || '',
+                        newBatteryId: data.battery.id,
+                        dealerId: data.battery.dealerId || saleRecord?.dealerId || (allDealers.length > 0 ? allDealers[0].id : ''),
                         soldDate: data.battery.actualSaleDate || saleRecord?.warrantyStartDate || data.battery.activationDate || '',
 
                         settlementMethod: (incomingReplacement?.settlementType as any) || 'CREDIT',
@@ -142,17 +155,11 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         setIsSaving(true);
         try {
             if (activeAsset?.battery) {
-                await Database.run(
-                    `UPDATE batteries SET customerName = ?, customerPhone = ? WHERE id = ?`,
-                    [formData.customerName, formData.customerPhone, batteryId]
+                await Database.updateBatteryDetails(
+                    batteryId,
+                    batteryId, // ID unchanged
+                    formData.dealerId
                 );
-
-                if (activeAsset.sale) {
-                    await Database.run(
-                        `UPDATE sales SET customerName = ?, customerPhone = ? WHERE id = ?`,
-                        [formData.customerName, formData.customerPhone, activeAsset.sale.id]
-                    );
-                }
             }
 
             if (formData.soldDate && activeAsset?.battery) {
@@ -233,7 +240,7 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                 <div>
                     <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Edit Registry Record</h3>
                     <p className="text-xs font-bold text-amber-600 uppercase mt-1 tracking-widest bg-amber-50 px-2 py-1 rounded-md inline-block border border-amber-100">
-                        Modifying: {activeAsset?.battery.id}
+                        Targeting: {batteryId}
                     </p>
                 </div>
                 <button onClick={onClose} className="p-3 bg-slate-100 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-2xl transition-all">
@@ -285,31 +292,30 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                 <div className="space-y-8">
 
                     {/* 1. Details Grid */}
+                    {/* 1. Details Grid - EDITED FOR DEALER/ID */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Customer Name</label>
+                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Assigned Dealer</label>
                             <div className="relative">
-                                <input
-                                    className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-lg uppercase outline-none focus:border-amber-500 transition-all text-slate-700 placeholder:text-slate-300"
-                                    value={formData.customerName}
-                                    onChange={e => setFormData({ ...formData, customerName: e.target.value.toUpperCase() })}
-                                    placeholder="WALK-IN CUSTOMER"
-                                />
-                                <User className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
+                                <select
+                                    className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-lg uppercase outline-none focus:border-amber-500 transition-all text-slate-700 appearance-none"
+                                    value={formData.dealerId}
+                                    onChange={e => setFormData({ ...formData, dealerId: e.target.value })}
+                                >
+                                    {dealers.map(d => (
+                                        <option key={d.id} value={d.id}>{d.name} ({d.location})</option>
+                                    ))}
+                                </select>
+                                <Store className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
                             </div>
+                            {formData.dealerId !== originalDealerId && (
+                                <p className="text-[10px] font-bold text-amber-600 px-2 animate-pulse">
+                                    <AlertTriangle size={10} className="inline mr-1" />
+                                    Changing dealer will update ownership for this unit and its history steps.
+                                </p>
+                            )}
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Phone Number</label>
-                            <div className="relative">
-                                <input
-                                    className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-lg uppercase outline-none focus:border-amber-500 transition-all text-slate-700 placeholder:text-slate-300 mono"
-                                    value={formData.customerPhone}
-                                    onChange={e => setFormData({ ...formData, customerPhone: e.target.value })}
-                                    placeholder="N/A"
-                                />
-                                <Phone className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
-                            </div>
-                        </div>
+
                     </div>
 
                     {/* 2. Sale Date / Warranty Start - CRITICAL */}

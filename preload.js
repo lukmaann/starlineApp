@@ -9,7 +9,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   db: {
     query: (sql, params) => ipcRenderer.invoke('db-query', sql, params),
     run: (sql, params) => ipcRenderer.invoke('db-run', sql, params),
-    exec: (sql) => ipcRenderer.invoke('db-exec', sql)
+    exec: (sql) => ipcRenderer.invoke('db-exec', sql),
+    updateBatteryDetails: (currentId, newId, dealerId) => ipcRenderer.invoke('db-update-battery-details', currentId, newId, dealerId)
   },
   backup: () => ipcRenderer.invoke('db-backup'),
   selectBackupFolder: () => ipcRenderer.invoke('select-backup-folder'),

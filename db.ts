@@ -10,6 +10,7 @@ declare global {
         query: (sql: string, params?: any[]) => Promise<any[]>;
         run: (sql: string, params?: any[]) => Promise<{ changes: number; lastInsertRowid: number }>;
         exec: (sql: string) => Promise<void>;
+        updateBatteryDetails: (currentId: string, newId: string, dealerId: string) => Promise<void>;
       };
       backup: () => Promise<{ success: boolean; path: string; error?: string }>;
       selectBackupFolder: () => Promise<string | null>;
@@ -411,6 +412,19 @@ export class Database {
       `UPDATE batteries SET status = ?, dealerId = ? WHERE id = ?`,
       [status, dealerId, id]
     );
+  }
+
+  static async updateBatteryDetails(
+    currentId: string,
+    newId: string,
+    dealerId: string
+  ): Promise<void> {
+    if (window.electronAPI?.db?.updateBatteryDetails) {
+      await window.electronAPI.db.updateBatteryDetails(currentId, newId, dealerId);
+    } else {
+      console.error('IPC Bridge updateBatteryDetails not available');
+      throw new Error('Database bridge update failed');
+    }
   }
 
   static async registerSale(id: string, date: string, customerName: string, customerPhone: string): Promise<void> {

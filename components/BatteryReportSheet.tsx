@@ -204,7 +204,7 @@ const BatteryReportTemplate: React.FC<{
                                             {rep.paidInAccount ? (
                                                 <div className="flex items-center gap-2 text-emerald-700">
                                                     <CreditCard size={12} />
-                                                    <span className="text-[10px] font-bold">Factory added credit to Shop's account on {formatDate(rep.settlementDate || rep.replacementDate)}</span>
+                                                    <span className="text-[10px] font-bold">Paid in account on {formatDate(rep.settlementDate || rep.replacementDate)}</span>
                                                 </div>
                                             ) : (
                                                 <div className="flex items-center gap-2 text-rose-600">

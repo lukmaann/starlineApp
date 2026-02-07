@@ -66,9 +66,10 @@ const DealerPrintTemplate: React.FC<{
           </div>
         </div>
 
-        <div className="mt-8">
-          <p className="text-base font-bold text-black leading-relaxed">
-            This is the <span className="uppercase">{reportTitle}</span> record {modelText} sold to dealer {dateRangeText}.
+        <div className="mt-8 border-l-4 border-black pl-4">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-widest mb-1">Report Description</p>
+          <p className="text-lg font-bold text-black leading-relaxed">
+            Inventory report for <span className="uppercase text-black">{reportTitle}</span> {modelText} • {dateRangeText || 'Lifetime Record'}
           </p>
         </div>
       </div>
@@ -89,8 +90,7 @@ const DealerPrintTemplate: React.FC<{
               <>
                 <th className="py-3 px-2 font-black uppercase tracking-wider">Serial No.</th>
                 <th className="py-3 px-2 font-black uppercase tracking-wider">Model</th>
-                <th className="py-3 px-2 font-black uppercase tracking-wider">Sold to Dealer</th>
-                <th className="py-3 px-2 font-black uppercase tracking-wider text-right">Warranty Period</th>
+                <th className="py-3 px-2 font-black uppercase tracking-wider text-right">Sold to Dealer</th>
               </>
             )}
           </tr>
@@ -126,13 +126,8 @@ const DealerPrintTemplate: React.FC<{
                 <>
                   <td className="py-4 px-2 align-top font-black text-black mono text-sm">{item.id}</td>
                   <td className="py-4 px-2 align-top font-bold text-gray-700 text-sm">{item.model}</td>
-                  <td className="py-4 px-2 align-top font-medium text-black">
+                  <td className="py-4 px-2 align-top font-medium text-black text-right">
                     {formatDate(item.manufactureDate)}
-                  </td>
-                  <td className="py-4 px-2 align-top text-right text-black font-bold">
-                    <span>{formatDate(item.activationDate)}</span>
-                    <span className="mx-2 text-gray-400">→</span>
-                    <span>{formatDate(item.warrantyExpiry)}</span>
                   </td>
                 </>
               )}
@@ -142,9 +137,15 @@ const DealerPrintTemplate: React.FC<{
       </table>
 
       {/* Footer */}
-      <div className="mt-8 pt-6 border-t border-black flex justify-between items-center text-[10px] font-black text-gray-500 uppercase tracking-widest">
-        <span>Starline Enterprise</span>
-        <span>Generated Report</span>
+      <div className="mt-auto pt-6 border-t border-black flex justify-between items-end">
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Batteries</span>
+          <span className="text-xl font-black text-black leading-none">{data.length}</span>
+        </div>
+        <div className="text-right">
+          <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">Starline Batteries</span>
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mt-0.5">Computer Generated Report</span>
+        </div>
       </div>
     </div>
   );

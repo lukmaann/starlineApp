@@ -251,6 +251,51 @@ ipcMain.handle('db-exec', (event, sql) => {
   }
 });
 
+// 4. COMPLEX UPDATE: Battery Details (Transaction)
+ipcMain.handle('db-update-battery-details', (event, currentId, newId, dealerId) => {
+  try {
+    if (!db) throw new Error('Database not initialized');
+
+    // Use synchronous transaction for atomicity
+    const updateTransaction = db.transaction(() => {
+      // 1. Check New ID
+      if (newId !== currentId) {
+        const check = db.prepare('SELECT id FROM batteries WHERE id = ?').get(newId);
+        if (check) throw new Error(`Battery ID ${newId} already exists.`);
+      }
+
+      // 2. Update Batteries Table
+      db.prepare(`UPDATE batteries SET id = ?, dealerId = ? WHERE id = ?`).run(newId, dealerId, currentId);
+
+      // 3. Cascade ID changes
+      if (newId !== currentId) {
+        // Sales
+        db.prepare(`UPDATE sales SET batteryId = ? WHERE batteryId = ?`).run(newId, currentId);
+        // Replacements
+        db.prepare(`UPDATE replacements SET oldBatteryId = ? WHERE oldBatteryId = ?`).run(newId, currentId);
+        db.prepare(`UPDATE replacements SET newBatteryId = ? WHERE newBatteryId = ?`).run(newId, currentId);
+        db.prepare(`UPDATE replacements SET replenishmentBatteryId = ? WHERE replenishmentBatteryId = ?`).run(newId, currentId);
+        // Linked Batteries
+        db.prepare(`UPDATE batteries SET originalBatteryId = ? WHERE originalBatteryId = ?`).run(newId, currentId);
+        db.prepare(`UPDATE batteries SET previousBatteryId = ? WHERE previousBatteryId = ?`).run(newId, currentId);
+        db.prepare(`UPDATE batteries SET nextBatteryId = ? WHERE nextBatteryId = ?`).run(newId, currentId);
+      }
+
+      // 4. Update Dealer in Chain
+      // Sales
+      db.prepare(`UPDATE sales SET dealerId = ? WHERE batteryId = ?`).run(dealerId, newId);
+      // Replacements associated with this battery
+      db.prepare(`UPDATE replacements SET dealerId = ? WHERE oldBatteryId = ? OR newBatteryId = ?`).run(dealerId, newId, newId);
+    });
+
+    updateTransaction();
+    return true;
+  } catch (err) {
+    console.error('db-update-battery-details error:', err);
+    throw err;
+  }
+});
+
 // 4. BACKUP (Hot Backup - Legacy & Custom)
 ipcMain.handle('db-backup', async () => {
   try {
