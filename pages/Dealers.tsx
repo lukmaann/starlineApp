@@ -61,15 +61,15 @@ const DealerPrintTemplate: React.FC<{
           </div>
           <div className="text-right">
             <div className="text-black text-xs font-black uppercase tracking-widest inline-block border-2 border-black px-3 py-1">
-              {formatDate(new Date())}
+              Date: {formatDate(new Date())}
             </div>
           </div>
         </div>
 
         <div className="mt-8 border-l-4 border-black pl-4">
-          <p className="text-sm font-medium text-gray-500 uppercase tracking-widest mb-1">Report Description</p>
-          <p className="text-lg font-bold text-black leading-relaxed">
-            Inventory report for <span className="uppercase text-black">{reportTitle}</span> {modelText} • {dateRangeText || 'Lifetime Record'}
+          <p className="text-sm font-medium text-gray-400 uppercase tracking-widest mb-1 font-mono">Section</p>
+          <p className="text-lg font-black text-black leading-relaxed uppercase tracking-tight">
+            Battery Details
           </p>
         </div>
       </div>
@@ -137,14 +137,22 @@ const DealerPrintTemplate: React.FC<{
       </table>
 
       {/* Footer */}
-      <div className="mt-auto pt-6 border-t border-black flex justify-between items-end">
-        <div className="flex flex-col">
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Batteries</span>
-          <span className="text-xl font-black text-black leading-none">{data.length}</span>
+      <div className="mt-auto pt-6 border-t border-black space-y-6">
+        <div className="flex justify-between items-end">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Batteries</span>
+            <span className="text-xl font-black text-black leading-none">{data.length}</span>
+          </div>
+          <div className="text-right">
+            {/* Footer text removed as per user request */}
+          </div>
         </div>
-        <div className="text-right">
-          <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">Starline Batteries</span>
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mt-0.5">Computer Generated Report</span>
+
+        <div className="bg-gray-50 p-6 rounded-2xl border-l-4 border-black">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Report Description</p>
+          <p className="text-base font-bold text-black leading-relaxed">
+            Inventory report for <span className="uppercase text-black">{reportTitle}</span> {modelText} • {dateRangeText || ' '}
+          </p>
         </div>
       </div>
     </div>
