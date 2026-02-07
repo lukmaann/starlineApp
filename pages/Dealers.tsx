@@ -900,8 +900,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                           </td>
                           <td className="px-6 py-5">
                             <div className="flex flex-col gap-1">
-                              <span className="text-[10px] font-black text-rose-600 uppercase">FAILED: {item.reason}</span>
-                              <span className="text-[9px] font-bold text-slate-400 uppercase">Evidence: {item.warrantyCardStatus}</span>
+                              <span className="text-[10px] font-black text-rose-600 uppercase">FAILED: {item.reason || 'N/A'}</span>
+                              <span className="text-[9px] font-bold text-slate-400 uppercase">Evidence: {item.warrantyCardStatus || 'N/A'}</span>
                             </div>
                           </td>
                         </>
@@ -916,7 +916,9 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
                           <td className="px-8 py-6">
                             <div className="flex flex-col">
                               <span className="text-xs font-bold text-slate-900">{formatDate(item.activationDate)}</span>
-                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Returned Date</span>
+                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                                {item.status === BatteryStatus.RETURNED_PENDING ? 'Returned Date' : 'Exchanged Date'}
+                              </span>
                             </div>
                           </td>
                           <td className="px-8 py-6">

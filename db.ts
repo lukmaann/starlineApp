@@ -588,8 +588,8 @@ export class Database {
         );
       } else {
         await this.run(
-          `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ? WHERE id = ?`,
-          [rep.newBatteryId, rep.oldBatteryId]
+          `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ?, activationDate = ? WHERE id = ?`,
+          [rep.newBatteryId, rep.replacementDate, rep.oldBatteryId]
         );
       }
 
