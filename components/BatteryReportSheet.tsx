@@ -129,12 +129,12 @@ const BatteryReportTemplate: React.FC<{
                                     <p className="text-[9px] font-bold text-blue-400 uppercase">Sale Date</p>
                                     <p className="font-bold text-slate-900 text-sm">{formatDate(effectiveSaleDate)}</p>
                                 </div>
-                                {battery.customerName && (
+                                {/* {battery.customerName && (
                                     <div>
                                         <p className="text-[9px] font-bold text-blue-400 uppercase">Customer Name</p>
                                         <p className="font-bold text-slate-700 uppercase text-xs truncate">{battery.customerName}</p>
                                     </div>
-                                )}
+                                )} */}
                             </div>
                             <div className="mt-3 pt-2 border-t border-blue-100 flex justify-between items-center text-red-600/70">
                                 <p className="text-[9px] font-bold uppercase">Expiry Date</p>

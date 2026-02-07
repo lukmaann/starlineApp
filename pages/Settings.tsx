@@ -37,10 +37,19 @@ const Settings: React.FC = () => {
   const [deletingModel, setDeletingModel] = useState<BatteryModel | null>(null);
   const [deletingDealer, setDeletingDealer] = useState<Dealer | null>(null); // Added for Dealer Deletion
   const [modelDeleteConfirmName, setModelDeleteConfirmName] = useState('');
+
+  // Backup State
+  const [hasBackedUp, setHasBackedUp] = useState(false);
+
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [modelForm, setModelForm] = useState({ name: '', capacity: '', warranty: 18 });
   // Search state for models
   const [modelSearch, setModelSearch] = useState('');
+
+  // --- Replacement Deletion State ---
+  const [replacementSearchId, setReplacementSearchId] = useState('');
+  const [foundReplacement, setFoundReplacement] = useState<any>(null);
+  const [isSearchingReplacement, setIsSearchingReplacement] = useState(false);
 
   // --- Model Management Logic ---
   const loadModelData = async () => {
@@ -668,6 +677,130 @@ const Settings: React.FC = () => {
                 </h4>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Delete Battery Record */}
+                  <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm col-span-1 lg:col-span-2">
+                    <div className="mb-4">
+                      <h5 className="font-bold text-slate-900 text-sm">Delete Battery Record</h5>
+                      <p className="text-xs text-slate-500 mt-1">Permanently remove a battery and all its history (Sales, Replacements) from the database.</p>
+                    </div>
+
+                    <div className="flex gap-3 mb-4">
+                      <input
+                        placeholder="Scan Battery Serial Number..."
+                        className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold uppercase outline-none focus:border-rose-500"
+                        value={replacementSearchId}
+                        onChange={e => setReplacementSearchId(e.target.value.toUpperCase())}
+                        onKeyDown={async e => {
+                          if (e.key === 'Enter' && replacementSearchId) {
+                            setIsSearchingReplacement(true);
+                            setFoundReplacement(null);
+                            // Search for battery full details
+                            const res = await Database.searchBattery(replacementSearchId);
+                            setFoundReplacement(res);
+                            if (!res) notify('No battery record found for this ID', 'error');
+                            setIsSearchingReplacement(false);
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={async () => {
+                          if (!replacementSearchId) return;
+                          setIsSearchingReplacement(true);
+                          setFoundReplacement(null);
+                          const res = await Database.searchBattery(replacementSearchId);
+                          setFoundReplacement(res);
+                          if (!res) notify('No battery record found for this ID', 'error');
+                          setIsSearchingReplacement(false);
+                        }}
+                        disabled={isSearchingReplacement}
+                        className="px-4 py-2 bg-slate-900 text-white font-bold rounded-lg text-xs hover:bg-black transition-all shadow-sm flex items-center gap-2"
+                      >
+                        {isSearchingReplacement ? <Loader2 size={14} className="animate-spin" /> : 'Find'}
+                      </button>
+                    </div>
+
+                    {foundReplacement && foundReplacement.battery && (
+                      <div className="bg-rose-50 border border-rose-100 rounded-lg p-4 mb-4">
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 text-xs mb-4">
+                          <div><p className="font-bold text-slate-400 uppercase">Battery ID</p><p className="font-mono font-bold text-slate-900">{foundReplacement.battery.id}</p></div>
+                          <div><p className="font-bold text-slate-400 uppercase">Model</p><p className="font-mono font-bold text-slate-900">{foundReplacement.battery.model}</p></div>
+                          <div>
+                            <p className="font-bold text-slate-400 uppercase">Status</p>
+                            <p className={`font-mono font-bold ${(foundReplacement.battery.warrantyExpiry && new Date() > new Date(foundReplacement.battery.warrantyExpiry))
+                              ? 'text-rose-600'
+                              : 'text-slate-900'
+                              }`}>
+                              {(foundReplacement.battery.warrantyExpiry && new Date() > new Date(foundReplacement.battery.warrantyExpiry))
+                                ? 'EXPIRED'
+                                : foundReplacement.battery.status}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="font-bold text-slate-400 uppercase">Assigned Dealer</p>
+                            <p className="font-bold text-slate-900">
+                              {dealers.find(d => d.id === foundReplacement.battery.dealerId)?.name || foundReplacement.battery.dealerId || 'N/A'}
+                            </p>
+                          </div>
+                          {/* <div>
+                            <p className="font-bold text-slate-400 uppercase">Manufacture Date</p>
+                            <p className="font-mono font-bold text-slate-900">{foundReplacement.battery.manufactureDate ? foundReplacement.battery.manufactureDate.split('-').reverse().join('/') : 'N/A'}</p>
+                          </div> */}
+                          <div>
+                            <p className="font-bold text-slate-400 uppercase">Sent to Dealer</p>
+                            <p className="font-mono font-bold text-slate-900">
+                              {/* Sent date is typically manufacture date or explicitly tracked if we had a dispatch log. Using manuf date as proxy or activation if available */}
+                              {foundReplacement.battery.manufactureDate ? foundReplacement.battery.manufactureDate.split('-').reverse().join('/') : 'N/A'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {foundReplacement.sale && (
+                          <div className="mb-4 p-3 bg-white/50 rounded-lg border border-rose-100">
+                            <p className="font-bold text-slate-400 uppercase text-[10px] mb-2">Sale Record Detected</p>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div><span className="text-slate-500">To:</span> <span className="font-bold">{foundReplacement.sale.customerName}</span></div>
+                              <div><span className="text-slate-500">Date:</span> <span className="font-bold font-mono">{foundReplacement.sale.saleDate ? foundReplacement.sale.saleDate.split('-').reverse().join('/') : 'N/A'}</span></div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Lineage Warning */}
+                        {foundReplacement.replacements && foundReplacement.replacements.some(r => r.oldBatteryId === foundReplacement.battery.id) && (
+                          <div className="mb-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                            <p className="font-bold text-amber-800 uppercase text-[10px] mb-2 flex items-center gap-1"><AlertTriangle size={12} /> Lineage Warning</p>
+                            <p className="text-xs text-amber-900">
+                              This battery was replaced by <span className="font-bold font-mono">{foundReplacement.replacements.find(r => r.oldBatteryId === foundReplacement.battery.id)?.newBatteryId}</span>.
+                              Deleting this record will break the link and reset the replacement unit to a standalone <b>ACTIVE</b> status.
+                            </p>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={async () => {
+                            if (window.confirm(`CRITICAL: Are you sure you want to PERMANENTLY DELETE battery ${foundReplacement.battery.id}?\n\nThis will remove:\n- The Battery Record\n- Associated Sales\n- Associated Replacements\n\nThis action cannot be undone.`)) {
+                              setIsActionLoading(true);
+                              try {
+                                await Database.deleteBatteryRecord(foundReplacement.battery.id);
+                                notify('Battery record permanently deleted', 'success');
+                                setFoundReplacement(null);
+                                setReplacementSearchId('');
+                              } catch (e: any) {
+                                notify(`Deletion Failed: ${e.message}`, 'error');
+                              } finally {
+                                setIsActionLoading(false);
+                              }
+                            }
+                          }}
+                          disabled={isActionLoading}
+                          className="w-full py-2 bg-rose-600 text-white font-bold rounded-lg text-xs hover:bg-rose-700 transition-all shadow-sm flex items-center justify-center gap-2"
+                        >
+                          {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                          Permanently Delete Battery
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Dealer Deletion */}
                   <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm">
                     <div className="mb-4">
@@ -715,8 +848,39 @@ const Settings: React.FC = () => {
                     <div className="mb-4">
                       <h5 className="font-bold text-slate-900 text-sm">Factory Reset</h5>
                       <p className="text-xs text-slate-500 mt-1">Wipe all data and restore system defaults.</p>
+
+                      {!hasBackedUp && (
+                        <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                          <p className="text-[10px] font-bold text-amber-800 uppercase mb-2 flex items-center gap-1">
+                            <AlertTriangle size={12} /> Backup Required
+                          </p>
+                          <button
+                            onClick={async () => {
+                              setIsActionLoading(true);
+                              try {
+                                const result = await window.electronAPI?.backup();
+                                if (result?.success) {
+                                  setHasBackedUp(true);
+                                  notify(`Backup saved to: ${result.path}`, 'success');
+                                } else {
+                                  throw new Error(result?.error || 'Backup failed');
+                                }
+                              } catch (e: any) {
+                                notify(`Backup Failed: ${e.message}`, 'error');
+                              } finally {
+                                setIsActionLoading(false);
+                              }
+                            }}
+                            className="w-full py-2 bg-amber-100 text-amber-800 font-bold rounded-md text-[10px] hover:bg-amber-200 transition-colors uppercase tracking-wide"
+                          >
+                            Save Database Backup
+                          </button>
+                        </div>
+                      )}
                     </div>
+
                     <button
+                      disabled={!hasBackedUp}
                       onClick={async () => {
                         if (window.confirm('CRITICAL WARNING: You are about to wipe ALL application data.\n\nAre you absolutely sure?')) {
                           if (window.confirm('Final Confirmation: This action is irreversible. All records will be lost.\n\nProceed with Factory Reset?')) {
@@ -726,7 +890,7 @@ const Settings: React.FC = () => {
                           }
                         }
                       }}
-                      className="w-full py-2 bg-rose-600 text-white font-bold rounded-lg text-xs hover:bg-rose-700 transition-all shadow-sm flex items-center justify-center gap-2"
+                      className="w-full py-2 bg-rose-600 text-white font-bold rounded-lg text-xs hover:bg-rose-700 transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Trash2 size={14} /> Reset Application
                     </button>

@@ -725,6 +725,68 @@ export class Database {
     }
   }
 
+  static async searchReplacementByBatteryId(batteryId: string): Promise<Replacement | null> {
+    const records = await this.query<Replacement>(
+      'SELECT * FROM replacements WHERE oldBatteryId = ? OR newBatteryId = ? ORDER BY rowid DESC LIMIT 1',
+      [batteryId, batteryId]
+    );
+    return records[0] || null;
+  }
+
+  static async deleteBatteryRecord(batteryId: string): Promise<void> {
+    try {
+      await this.run('BEGIN TRANSACTION');
+
+      // 1. Delete Sales Records
+      await this.run('DELETE FROM sales WHERE batteryId = ?', [batteryId]);
+
+      // 1.5. UNLINK & RESET NEW BATTERY (Successor)
+      // Check if this battery was an "oldBatteryId" in a replacement (meaning it was replaced by someone)
+      const replacementAsOld = await this.query<{ newBatteryId: string }>(
+        'SELECT newBatteryId FROM replacements WHERE oldBatteryId = ?',
+        [batteryId]
+      );
+
+      if (replacementAsOld.length > 0) {
+        const successorId = replacementAsOld[0].newBatteryId;
+        // Reset the successor battery to be a standalone unit
+        await this.run(
+          `UPDATE batteries SET 
+             originalBatteryId = id, 
+             previousBatteryId = NULL, 
+             replacementCount = 0,
+             status = 'ACTIVE' 
+           WHERE id = ?`,
+          [successorId]
+        );
+      }
+
+      // 2. Delete Replacement Records (where it is Old, New, or Replenishment)
+      // Note: We already handled the successor logic above before deleting the link
+      await this.run(
+        'DELETE FROM replacements WHERE oldBatteryId = ? OR newBatteryId = ? OR replenishmentBatteryId = ?',
+        [batteryId, batteryId, batteryId]
+      );
+
+      // 3. Clean up Lineage Links in OTHER batteries
+      // If this battery was a 'nextBatteryId' for someone, clear it
+      await this.run('UPDATE batteries SET nextBatteryId = NULL WHERE nextBatteryId = ?', [batteryId]);
+      // If this battery was a 'previousBatteryId' for someone, clear it
+      await this.run('UPDATE batteries SET previousBatteryId = NULL WHERE previousBatteryId = ?', [batteryId]);
+
+      // 4. Delete the Battery Record itself
+      await this.run('DELETE FROM batteries WHERE id = ?', [batteryId]);
+
+      await this.run('COMMIT');
+      window.dispatchEvent(new CustomEvent('db-synced'));
+    } catch (error) {
+      await this.run('ROLLBACK');
+      console.error('Delete Battery Record Failed:', error);
+      throw error;
+    }
+  }
+
+  // Keeping the old method for reference or future use if needed, but the UI will use the new one.
   static async deleteReplacement(replacementId: string): Promise<void> {
     const replacement = (await this.query<{
       id: string, oldBatteryId: string, newBatteryId: string,
@@ -1081,5 +1143,6 @@ export class Database {
       calculationBase: 'ACTIVATION'
     };
   }
-}
 
+  // End of Database class
+}
