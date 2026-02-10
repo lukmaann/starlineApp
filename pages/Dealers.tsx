@@ -28,6 +28,9 @@ import {
 
 interface DealersProps {
   onNavigateToHub?: (serial: string) => void;
+  initialState?: any;
+  onStateChange?: (state: any) => void;
+  active?: boolean;
 }
 
 const DealerPrintTemplate: React.FC<{
@@ -184,7 +187,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   }
 }
 
-const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
+const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState, onStateChange, active }) => {
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [totalDealers, setTotalDealers] = useState(0);
   const [page, setPage] = useState(1);
@@ -241,7 +244,44 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
     setAdminPassword(p || 'starline@2025');
   };
 
-  useEffect(() => { loadData(); }, []); // Reload when page changes
+  useEffect(() => {
+    loadData();
+
+    if (initialState) {
+      if (initialState.selectedDealer) setSelectedDealer(initialState.selectedDealer);
+      if (initialState.viewMode) setViewMode(initialState.viewMode);
+      if (initialState.searchTerm) setSearchTerm(initialState.searchTerm);
+      if (initialState.activeLogTab) setActiveLogTab(initialState.activeLogTab);
+      // Restore other relevant state if needed
+    }
+  }, []); // Reload when page changes
+
+  useEffect(() => {
+    if (active) {
+      loadData();
+    }
+  }, [active]);
+
+  // Listen for session changes
+  useEffect(() => {
+    const handleSessionChange = (e: any) => {
+      setIsLocked(!e.detail.isAuthenticated);
+    };
+    window.addEventListener('session-changed' as any, handleSessionChange);
+    return () => window.removeEventListener('session-changed' as any, handleSessionChange);
+  }, []);
+
+  // Save State
+  useEffect(() => {
+    if (onStateChange) {
+      onStateChange({
+        selectedDealer,
+        viewMode,
+        searchTerm,
+        activeLogTab
+      });
+    }
+  }, [selectedDealer, viewMode, searchTerm, activeLogTab]);
 
   // --- FILTER & CALCULATIONS ---
   const filteredDealers = useMemo(() => {
@@ -333,7 +373,21 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
       });
       setSelectedDealer(existing); // keep selected for update context if needed
     } else {
-      setGeneratedId(`DL-${Math.floor(100000 + Math.random() * 899999)}`);
+      // Robust Unique ID Generation
+      let newId = '';
+      let attempts = 0;
+      do {
+        newId = `DL-${Math.floor(100000 + Math.random() * 899999)}`;
+        attempts++;
+      } while (dealers.some(d => d.id === newId) && attempts < 100);
+
+      if (attempts >= 100) {
+        console.error('Failed to generate unique dealer ID after 100 attempts');
+        // Fallback to timestamp just in case
+        newId = `DL-${Date.now().toString().slice(-6)}`;
+      }
+
+      setGeneratedId(newId);
       setFormData({ name: '', owner: '', address: '', contact: '', city: '', state: '', pincode: '' });
       setSelectedDealer(null);
     }
@@ -345,8 +399,20 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
     setIsSubmitting(true);
     const locationString = `${formData.city}, ${formData.state} - ${formData.pincode}`.toUpperCase();
 
+    // Safety Check: Ensure ID exists
+    let finalId = generatedId;
+    if (!finalId && !selectedDealer) {
+      // Fallback unique check if generatedId was somehow lost
+      let newId = '';
+      do {
+        newId = `DL-${Math.floor(100000 + Math.random() * 899999)}`;
+      } while (dealers.some(d => d.id === newId));
+      finalId = newId;
+      console.warn('Generated ID was missing, created fallback:', finalId);
+    }
+
     const dealerData = {
-      id: generatedId,
+      id: finalId,
       name: formData.name.toUpperCase(),
       ownerName: formData.owner.toUpperCase(),
       address: formData.address.toUpperCase(),
@@ -356,8 +422,10 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
 
     if (selectedDealer) {
       await Database.updateDealer(dealerData);
+      await Database.logActivity('PARTNER_UPDATE', `Updated partner details for ${dealerData.name}`, { dealerId: dealerData.id, changes: dealerData });
     } else {
       await Database.addDealer(dealerData);
+      await Database.logActivity('PARTNER_ENROLL', `Enrolled new partner ${dealerData.name}`, { dealerId: dealerData.id, initialData: dealerData });
     }
 
     setIsSubmitting(false);
@@ -572,6 +640,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
     const handlePrint = () => {
       const originalTitle = document.title;
       document.title = `${selectedDealer.name}_${activeLogTab}_Report`;
+      document.title = `${selectedDealer.name}_${activeLogTab}_Report`;
+      Database.logActivity('PRINT_REPORT', `Printed dealer report for ${selectedDealer.name}`, { dealerId: selectedDealer.id, tab: activeLogTab });
       window.print();
       document.title = originalTitle;
     };
@@ -731,9 +801,9 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub }) => {
               <button onClick={() => handleStartWizard(selectedDealer)} className="p-4 bg-white border border-slate-200 rounded-2xl hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-all shadow-sm active:scale-95">
                 <Settings size={20} />
               </button>
-              <button onClick={() => handleDeleteDealer(selectedDealer.id)} className="p-4 bg-white border border-slate-200 rounded-2xl hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all shadow-sm active:scale-95">
+              {/* <button onClick={() => handleDeleteDealer(selectedDealer.id)} className="p-4 bg-white border border-slate-200 rounded-2xl hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all shadow-sm active:scale-95">
                 <Trash2 size={20} />
-              </button>
+              </button> */}
             </div>
           </div>
 

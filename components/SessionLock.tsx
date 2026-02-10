@@ -44,6 +44,7 @@ const SessionLock: React.FC<{
         if (!isLocked) {
             // If unlocked, lock it
             AuthSession.clearSession();
+            window.location.reload();
         } else {
             // If locked, open modal
             setShowModal(true);

@@ -50,7 +50,10 @@ const Reports: React.FC = () => {
             <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Cross-territory network intelligence</p>
           </div>
         </div>
-        <button onClick={() => window.electronAPI ? window.electronAPI.printOrPdf() : window.print()} className="flex items-center space-x-3 px-8 py-4 bg-blue-600 text-white rounded-none font-black hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20 no-print">
+        <button onClick={() => {
+          Database.logActivity('PRINT_REPORT', 'Printed Network Analysis Report');
+          window.electronAPI ? window.electronAPI.printOrPdf() : window.print();
+        }} className="flex items-center space-x-3 px-8 py-4 bg-blue-600 text-white rounded-none font-black hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20 no-print">
           <Download size={18} />
           <span>GENERATE NETWORK AUDIT</span>
         </button>

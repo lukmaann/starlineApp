@@ -25,9 +25,12 @@ import { AuthSession } from '../utils/AuthSession';
 interface ScannerProps {
   initialSearch?: string | null;
   onSearchHandled?: () => void;
+  initialState?: any;
+  onStateChange?: (state: any) => void;
+  active?: boolean;
 }
 
-const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) => {
+const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, initialState, onStateChange, active }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const replacementInputRef = useRef<HTMLInputElement>(null);
 
@@ -91,22 +94,68 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
   const [lockPassword, setLockPassword] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [lockError, setLockError] = useState('');
+  const [isSessionValid, setIsSessionValid] = useState(AuthSession.isValid());
 
+  const loadData = async () => {
+    const [d, m, p] = await Promise.all([
+      Database.getAll<Dealer>('dealers'),
+      Database.getAll<BatteryModel>('models'),
+      Database.getConfig('starline_admin_pass')
+    ]);
+    setDealers(d.sort((a, b) => a.name.localeCompare(b.name)));
+    setModels(m.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
+    setAdminPassword(p || 'starline@2025');
+  };
 
   useEffect(() => {
-    const init = async () => {
-      const [d, m, p] = await Promise.all([
-        Database.getAll<Dealer>('dealers'),
-        Database.getAll<BatteryModel>('models'),
-        Database.getConfig('starline_admin_pass')
-      ]);
-      setDealers(d.sort((a, b) => a.name.localeCompare(b.name)));
-      setModels(m.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
-      setAdminPassword(p || 'starline@2025');
-    };
-    init();
-    focusMainInput();
+    loadData();
+
+    // Restore State if available
+    if (initialState) {
+      if (initialState.scanBuffer) setScanBuffer(initialState.scanBuffer);
+      if (initialState.activeAsset) setActiveAsset(initialState.activeAsset);
+      if (initialState.batchMode) setBatchMode(initialState.batchMode);
+      if (initialState.stagedItems) setStagedItems(initialState.stagedItems);
+      if (initialState.batchConfig) setBatchConfig(initialState.batchConfig);
+      if (initialState.showAddStock) setShowAddStock(initialState.showAddStock);
+      if (initialState.missingSerial) setMissingSerial(initialState.missingSerial);
+    } else {
+      focusMainInput();
+    }
   }, []);
+
+  useEffect(() => {
+    if (active) {
+      loadData();
+      focusMainInput();
+    }
+  }, [active]);
+
+  // Listen for session changes
+  useEffect(() => {
+    const handleSessionChange = (e: any) => {
+      setIsSessionValid(e.detail.isAuthenticated);
+    };
+
+    window.addEventListener('session-changed' as any, handleSessionChange);
+    return () => window.removeEventListener('session-changed' as any, handleSessionChange);
+  }, []);
+
+  // Save State on Change
+  useEffect(() => {
+    if (onStateChange) {
+      const stateToSave = {
+        scanBuffer,
+        activeAsset,
+        batchMode,
+        stagedItems,
+        batchConfig,
+        showAddStock,
+        missingSerial
+      };
+      onStateChange(stateToSave);
+    }
+  }, [scanBuffer, activeAsset, batchMode, stagedItems, batchConfig, showAddStock, missingSerial]);
 
   useEffect(() => {
     if (initialSearch) {
@@ -265,7 +314,10 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
     }
   };
 
-  const handlePrintReport = () => window.print();
+  const handlePrintReport = () => {
+    Database.logActivity('PRINT_REPORT', 'Printed detailed battery report', { source: 'Scanner' });
+    window.print();
+  };
 
   // Warranty Date Correction Handlers
   const handleDateCorrectionChange = (date: string) => {
@@ -587,6 +639,14 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
         correctedOriginalSaleDate: replacementData.soldDate
       });
 
+      await Database.logActivity('EXCHANGE_COMPLETED', `Exchanged ${activeAsset.battery.id} with ${replacementData.newBatteryId}`, {
+        oldBatteryId: activeAsset.battery.id,
+        newBatteryId: replacementData.newBatteryId,
+        dealerId: replacementData.dealerId,
+        partnerName: dealers.find(d => d.id === replacementData.dealerId)?.name || 'N/A',
+        type: replacementData.settlementMethod
+      });
+
       notify('Exchange Sequence Complete. New Unit Active.', 'success');
       setReplacementData({
         newBatteryId: '',
@@ -608,6 +668,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
       handleSearch(activeAsset.battery.id);
     } catch (e) {
       console.error(e);
+      await Database.logActivity('EXCHANGE_FAILED', `Exchange failed for ${activeAsset.battery.id}`, { error: String(e) });
       notify('Exchange failed during write protocol', 'error');
     } finally {
       setIsActionLoading(false);
@@ -631,6 +692,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
         replacementData.warrantyCardStatus,
         replacementData.soldDate
       );
+      await Database.logActivity('RETURN_PENDING', `Marked ${activeAsset.battery.id} as Pending Exchange`, { dealerId: activeAsset.battery.dealerId });
       notify(`${activeAsset.battery.id} marked as pending exchange`);
       setActiveAsset(null);
       setIsReplacing(false);
@@ -764,6 +826,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                     onClick={async () => {
                       setIsActionLoading(true);
                       await Database.batchAssign(stagedItems, batchConfig.date);
+                      const dealerName = dealers.find(d => d.id === batchConfig.dealerId)?.name;
+                      await Database.logActivity('BATCH_ASSIGN', `Batch assigned ${stagedItems.length} items to ${dealerName}`, { count: stagedItems.length, dealerId: batchConfig.dealerId, partnerName: dealerName, batteryIds: stagedItems.map(i => i.id) });
                       notify(`Processed ${stagedItems.length} items`);
                       setStagedItems([]);
                       setIsActionLoading(false);
@@ -838,7 +902,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
             )}
 
             {/* Warranty Date Correction Section - Only if Unlocked */}
-            {isExp && !showDateCorrection && !isLocked && (
+            {isExp && !showDateCorrection && isSessionValid && (
               <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-6 animate-in slide-in-from-top-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -860,7 +924,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
               </div>
             )}
 
-            {isExp && showDateCorrection && !isLocked && (
+            {isExp && showDateCorrection && isSessionValid && (
               <div className="bg-white border-2 border-amber-300 rounded-2xl p-8 shadow-xl animate-in zoom-in-95">
                 <div className="flex items-center justify-between mb-6 pb-4 border-b border-amber-100">
                   <div className="flex items-center gap-3">

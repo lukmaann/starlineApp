@@ -2,6 +2,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { Battery, Replacement, Dealer, BatteryStatus } from '../types';
+import { Database } from '../db';
 import { formatDate } from '../utils';
 import { Printer, Calendar, ShieldCheck, History, Store, User, Zap, AlertTriangle, ArrowRightLeft, CheckCircle2, CreditCard } from 'lucide-react';
 import { Button } from './ui/button';
@@ -249,6 +250,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
     const handlePrint = () => {
         const originalTitle = document.title;
         document.title = `${battery.id}_report`;
+        Database.logActivity('PRINT_REPORT', `Printed battery report for ${battery.id}`, { batteryId: battery.id });
         window.print();
         document.title = originalTitle;
     };

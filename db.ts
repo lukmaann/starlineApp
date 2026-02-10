@@ -27,7 +27,20 @@ export class Database {
 
   static async init(): Promise<void> {
     console.log('Database Client Initialized [Mode: Enterprise IPC]');
-    // No-op for client init as Main process handles DB file
+    // Ensure Activity Log Table Exists (Client-side check/init as we can send SQL)
+    try {
+      await this.run(`
+        CREATE TABLE IF NOT EXISTS activity_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          type TEXT NOT NULL,
+          description TEXT NOT NULL,
+          metadata TEXT,
+          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    } catch (e) {
+      console.warn('Failed to ensure activity_logs table:', e);
+    }
   }
 
   // --- GENERIC HELPERS ---
@@ -406,6 +419,39 @@ export class Database {
   }
 
 
+
+  // --- ACTIVITY LOG ---
+
+  static async logActivity(type: string, description: string, metadata?: any): Promise<void> {
+    try {
+      await this.run(
+        'INSERT INTO activity_logs (type, description, metadata) VALUES (?, ?, ?)',
+        [type, description, metadata ? JSON.stringify(metadata) : null]
+      );
+    } catch (e) {
+      console.error('Failed to log activity:', e);
+    }
+  }
+
+  static async getActivityLogs(page: number = 1, limit: number = 50, typeFilter?: string): Promise<{ data: any[], total: number }> {
+    let where = '';
+    const params: any[] = [];
+
+    if (typeFilter) {
+      where = 'type = ?';
+      params.push(typeFilter);
+    }
+
+    return await this.getPaginated<any>('activity_logs', page, limit, where, params, 'timestamp DESC');
+  }
+
+  static async deleteActivityLog(id: number): Promise<void> {
+    await this.run('DELETE FROM activity_logs WHERE id = ?', [id]);
+  }
+
+  static async clearActivityLogs(): Promise<void> {
+    await this.run('DELETE FROM activity_logs');
+  }
   // --- OPERATIONS ---
 
   static async updateBatteryStatus(id: string, status: string, dealerId: string | null = null): Promise<void> {

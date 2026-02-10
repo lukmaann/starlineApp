@@ -311,6 +311,15 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                 );
             }
 
+            if (pendingChanges.length > 0) {
+                await Database.logActivity('BATTERY_EDIT', `Edited ${batteryId}: ${pendingChanges.map(c => c.field).join(', ')}`, {
+                    batteryId,
+                    dealerId: formData.dealerId,
+                    partnerName: dealers.find(d => d.id === formData.dealerId)?.name,
+                    changes: pendingChanges
+                });
+            }
+
             onUpdate();
             onClose();
         } catch (e) {

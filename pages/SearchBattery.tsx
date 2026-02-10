@@ -196,7 +196,10 @@ const SearchBattery: React.FC = () => {
                 </div>
                 {/* Print Button */}
                 <button
-                  onClick={() => window.electronAPI ? window.electronAPI.printOrPdf() : window.print()}
+                  onClick={() => {
+                    Database.logActivity('PRINT_REPORT', `Printed trace history for ${result.battery.id}`, { batteryId: result.battery.id });
+                    window.electronAPI ? window.electronAPI.printOrPdf() : window.print();
+                  }}
                   className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-black transition-all shadow-lg hover:translate-y-[-2px]"
                 >
                   <Fingerprint size={16} /> Print Full History

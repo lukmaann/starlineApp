@@ -7,17 +7,30 @@ import Dealers from './pages/Dealers';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import { Database } from './db';
-import { Zap, Download, AlertTriangle, CheckCircle2, X, Settings as SettingsIcon, LogOut, Bell, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Zap, Download, AlertTriangle, CheckCircle2, X, Settings as SettingsIcon, LogOut, Bell } from 'lucide-react';
+import { useNavigationHistory } from './hooks/useNavigationHistory';
+import NavigationControls from './components/NavigationControls';
+import { AuthSession } from './utils/AuthSession';
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('scanner');
+  const {
+    activeTab,
+    history,
+    historyIndex,
+    navigate,
+    goBack,
+    goForward,
+    clearHistory,
+    savePageState,
+    getPageState,
+    reset: resetNavigation
+  } = useNavigationHistory('scanner');
+
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [pendingSearch, setPendingSearch] = useState<string | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [history, setHistory] = useState<string[]>(['scanner']);
-  const [historyIndex, setHistoryIndex] = useState(0);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -26,34 +39,7 @@ const App: React.FC = () => {
 
   const triggerHubSearch = (serial: string) => {
     setPendingSearch(serial);
-    handleNavigate('scanner');
-  };
-
-  const handleNavigate = (tab: string) => {
-    if (tab === activeTab) return;
-
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(tab);
-
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
-    setActiveTab(tab);
-  };
-
-  const handleBack = () => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      setHistoryIndex(newIndex);
-      setActiveTab(history[newIndex]);
-    }
-  };
-
-  const handleForward = () => {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1;
-      setHistoryIndex(newIndex);
-      setActiveTab(history[newIndex]);
-    }
+    navigate('scanner');
   };
 
   useEffect(() => {
@@ -61,6 +47,8 @@ const App: React.FC = () => {
       await Database.init();
       const auth = localStorage.getItem('starline_auth');
       if (auth === 'true') setIsLoggedIn(true);
+      // Initialize auto-lock timer
+      AuthSession.initialize();
       setIsLoading(false);
     };
     init();
@@ -94,12 +82,7 @@ const App: React.FC = () => {
   const confirmLogout = () => {
     localStorage.clear();
     setIsLoggedIn(false);
-    localStorage.clear();
-    setIsLoggedIn(false);
-    setActiveTab('scanner');
-    setActiveTab('scanner');
-    setHistory(['scanner']);
-    setHistoryIndex(0);
+    resetNavigation();
     setShowLogoutConfirm(false);
   };
 
@@ -107,13 +90,27 @@ const App: React.FC = () => {
     return (
       <>
         <div style={{ display: activeTab === 'scanner' ? 'block' : 'none' }}>
-          <Scanner initialSearch={pendingSearch} onSearchHandled={() => setPendingSearch(null)} />
+          <Scanner
+            initialSearch={pendingSearch}
+            onSearchHandled={() => setPendingSearch(null)}
+            initialState={getPageState('scanner')}
+            onStateChange={(s) => savePageState('scanner', s)}
+            active={activeTab === 'scanner'}
+          />
         </div>
         <div style={{ display: activeTab === 'dealers' ? 'block' : 'none' }}>
-          <Dealers onNavigateToHub={triggerHubSearch} />
+          <Dealers
+            onNavigateToHub={(serial) => {
+              setPendingSearch(serial);
+              navigate('scanner');
+            }}
+            initialState={getPageState('dealers')}
+            onStateChange={(s) => savePageState('dealers', s)}
+            active={activeTab === 'dealers'}
+          />
         </div>
         <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
-          <Settings />
+          <Settings active={activeTab === 'settings'} />
         </div>
       </>
     );
@@ -135,7 +132,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-white text-slate-900 antialiased overflow-hidden">
-      <Navigation activeTab={activeTab} setActiveTab={handleNavigate} />
+      <Navigation activeTab={activeTab} setActiveTab={navigate} />
 
       <div className="flex-1 flex flex-col overflow-hidden relative bg-slate-50/50">
         {toast && (
@@ -160,24 +157,14 @@ const App: React.FC = () => {
 
         <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 no-print">
           <div className="flex items-center space-x-3 text-slate-400 text-sm font-medium">
-            <div className="flex items-center space-x-1 mr-4 bg-slate-100 p-1 rounded-lg">
-              <button
-                onClick={handleBack}
-                disabled={historyIndex <= 0}
-                className={`p-1.5 rounded-md transition-all ${historyIndex > 0 ? 'hover:bg-white text-slate-500 hover:text-slate-800 shadow-sm' : 'text-slate-300 cursor-not-allowed'}`}
-                title="Go Back"
-              >
-                <ArrowLeft size={16} />
-              </button>
-              <button
-                onClick={handleForward}
-                disabled={historyIndex >= history.length - 1}
-                className={`p-1.5 rounded-md transition-all ${historyIndex < history.length - 1 ? 'hover:bg-white text-slate-500 hover:text-slate-800 shadow-sm' : 'text-slate-300 cursor-not-allowed'}`}
-                title="Go Forward"
-              >
-                <ArrowRight size={16} />
-              </button>
-            </div>
+            <NavigationControls
+              history={history}
+              historyIndex={historyIndex}
+              onBack={goBack}
+              onForward={goForward}
+              onClear={clearHistory}
+              activeTab={activeTab}
+            />
             <span className="hover:text-slate-600 transition-colors cursor-default">Starline</span>
             <span>/</span>
             <span className="text-slate-900 font-bold capitalize">{activeTab}</span>

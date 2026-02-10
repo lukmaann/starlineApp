@@ -14,6 +14,7 @@ const formatINR = (v: number) => new Intl.NumberFormat('en-IN', { style: 'curren
 
 const Invoice: React.FC<{ sale: Sale; dealer: Dealer | null; battery: Battery | null }> = ({ sale, dealer, battery }) => {
   const handlePrint = () => {
+    Database.logActivity('PRINT_REPORT', `Printed Invoice ${sale.id}`, { saleId: sale.id, customer: sale.customerName });
     if (window.electronAPI) {
       window.electronAPI.printOrPdf();
     } else {
