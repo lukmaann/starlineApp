@@ -74,6 +74,65 @@ const DeleteConfirmation: React.FC<{
     </div>
 );
 
+const EditConfirmation: React.FC<{
+    changes: { field: string, old: string, new: string }[];
+    onConfirm: () => void;
+    onCancel: () => void;
+    isSaving: boolean;
+}> = ({ changes, onConfirm, onCancel, isSaving }) => (
+    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in scale-95 duration-200">
+            <div className="p-6 bg-indigo-50 border-b border-indigo-100 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+                    <Save size={24} />
+                </div>
+                <div>
+                    <h3 className="text-lg font-black text-indigo-900 uppercase tracking-tight">Confirm Changes</h3>
+                    <p className="text-xs font-bold text-indigo-600 uppercase">Review your edits before saving</p>
+                </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+                {changes.length === 0 ? (
+                    <p className="text-sm text-slate-500 font-medium italic">No changes detected.</p>
+                ) : (
+                    <div className="space-y-2">
+                        {changes.map((change, idx) => (
+                            <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+                                <span className="block font-bold text-slate-400 uppercase tracking-wider mb-1">{change.field}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-rose-500 line-through decoration-2 decoration-rose-500/30">{change.old || '(empty)'}</span>
+                                    <span className="text-slate-300">→</span>
+                                    <span className="text-emerald-600 font-bold bg-emerald-50 px-1 rounded">{change.new}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                    <button
+                        onClick={onCancel}
+                        disabled={isSaving}
+                        className="flex-1 py-3 bg-white border-2 border-slate-200 text-slate-600 font-bold uppercase text-xs rounded-xl hover:bg-slate-50 transition-colors"
+                    >
+                        Back
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        disabled={isSaving}
+                        className="flex-1 py-3 bg-indigo-600 text-white font-bold uppercase text-xs rounded-xl hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+                    >
+                        {isSaving ? <Loader2 size={16} className="animate-spin" /> : <>
+                            <Save size={16} /> Confirm Update
+                        </>}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
 const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -87,13 +146,18 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteLoading, setDeleteLoading] = useState(false);
 
+    const [showEditConfirm, setShowEditConfirm] = useState(false);
+    const [pendingChanges, setPendingChanges] = useState<{ field: string, old: string, new: string }[]>([]);
+
     const [dealers, setDealers] = useState<any[]>([]);
+    const [models, setModels] = useState<any[]>([]);
     const [originalDealerId, setOriginalDealerId] = useState('');
 
     const [formData, setFormData] = useState({
         // customerName: '', // REPLACED BY DEALER SELECT
         // customerPhone: '', // REMOVED
         newBatteryId: '',
+        model: '',
         dealerId: '',
         soldDate: '',
         // Replacement specific fields
@@ -109,12 +173,14 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         const loadData = async () => {
             setIsLoading(true);
             try {
-                const [data, allDealers] = await Promise.all([
+                const [data, allDealers, allModels] = await Promise.all([
                     Database.searchBattery(batteryId),
-                    Database.getAll<{ id: string, name: string, location: string }>('dealers')
+                    Database.getAll<{ id: string, name: string, location: string }>('dealers'),
+                    Database.getAll<{ id: string, name: string }>('models')
                 ]);
 
                 setDealers(allDealers);
+                setModels(allModels);
 
                 if (data && data.battery) {
                     const incomingReplacement = data.replacements.find(r => r.newBatteryId === batteryId);
@@ -131,6 +197,7 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
 
                     setFormData({
                         newBatteryId: data.battery.id,
+                        model: data.battery.model,
                         dealerId: data.battery.dealerId || saleRecord?.dealerId || (allDealers.length > 0 ? allDealers[0].id : ''),
                         soldDate: data.battery.actualSaleDate || saleRecord?.warrantyStartDate || data.battery.activationDate || '',
 
@@ -151,14 +218,54 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         loadData();
     }, [batteryId]);
 
-    const handleSave = async () => {
+    const getChanges = () => {
+        const changes: { field: string, old: string, new: string }[] = [];
+        if (!activeAsset) return changes;
+
+        // Check Dealer
+        const currentDealer = dealers.find(d => d.id === activeAsset.battery.dealerId)?.name || 'None';
+        const newDealer = dealers.find(d => d.id === formData.dealerId)?.name || 'None';
+        if (activeAsset.battery.dealerId !== formData.dealerId) {
+            changes.push({ field: 'Assigned Dealer', old: currentDealer, new: newDealer });
+        }
+
+        // Check Model
+        if (activeAsset.battery.model !== formData.model) {
+            changes.push({ field: 'Battery Model', old: activeAsset.battery.model || 'Unknown', new: formData.model });
+        }
+
+        // Check Sale Date
+        const oldDate = activeAsset.sale?.warrantyStartDate || activeAsset.battery.actualSaleDate || activeAsset.battery.activationDate || '';
+        if (oldDate !== formData.soldDate) {
+            changes.push({ field: 'Sale/Warranty Date', old: oldDate, new: formData.soldDate });
+        }
+
+        // Check Replacements Fields (if applicable)
+        if (activeAsset.replacement) {
+            if (activeAsset.replacement.settlementType !== formData.settlementMethod) {
+                changes.push({ field: 'Settlement Method', old: activeAsset.replacement.settlementType, new: formData.settlementMethod });
+            }
+            // Add other replacement checks if needed...
+        }
+
+        return changes;
+    };
+
+    const handleSaveClick = () => {
+        const changes = getChanges();
+        setPendingChanges(changes);
+        setShowEditConfirm(true);
+    };
+
+    const executeSave = async () => {
         setIsSaving(true);
         try {
             if (activeAsset?.battery) {
                 await Database.updateBatteryDetails(
                     batteryId,
                     batteryId, // ID unchanged
-                    formData.dealerId
+                    formData.dealerId,
+                    formData.model
                 );
             }
 
@@ -316,6 +423,22 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                             )}
                         </div>
 
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Battery Model</label>
+                            <div className="relative">
+                                <select
+                                    className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-lg uppercase outline-none focus:border-amber-500 transition-all text-slate-700 appearance-none"
+                                    value={formData.model}
+                                    onChange={e => setFormData({ ...formData, model: e.target.value })}
+                                >
+                                    {models.map(m => (
+                                        <option key={m.id} value={m.name}>{m.name}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
+                            </div>
+                        </div>
+
                     </div>
 
                     {/* 2. Sale Date / Warranty Start - CRITICAL */}
@@ -442,7 +565,7 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                         <button onClick={onClose} className="px-8 py-5 text-slate-400 font-bold uppercase tracking-widest text-xs hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
                             Cancel
                         </button>
-                        <button onClick={handleSave} disabled={isSaving} className="flex-1 bg-gradient-to-r from-slate-900 to-slate-800 text-white font-black py-5 rounded-xl hover:from-black hover:to-slate-900 transition-all uppercase text-sm tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl transform active:scale-[0.99] disabled:opacity-50">
+                        <button onClick={handleSaveClick} disabled={isSaving} className="flex-1 bg-gradient-to-r from-slate-900 to-slate-800 text-white font-black py-5 rounded-xl hover:from-black hover:to-slate-900 transition-all uppercase text-sm tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl transform active:scale-[0.99] disabled:opacity-50">
                             {isSaving ? (
                                 <>
                                     <Loader2 className="animate-spin" size={20} />
@@ -464,6 +587,15 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                     onConfirm={handleDelete}
                     onCancel={() => setShowDeleteConfirm(false)}
                     isLoading={deleteLoading}
+                />
+            )}
+
+            {showEditConfirm && (
+                <EditConfirmation
+                    changes={pendingChanges}
+                    onConfirm={executeSave}
+                    onCancel={() => setShowEditConfirm(false)}
+                    isSaving={isSaving}
                 />
             )}
         </div>

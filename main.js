@@ -252,7 +252,7 @@ ipcMain.handle('db-exec', (event, sql) => {
 });
 
 // 4. COMPLEX UPDATE: Battery Details (Transaction)
-ipcMain.handle('db-update-battery-details', (event, currentId, newId, dealerId) => {
+ipcMain.handle('db-update-battery-details', (event, currentId, newId, dealerId, model) => {
   try {
     if (!db) throw new Error('Database not initialized');
 
@@ -265,7 +265,11 @@ ipcMain.handle('db-update-battery-details', (event, currentId, newId, dealerId) 
       }
 
       // 2. Update Batteries Table
-      db.prepare(`UPDATE batteries SET id = ?, dealerId = ? WHERE id = ?`).run(newId, dealerId, currentId);
+      if (model) {
+        db.prepare(`UPDATE batteries SET id = ?, dealerId = ?, model = ? WHERE id = ?`).run(newId, dealerId, model, currentId);
+      } else {
+        db.prepare(`UPDATE batteries SET id = ?, dealerId = ? WHERE id = ?`).run(newId, dealerId, currentId);
+      }
 
       // 3. Cascade ID changes
       if (newId !== currentId) {

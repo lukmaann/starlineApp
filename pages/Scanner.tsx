@@ -100,8 +100,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
         Database.getAll<BatteryModel>('models'),
         Database.getConfig('starline_admin_pass')
       ]);
-      setDealers(d);
-      setModels(m);
+      setDealers(d.sort((a, b) => a.name.localeCompare(b.name)));
+      setModels(m.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
       setAdminPassword(p || 'starline@2025');
     };
     init();
@@ -249,6 +249,19 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
       setIsProcessing(false);
       setScanBuffer('');
       focusMainInput();
+    }
+  };
+
+  const handleClear = () => {
+    setScanBuffer('');
+    setActiveAsset(null);
+    setMissingSerial('');
+    setShowAddStock(false);
+    setIsReplacing(false);
+    setReplacementStep(1);
+    setWarrantyCalculation(null);
+    if (inputRef.current) {
+      inputRef.current.focus();
     }
   };
 
@@ -694,6 +707,16 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
               {isProcessing && <Loader2 className={`absolute right-4 top-1/2 -translate-y-1/2 animate-spin ${batchMode ? 'text-white' : 'text-blue-600'}`} size={20} />}
             </div>
             <button onClick={() => handleSearch(scanBuffer)} disabled={isProcessing || !scanBuffer || (batchMode && (!batchConfig.dealerId || !batchConfig.modelId))} className={`px-8 py-4 rounded-xl font-bold text-sm transition-all shadow-lg active:scale-95 disabled:opacity-30 uppercase tracking-widest ${batchMode ? 'bg-white text-indigo-900 hover:bg-indigo-50' : 'bg-slate-900 text-white hover:bg-black'}`}>{batchMode ? 'Stage' : 'Trace Unit'}</button>
+
+            {(activeAsset || scanBuffer) && (
+              <button
+                onClick={handleClear}
+                className="p-4 bg-slate-100 text-slate-500 rounded-xl hover:bg-rose-100 hover:text-rose-600 transition-all active:scale-95"
+                title="Clear Search"
+              >
+                <X size={20} />
+              </button>
+            )}
           </div>
 
           {batchMode && stagedItems.length > 0 && (
