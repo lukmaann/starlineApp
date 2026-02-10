@@ -234,7 +234,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
         // not when it was sold to customer (warrantyStartDate)
         setReplacementData(prev => ({
           ...prev,
-          soldDate: data.battery.activationDate || ''
+          soldDate: data.battery.actualSaleDate || data.battery.activationDate || '',
+          warrantyCardStatus: data.battery.warrantyCardStatus || 'RECEIVED'
         }));
         notify(`${cleanId} traced successfully`);
       } else {
@@ -610,7 +611,13 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
 
     setIsActionLoading(true);
     try {
-      await Database.markAsPendingExchange(activeAsset.battery.id, activeAsset.battery.dealerId || 'CENTRAL', pendingReturnDate);
+      await Database.markAsPendingExchange(
+        activeAsset.battery.id,
+        activeAsset.battery.dealerId || 'CENTRAL',
+        pendingReturnDate,
+        replacementData.warrantyCardStatus,
+        replacementData.soldDate
+      );
       notify(`${activeAsset.battery.id} marked as pending exchange`);
       setActiveAsset(null);
       setIsReplacing(false);
@@ -1114,9 +1121,43 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                                     className="w-full pl-20 pr-6 py-8 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-3xl outline-none focus:border-blue-500 focus:bg-white focus:shadow-xl focus:shadow-blue-500/10 uppercase transition-all mono placeholder:text-slate-300"
                                     value={replacementData.newBatteryId}
                                     onChange={e => setReplacementData({ ...replacementData, newBatteryId: e.target.value.toUpperCase() })}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (replacementData.newBatteryId) {
+                                          document.getElementById('card-status-select')?.focus();
+                                        }
+                                      }
+                                    }}
                                   />
                                 </div>
                               </div>
+
+                              {/* [MOVED] Details from Step 2 */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-top-2">
+                                <div className="space-y-2">
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Warranty Proof Status</label>
+                                  <div className="relative">
+                                    <select id="card-status-select" required className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-sm uppercase outline-none focus:border-amber-500 transition-all cursor-pointer appearance-none text-slate-700" value={replacementData.warrantyCardStatus} onChange={e => setReplacementData({ ...replacementData, warrantyCardStatus: e.target.value as WarrantyCardStatus })}>
+                                      <option value="RECEIVED">Original Card Collected</option>
+                                      <option value="XEROX">Xerox Only</option>
+                                      <option value="WHATSAPP">Digital / WhatsApp</option>
+                                    </select>
+                                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Original Sale Date</label>
+                                  <input
+                                    required
+                                    type="date"
+                                    className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-200 rounded-xl outline-none font-bold text-sm text-slate-900 focus:border-amber-500 transition-all"
+                                    value={replacementData.soldDate}
+                                    onChange={(e) => setReplacementData({ ...replacementData, soldDate: e.target.value })}
+                                  />
+                                </div>
+                              </div>
+
                               {showReturnDatePicker && (
                                 <div className="space-y-4 animate-in slide-in-from-top-2">
                                   <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Confirm Returning Date</label>
@@ -1186,44 +1227,23 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled }) =>
                                       <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
                                     </div>
                                   </div>
-                                  <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Card Status</label>
-                                    <div className="relative">
-                                      <select required className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-lg uppercase outline-none focus:border-amber-500 transition-all cursor-pointer appearance-none text-slate-700" value={replacementData.warrantyCardStatus} onChange={e => setReplacementData({ ...replacementData, warrantyCardStatus: e.target.value as WarrantyCardStatus })}>
-                                        <option value="RECEIVED">Original Card Collected</option>
-                                        <option value="XEROX">Xerox Only</option>
-                                        <option value="WHATSAPP">Digital / WhatsApp</option>
-                                      </select>
-                                      <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
-                                    </div>
-                                  </div>
-                                </div>
+                                  <div className="hidden">
 
-                                <div className="p-6 bg-amber-50 rounded-2xl border-2 border-amber-100 space-y-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-amber-100 rounded-lg text-amber-600"><Calendar size={20} /></div>
-                                    <h4 className="text-sm font-black text-amber-900 uppercase tracking-wide">Original Sale Date Validation</h4>
-                                  </div>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                      <label className="text-[10px] font-bold text-amber-700  ml-1">Battery Selling Date By Dealer</label>
-                                      <input
-                                        required
-                                        type="date"
-                                        className="w-full px-6 py-4 bg-white border-2 border-amber-200 rounded-xl outline-none font-black text-xl text-slate-900 focus:border-amber-500 focus:shadow-lg focus:shadow-amber-500/10 transition-all"
-                                        value={replacementData.soldDate}
-                                        onChange={(e) => setReplacementData({ ...replacementData, soldDate: e.target.value })}
-                                      />
+                                    <div className="flex items-center gap-3">
+                                      <div className="p-2 bg-amber-100 rounded-lg text-amber-600"><Calendar size={20} /></div>
+                                      <h4 className="text-sm font-black text-amber-900 uppercase tracking-wide">Validation Config</h4>
                                     </div>
-                                    <div className="space-y-2">
-                                      <label className="text-[10px] font-bold text-amber-700 uppercase ml-1">Exchange Date</label>
-                                      <input
-                                        required
-                                        type="date"
-                                        className="w-full px-6 py-4 bg-white/50 border-2 border-amber-200/50 rounded-xl outline-none font-bold text-lg text-slate-500 focus:border-amber-500 transition-all"
-                                        value={replacementData.replacementDate}
-                                        onChange={e => setReplacementData({ ...replacementData, replacementDate: e.target.value })}
-                                      />
+                                    <div className="grid grid-cols-1 gap-6">
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-bold text-amber-700 uppercase ml-1">Exchange Date (Today)</label>
+                                        <input
+                                          required
+                                          type="date"
+                                          className="w-full px-6 py-4 bg-white/50 border-2 border-amber-200/50 rounded-xl outline-none font-bold text-lg text-slate-500 focus:border-amber-500 transition-all"
+                                          value={replacementData.replacementDate}
+                                          onChange={e => setReplacementData({ ...replacementData, replacementDate: e.target.value })}
+                                        />
+                                      </div>
                                     </div>
                                   </div>
                                 </div>

@@ -415,7 +415,13 @@ export class Database {
     );
   }
 
-  static async markAsPendingExchange(id: string, dealerId: string, returnDate?: string): Promise<void> {
+  static async markAsPendingExchange(
+    id: string,
+    dealerId: string,
+    returnDate?: string,
+    warrantyCardStatus?: string,
+    actualSaleDate?: string
+  ): Promise<void> {
     const battery = await this.getBattery(id);
     if (!battery) throw new Error('Battery not found');
 
@@ -427,8 +433,21 @@ export class Database {
     const finalReturnDate = returnDate || getLocalDate();
 
     await this.run(
-      `UPDATE batteries SET status = ?, dealerId = ?, activationDate = ? WHERE id = ?`,
-      [BatteryStatus.RETURNED_PENDING, dealerId, finalReturnDate, id]
+      `UPDATE batteries SET 
+        status = ?, 
+        dealerId = ?, 
+        activationDate = ?,
+        warrantyCardStatus = ?,
+        actualSaleDate = ?
+       WHERE id = ?`,
+      [
+        BatteryStatus.RETURNED_PENDING,
+        dealerId,
+        finalReturnDate,
+        warrantyCardStatus || null,
+        actualSaleDate || null,
+        id
+      ]
     );
   }
 
