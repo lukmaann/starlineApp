@@ -462,6 +462,15 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
           notify(`Stock Conflict: ID ${newUnitId} is ${newUnitCheck.battery.status}. Cannot use as replacement.`, 'error');
           return;
         }
+
+        // ✅ BUG FIX: Cross-Dealer Validation
+        // If the unit is already assigned to a dealer (e.g. ACTIVE stock), it MUST belong to the SAME dealer
+        if (newUnitCheck.battery.dealerId && newUnitCheck.battery.dealerId !== activeAsset.battery.dealerId) {
+          const ownerName = dealers.find(d => d.id === newUnitCheck.battery.dealerId)?.name || 'Another Dealer';
+          notify(`Stock Conflict: Unit belongs to ${ownerName}. Cannot exchange.`, 'error');
+          return;
+        }
+
         // It's valid stock, we will effectively "transfer" it
       }
 

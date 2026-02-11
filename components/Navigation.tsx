@@ -1,15 +1,15 @@
 
 import React from 'react';
-import { Battery, Users, Zap, ChevronRight, Barcode, ShieldCheck, Sliders } from 'lucide-react';
+import { Battery, Users, Zap, ChevronRight, Barcode, ShieldCheck, Sliders, Search, History, UserCircle, Scale } from 'lucide-react';
 
 interface NavItemProps {
-  icon: React.ElementType;
+  icon: React.ReactNode; // Changed from React.ElementType to React.ReactNode
   label: string;
   active: boolean;
   onClick: () => void;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ icon: Icon, label, active, onClick }) => (
+const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick }) => ( // Changed icon: Icon to icon
   <button
     onClick={onClick}
     className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 group relative ${active
@@ -18,7 +18,7 @@ const NavItem: React.FC<NavItemProps> = ({ icon: Icon, label, active, onClick })
       }`}
   >
     <div className={`${active ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'}`}>
-      <Icon size={18} strokeWidth={active ? 2.5 : 2} />
+      {icon} {/* Render icon directly */}
     </div>
     <span className={`text-[13px] font-semibold tracking-tight ${active ? 'opacity-100' : 'opacity-80'}`}>{label}</span>
     {active && <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-blue-600 rounded-l-full" />}
@@ -32,8 +32,9 @@ interface NavigationProps {
 
 const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
   const menuItems = [
-    { id: 'scanner', label: 'Hub Trace', icon: Barcode },
-    { id: 'dealers', label: 'Dealers', icon: Users },
+    { id: 'scanner', label: 'Hub Trace', icon: <Barcode size={18} strokeWidth={activeTab === 'scanner' ? 2.5 : 2} /> },
+    { id: 'dealers', label: 'Dealers', icon: <Users size={18} strokeWidth={activeTab === 'dealers' ? 2.5 : 2} /> },
+    { id: 'settlements', label: 'Settlements', icon: <Scale size={18} strokeWidth={activeTab === 'settlements' ? 2.5 : 2} /> },
   ];
 
   return (

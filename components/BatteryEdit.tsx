@@ -5,7 +5,7 @@ import { getLocalDate, formatDate } from '../utils';
 import {
     Save, ShieldCheck, X, Calendar, User, Phone,
     CreditCard, CheckCircle2, AlertCircle, Loader2,
-    Store, Barcode, ChevronDown, History, Zap, Trash2, AlertTriangle
+    Store, Barcode, ChevronDown, History, Zap, Trash2, AlertTriangle, RotateCcw
 } from 'lucide-react';
 
 interface BatteryEditProps {
@@ -305,7 +305,7 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                         replId,
                         formData.warrantyCardStatus,
                         formData.reason,
-                        formData.settlementDate,
+                        formData.settlementDate ? formData.settlementDate : null, // ✅ FIX: Convert empty string to NULL
                         activeAsset.replacement.id
                     ]
                 );
@@ -485,12 +485,21 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                                 </h4>
                                 <div className="flex items-center gap-2">
                                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Settlement Date:</label>
-                                    <input
-                                        type="date"
-                                        className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-blue-500 transition-all uppercase"
-                                        value={formData.settlementDate}
-                                        onChange={(e) => setFormData({ ...formData, settlementDate: e.target.value })}
-                                    />
+                                    <div className="flex items-center gap-1">
+                                        <input
+                                            type="date"
+                                            className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-blue-500 transition-all uppercase"
+                                            value={formData.settlementDate}
+                                            onChange={(e) => setFormData({ ...formData, settlementDate: e.target.value })}
+                                        />
+                                        <button
+                                            onClick={() => setFormData({ ...formData, settlementDate: '', paidInAccount: false })}
+                                            className="p-1.5 bg-slate-100 hover:bg-amber-100 text-slate-400 hover:text-amber-600 rounded-md transition-all"
+                                            title="Undo Settlement (Revert to Pending)"
+                                        >
+                                            <RotateCcw size={14} />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 

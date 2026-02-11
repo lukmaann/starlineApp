@@ -25,6 +25,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
+import { SettlementModal, SettlementTarget } from '../components/SettlementModal';
 
 interface DealersProps {
   onNavigateToHub?: (serial: string) => void;
@@ -501,32 +502,15 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
+
   // SETTLEMENT MODAL STATE
-  const [settlementModal, setSettlementModal] = useState<{
-    isOpen: boolean;
-    replacementId: string;
-    oldBatteryId: string;
-    method: 'CREDIT' | 'STOCK';
-    date: string;
-    replenishmentId: string;
-  }>({
-    isOpen: false,
-    replacementId: '',
-    oldBatteryId: '',
-    method: 'CREDIT',
-    date: new Date().toISOString().split('T')[0],
-    replenishmentId: ''
-  });
-  const [isSettling, setIsSettling] = useState(false);
+  const [resolvingRecord, setResolvingRecord] = useState<SettlementTarget | null>(null);
 
   const handleOpenSettlement = (repo: any) => {
-    setSettlementModal({
-      isOpen: true,
-      replacementId: repo.id,
+    setResolvingRecord({
+      id: repo.id,
       oldBatteryId: repo.oldBatteryId,
-      method: 'CREDIT',
-      date: repo.replacementDate ? repo.replacementDate.split('T')[0] : new Date().toISOString().split('T')[0],
-      replenishmentId: ''
+      dealerName: selectedDealer?.name || 'Unknown Dealer'
     });
   };
 
@@ -543,25 +527,6 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   // 2. The table cell content (Line ~580)
 
 
-  const handleResolveSettlement = async () => {
-    if (!settlementModal.replacementId) return;
-    setIsSettling(true);
-    try {
-      await Database.resolveSettlement(
-        settlementModal.replacementId,
-        settlementModal.method,
-        settlementModal.date,
-        settlementModal.method === 'STOCK' ? settlementModal.replenishmentId : undefined
-      );
-      setSettlementModal(prev => ({ ...prev, isOpen: false }));
-      fetchTabData(); // Reload table
-      window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: 'Settlement Resolved Successfully', type: 'success' } }));
-    } catch (e: any) {
-      window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: e.message || 'Settlement Failed', type: 'error' } }));
-    } finally {
-      setIsSettling(false);
-    }
-  };
 
   // --- RENDER ---
   if (isLocked) {
@@ -705,81 +670,17 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
           `}
           </style>
 
+
           {/* Settlement Modal Overlay */}
-          {settlementModal.isOpen && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/40 backdrop-blur-sm animate-in fade-in duration-300 no-print">
-              <div className="max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-300">
-                <div className="p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                  <div>
-                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Resolve Settlement</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Reference: {settlementModal.oldBatteryId}</p>
-                  </div>
-                  <button onClick={() => setSettlementModal(prev => ({ ...prev, isOpen: false }))} className="p-2 hover:bg-slate-200 rounded-xl transition-colors"><X size={20} /></button>
-                </div>
-
-                <div className="p-8 space-y-6">
-                  {/* 1. Method Selection */}
-                  <div className="space-y-4">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">Settlement Method</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => setSettlementModal(prev => ({ ...prev, method: 'CREDIT' }))}
-                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${settlementModal.method === 'CREDIT' ? 'bg-blue-50 border-blue-500 shadow-md' : 'bg-white border-slate-100 hover:border-slate-200'}`}
-                      >
-                        <Landmark size={24} className={settlementModal.method === 'CREDIT' ? 'text-blue-600' : 'text-slate-300'} />
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${settlementModal.method === 'CREDIT' ? 'text-blue-700' : 'text-slate-400'}`}>Account Credit</span>
-                      </button>
-                      <button
-                        onClick={() => setSettlementModal(prev => ({ ...prev, method: 'STOCK' }))}
-                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${settlementModal.method === 'STOCK' ? 'bg-indigo-50 border-indigo-500 shadow-md' : 'bg-white border-slate-100 hover:border-slate-200'}`}
-                      >
-                        <Box size={24} className={settlementModal.method === 'STOCK' ? 'text-indigo-600' : 'text-slate-300'} />
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${settlementModal.method === 'STOCK' ? 'text-indigo-700' : 'text-slate-400'}`}>Stock Replace</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 2. Date Input */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">Settlement Date</label>
-                    <input
-                      type="date"
-                      className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-blue-500 transition-all uppercase text-slate-900"
-                      value={settlementModal.date}
-                      onChange={e => setSettlementModal(prev => ({ ...prev, date: e.target.value }))}
-                    />
-                  </div>
-
-                  {/* 3. Stock Scanner (Conditional) */}
-                  {settlementModal.method === 'STOCK' && (
-                    <div className="space-y-2 animate-in slide-in-from-top-2">
-                      <label className="text-xs font-bold text-indigo-500 uppercase tracking-widest pl-1 flex items-center gap-2"><QrCode size={14} /> Scan New Battery ID</label>
-                      <input
-                        autoFocus
-                        placeholder="SCAN STOCK SERIAL..."
-                        className="w-full px-5 py-4 bg-indigo-50 border-2 border-indigo-200 rounded-xl font-black text-lg outline-none focus:border-indigo-500 transition-all uppercase text-indigo-900 placeholder:text-indigo-300"
-                        value={settlementModal.replenishmentId}
-                        onChange={e => setSettlementModal(prev => ({ ...prev, replenishmentId: e.target.value.toUpperCase().trim() }))}
-                      />
-                      <p className="text-[10px] text-indigo-400 font-bold px-1">This unit will be activated and assigned to dealer immediately.</p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-4">
-                  <button onClick={() => setSettlementModal(prev => ({ ...prev, isOpen: false }))} className="px-6 py-3 text-slate-400 font-bold text-sm hover:text-slate-600 transition-colors">Cancel</button>
-                  <button
-                    onClick={handleResolveSettlement}
-                    disabled={isSettling || (settlementModal.method === 'STOCK' && !settlementModal.replenishmentId)}
-                    className="flex-1 px-6 py-3 bg-slate-900 text-white font-bold text-sm rounded-xl hover:bg-black transition-all shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isSettling ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
-                    Confirm Settlement
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          <SettlementModal
+            isOpen={!!resolvingRecord}
+            target={resolvingRecord}
+            onClose={() => setResolvingRecord(null)}
+            onSuccess={() => {
+              setResolvingRecord(null);
+              fetchTabData();
+            }}
+          />
 
           {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 p-8 bg-white/40 backdrop-blur-xl border border-white/20 rounded-[2.5rem] shadow-xl shadow-slate-200/20">

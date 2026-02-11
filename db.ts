@@ -41,6 +41,19 @@ export class Database {
     } catch (e) {
       console.warn('Failed to ensure activity_logs table:', e);
     }
+
+    try {
+      await this.run(`
+        CREATE TABLE IF NOT EXISTS models (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT UNIQUE NOT NULL,
+          defaultCapacity TEXT,
+          warrantyMonths INTEGER DEFAULT 24
+        )
+      `);
+    } catch (e) {
+      console.warn('Failed to ensure models table:', e);
+    }
   }
 
   // --- GENERIC HELPERS ---
@@ -720,7 +733,7 @@ export class Database {
     date: string,
     replenishmentBatteryId?: string
   ): Promise<void> {
-    const replacement = (await this.query<{ dealerId: string }>('SELECT dealerId FROM replacements WHERE id = ?', [replacementId]))[0];
+    const replacement = (await this.query<{ dealerId: string, oldBatteryId: string }>('SELECT dealerId, oldBatteryId FROM replacements WHERE id = ?', [replacementId]))[0];
     if (!replacement) throw new Error('Replacement record not found');
 
     try {
@@ -762,17 +775,29 @@ export class Database {
           );
         } else {
           // Create new unit
+          // 1. Get Old Battery Model to determine warranty
+          const oldBattery = (await this.query<{ model: string }>('SELECT model FROM batteries WHERE id = ?', [replacement.oldBatteryId]))[0];
+          const modelName = oldBattery ? oldBattery.model : 'UNKNOWN';
+
+          // 2. Get Warranty Duration for this model
+          const modelConfig = (await this.query<{ defaultWarrantyMonths: number }>('SELECT defaultWarrantyMonths FROM models WHERE name = ?', [modelName]))[0];
+          const warrantyMonths = modelConfig ? modelConfig.defaultWarrantyMonths : 24;
+
+          const expiryDate = new Date(date);
+          expiryDate.setMonth(expiryDate.getMonth() + warrantyMonths);
+
           await this.addBattery({
             id: replId,
-            model: 'UNKNOWN', // Ideally we'd need model input, but for settlement flow we assume scanned existing or generic
+            model: modelName,
             capacity: 'UNKNOWN',
             manufactureDate: getLocalDate(),
             status: BatteryStatus.ACTIVE,
             replacementCount: 0,
-            warrantyMonths: 24, // Default
+            warrantyMonths: warrantyMonths,
             dealerId: replacement.dealerId,
             activationDate: date,
-            customerName: 'DEALER STOCK'
+            customerName: 'DEALER STOCK',
+            warrantyExpiry: expiryDate.toISOString().split('T')[0] // ✅ FIX: Dynamic Expiry
           });
         }
 
@@ -801,12 +826,79 @@ export class Database {
           [date, replacementId]
         );
       }
-
       window.dispatchEvent(new CustomEvent('db-synced'));
-    } catch (e) {
+    } catch (err) {
       if (method === 'STOCK') await this.run('ROLLBACK');
-      throw e;
+      console.error('Settlement Failed:', err);
+      throw err;
     }
+  }
+
+  static async getSettlementLedger(): Promise<any[]> {
+    const sql = `
+      -- 1. Finalized Replacements awaiting settlement
+      SELECT 
+        r.id,
+        r.dealerId,
+        r.oldBatteryId,
+        r.newBatteryId,
+        r.replacementDate,
+        'EXCHANGED' as type,
+        d.name as dealerName,
+        d.location as dealerLocation,
+        ob.model as oldModel,
+        nb.model as newModel,
+        s.salePrice as originalPrice
+      FROM replacements r
+      JOIN dealers d ON r.dealerId = d.id
+      JOIN batteries ob ON r.oldBatteryId = ob.id
+      LEFT JOIN batteries nb ON r.newBatteryId = nb.id
+      LEFT JOIN sales s ON r.oldBatteryId = s.batteryId
+      WHERE r.settlementDate IS NULL
+
+      UNION ALL
+
+      -- 2. Pending Returns awaiting swap
+      SELECT
+        b.id as id,
+        b.dealerId,
+        b.id as oldBatteryId,
+        NULL as newBatteryId,
+        b.activationDate as replacementDate,
+        'PENDING_SWAP' as type,
+        d.name as dealerName,
+        d.location as dealerLocation,
+        b.model as oldModel,
+        NULL as newModel,
+        s.salePrice as originalPrice
+      FROM batteries b
+      JOIN dealers d ON b.dealerId = d.id
+      LEFT JOIN sales s ON b.id = s.batteryId
+      WHERE b.status = 'RETURNED_PENDING'
+
+      ORDER BY replacementDate DESC
+    `;
+    return await this.query<any>(sql);
+  }
+
+  static async getSettlementSummary(): Promise<any[]> {
+    const sql = `
+        SELECT
+        d.id as dealerId,
+          d.name as dealerName,
+          d.location as dealerLocation,
+          COUNT(r.id) as pendingClaims,
+          SUM(CASE WHEN (r.settlementType = 'STOCK' AND r.replenishmentBatteryId IS NULL) OR r.settlementType IS NULL THEN 1 ELSE 0 END) as pendingStock,
+          SUM(CASE WHEN r.paidInAccount = 0 THEN 1 ELSE 0 END) as totalOwedItems,
+          SUM(COALESCE(s.salePrice, 4200)) as totalEstimatedCredit
+      FROM dealers d
+      JOIN replacements r ON d.id = r.dealerId
+      LEFT JOIN sales s ON r.oldBatteryId = s.batteryId
+      WHERE r.settlementDate IS NULL
+      GROUP BY d.id
+      ORDER BY pendingClaims DESC
+    `;
+    return await this.query<any>(sql);
   }
 
   static async searchReplacementByBatteryId(batteryId: string): Promise<Replacement | null> {
@@ -835,12 +927,12 @@ export class Database {
         const successorId = replacementAsOld[0].newBatteryId;
         // Reset the successor battery to be a standalone unit
         await this.run(
-          `UPDATE batteries SET 
-             originalBatteryId = id, 
-             previousBatteryId = NULL, 
-             replacementCount = 0,
-             status = 'ACTIVE' 
-           WHERE id = ?`,
+          `UPDATE batteries SET
+        originalBatteryId = id,
+          previousBatteryId = NULL,
+          replacementCount = 0,
+          status = 'ACTIVE' 
+           WHERE id = ? `,
           [successorId]
         );
       }
@@ -883,7 +975,7 @@ export class Database {
     // Ensure the new battery hasn't been used in a subsequent replacement
     const newBattery = await this.getBattery(replacement.newBatteryId);
     if (newBattery && newBattery.nextBatteryId) {
-      throw new Error(`Cannot delete this record because the replacement unit (${replacement.newBatteryId}) has already been replaced in a later transaction. Please delete the subsequent record first.`);
+      throw new Error(`Cannot delete this record because the replacement unit(${replacement.newBatteryId}) has already been replaced in a later transaction.Please delete the subsequent record first.`);
     }
 
     try {
@@ -894,7 +986,7 @@ export class Database {
       // We clear the link to the next battery
       // We DO NOT change dealer/customer as it returns to their ownership state
       await this.run(
-        `UPDATE batteries SET status = 'ACTIVE', nextBatteryId = NULL, warrantyExpiry = date(activationDate, '+' || warrantyMonths || ' months') WHERE id = ?`,
+        `UPDATE batteries SET status = 'ACTIVE', nextBatteryId = NULL, warrantyExpiry = date(activationDate, '+' || warrantyMonths || ' months') WHERE id = ? `,
         [replacement.oldBatteryId]
       );
       // Recalculate expiry based on original logic? 
@@ -905,15 +997,15 @@ export class Database {
       // This goes back to being fresh stock (MANUFACTURED)
       // We strip it of all assignment data
       await this.run(
-        `UPDATE batteries SET 
-           status = 'MANUFACTURED', 
-           previousBatteryId = NULL, 
-           activationDate = NULL, 
-           dealerId = NULL, 
-           customerName = NULL, 
-           customerPhone = NULL, 
-           warrantyExpiry = NULL
-         WHERE id = ?`,
+        `UPDATE batteries SET
+        status = 'MANUFACTURED',
+          previousBatteryId = NULL,
+          activationDate = NULL,
+          dealerId = NULL,
+          customerName = NULL,
+          customerPhone = NULL,
+          warrantyExpiry = NULL
+         WHERE id = ? `,
         [replacement.newBatteryId]
       );
 
@@ -921,13 +1013,13 @@ export class Database {
       // If a replenishment unit was given to the dealer, we must take it back (make it Manufactured again)
       if (replacement.replenishmentBatteryId) {
         await this.run(
-          `UPDATE batteries SET 
-             status = 'MANUFACTURED', 
-             dealerId = NULL, 
-             activationDate = NULL, 
-             customerName = NULL, 
-             warrantyExpiry = NULL 
-           WHERE id = ?`,
+          `UPDATE batteries SET
+        status = 'MANUFACTURED',
+          dealerId = NULL,
+          activationDate = NULL,
+          customerName = NULL,
+          warrantyExpiry = NULL 
+           WHERE id = ? `,
           [replacement.replenishmentBatteryId]
         );
       }
@@ -960,7 +1052,7 @@ export class Database {
 
     if (searchQuery) {
       where += ' AND (r.oldBatteryId LIKE ? OR r.newBatteryId LIKE ?)';
-      params.push(`%${searchQuery}%`, `%${searchQuery}%`);
+      params.push(`% ${searchQuery}% `, ` % ${searchQuery}% `);
     }
 
     if (startDate) {
@@ -980,8 +1072,8 @@ export class Database {
 
     const [data, countResult] = await Promise.all([
       this.query<any>(`
-        SELECT 
-          r.*,
+        SELECT
+        r.*,
           COALESCE(s.warrantyStartDate, b.actualSaleDate, b.activationDate) as soldDate,
           b.manufactureDate as sentDate,
           b.model as batteryModel
@@ -991,12 +1083,12 @@ export class Database {
         ${where}
         ORDER BY r.rowid DESC
         LIMIT ? OFFSET ?
-      `, [...params, limit, offset]),
+          `, [...params, limit, offset]),
       this.query<{ count: number }>(`
         SELECT COUNT(*) as count 
         FROM replacements r 
         ${where}
-      `, params)
+        `, params)
     ]);
 
     return {
@@ -1008,14 +1100,14 @@ export class Database {
   static async addModel(model: BatteryModel): Promise<void> {
     console.log('Adding Model:', model);
     await this.run(
-      `INSERT INTO models (id, name, defaultCapacity, defaultWarrantyMonths) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO models(id, name, defaultCapacity, defaultWarrantyMonths) VALUES(?, ?, ?, ?)`,
       [model.id, model.name, model.defaultCapacity, model.defaultWarrantyMonths]
     );
   }
 
   static async updateModel(model: BatteryModel): Promise<void> {
     await this.run(
-      `UPDATE models SET name = ?, defaultCapacity = ?, defaultWarrantyMonths = ? WHERE id = ?`,
+      `UPDATE models SET name = ?, defaultCapacity = ?, defaultWarrantyMonths = ? WHERE id = ? `,
       [model.name, model.defaultCapacity, model.defaultWarrantyMonths, model.id]
     );
   }
@@ -1034,7 +1126,7 @@ export class Database {
     if (model) {
       const count = await this.getBatteryCountByModel(model.name);
       if (count > 0) {
-        throw new Error(`Cannot delete model "${model.name}". It is used by ${count} batteries.`);
+        throw new Error(`Cannot delete model "${model.name}".It is used by ${count} batteries.`);
       }
     }
     await this.run('DELETE FROM models WHERE id = ?', [id]);
@@ -1053,13 +1145,13 @@ export class Database {
       if (item.exists) {
         // Update existing unit to new dealer and ACTIVATE
         await this.run(
-          `UPDATE batteries SET 
-             dealerId = ?, 
-             status = ?, 
-             activationDate = ?, 
-             warrantyExpiry = ?, 
-             customerName = ? 
-           WHERE id = ?`,
+          `UPDATE batteries SET
+        dealerId = ?,
+          status = ?,
+          activationDate = ?,
+          warrantyExpiry = ?,
+          customerName = ?
+            WHERE id = ? `,
           [item.dealerId, BatteryStatus.ACTIVE, today, expiryStr, customerName, item.id]
         );
       } else {
@@ -1081,13 +1173,13 @@ export class Database {
 
       // Create Sales record for analytics and reporting
       await this.run(
-        `INSERT INTO sales (
-          id, batteryId, batteryType, dealerId, saleDate, salePrice, gstAmount, totalAmount,
-          isBilled, customerName, customerPhone, guaranteeCardReturned, paidInAccount,
-          warrantyStartDate, warrantyExpiry
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO sales(
+              id, batteryId, batteryType, dealerId, saleDate, salePrice, gstAmount, totalAmount,
+              isBilled, customerName, customerPhone, guaranteeCardReturned, paidInAccount,
+              warrantyStartDate, warrantyExpiry
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          `AUTO-${item.id}-${Date.now()}`,
+          `AUTO - ${item.id} -${Date.now()} `,
           item.id, item.model, item.dealerId, today, 0, 0, 0,
           0, customerName, 'STOCK', 0, 0, today, expiryStr
         ]
@@ -1102,14 +1194,14 @@ export class Database {
     // This maps to registerSale but with explicit dealer assignment if provided
     await this.run(
       `UPDATE batteries SET
-         status = 'ACTIVE',
-         activationDate = ?,
-         customerName = ?,
-         customerPhone = ?,
-         warrantyExpiry = ?,
-         dealerId = COALESCE(?, dealerId),
-         warrantyCardStatus = ?
-       WHERE id = ?`,
+        status = 'ACTIVE',
+          activationDate = ?,
+          customerName = ?,
+          customerPhone = ?,
+          warrantyExpiry = ?,
+          dealerId = COALESCE(?, dealerId),
+          warrantyCardStatus = ?
+            WHERE id = ? `,
       [date, customerName, customerPhone, expiryDate, dealerId, warrantyCardStatus, id]
     );
   }
@@ -1146,15 +1238,15 @@ export class Database {
 
     // Update current battery
     await this.run(
-      `UPDATE batteries SET 
+      `UPDATE batteries SET
         actualSaleDate = ?,
-        actualSaleDateSource = ?,
-        actualSaleDateProof = ?,
-        warrantyCalculationBase = 'ACTUAL_SALE',
-        warrantyExpiry = ?,
-        activationDate = ?,
-        gracePeriodUsed = ?
-      WHERE id = ?`,
+          actualSaleDateSource = ?,
+          actualSaleDateProof = ?,
+          warrantyCalculationBase = 'ACTUAL_SALE',
+          warrantyExpiry = ?,
+          activationDate = ?,
+          gracePeriodUsed = ?
+            WHERE id = ? `,
       [actualSaleDate, source, proofPath || null, newExpiryStr, actualSaleDate,
         isInGracePeriod ? 1 : 0, batteryId]
     );
@@ -1167,7 +1259,7 @@ export class Database {
 
       // Get the replacement record to find when this battery was activated
       const replacementRecord = await this.query<any>(
-        `SELECT replacementDate FROM replacements WHERE newBatteryId = ?`,
+        `SELECT replacementDate FROM replacements WHERE newBatteryId = ? `,
         [currentBatteryId]
       );
 
@@ -1188,12 +1280,12 @@ export class Database {
         newReplacementExpiry.setMonth(newReplacementExpiry.getMonth() + remainingMonths);
 
         await this.run(
-          `UPDATE batteries SET 
-            warrantyExpiry = ?,
-            actualSaleDate = ?,
-            warrantyCalculationBase = 'ACTUAL_SALE',
-            activationDate = ?
-          WHERE id = ?`,
+          `UPDATE batteries SET
+        warrantyExpiry = ?,
+          actualSaleDate = ?,
+          warrantyCalculationBase = 'ACTUAL_SALE',
+          activationDate = ?
+            WHERE id = ? `,
           [newReplacementExpiry.toISOString().split('T')[0], actualSaleDate,
           replacementRecord[0].replacementDate, currentBatteryId]
         );

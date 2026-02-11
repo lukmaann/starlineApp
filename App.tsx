@@ -4,6 +4,7 @@ import Navigation from './components/Navigation';
 import Scanner from './pages/Scanner';
 import SessionLock from './components/SessionLock';
 import Dealers from './pages/Dealers';
+import Settlements from './pages/Settlements';
 import Controls from './pages/Controls';
 import Login from './pages/Login';
 import { Database } from './db';
@@ -96,9 +97,9 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    return (
-      <>
-        <div style={{ display: activeTab === 'scanner' ? 'block' : 'none' }}>
+    switch (activeTab) {
+      case 'scanner':
+        return (
           <Scanner
             initialSearch={pendingSearch}
             onSearchHandled={() => setPendingSearch(null)}
@@ -106,8 +107,9 @@ const App: React.FC = () => {
             onStateChange={(s) => savePageState('scanner', s)}
             active={activeTab === 'scanner'}
           />
-        </div>
-        <div style={{ display: activeTab === 'dealers' ? 'block' : 'none' }}>
+        );
+      case 'dealers':
+        return (
           <Dealers
             onNavigateToHub={(serial) => {
               setPendingSearch(serial);
@@ -117,12 +119,21 @@ const App: React.FC = () => {
             onStateChange={(s) => savePageState('dealers', s)}
             active={activeTab === 'dealers'}
           />
-        </div>
-        <div style={{ display: activeTab === 'controls' ? 'block' : 'none' }}>
-          <Controls active={activeTab === 'controls'} />
-        </div>
-      </>
-    );
+        );
+      case 'settlements':
+        return (
+          <Settlements
+            onNavigateToHub={(serial) => {
+              setPendingSearch(serial);
+              navigate('scanner');
+            }}
+          />
+        );
+      case 'controls':
+        return <Controls active={activeTab === 'controls'} />;
+      default:
+        return null;
+    }
   };
 
   if (isLoading || isRefreshing) return (
