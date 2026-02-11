@@ -158,7 +158,7 @@ const SearchBattery: React.FC = () => {
                         </div>
                         <div className="overflow-hidden">
                           <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">AUTHORIZED DEALER</p>
-                          <p className="text-lg font-black tracking-tight truncate mt-0.5">{getDealer(result.battery.dealerId)?.name || 'UNKNOWN PARTNER'}</p>
+                          <p className="text-lg font-black tracking-tight truncate mt-0.5">{getDealer(result.battery.dealerId)?.name || 'UNKNOWN DEALER'}</p>
                         </div>
                       </div>
                       <div className={`p-6 rounded-3xl border ${isExpired ? 'bg-rose-900/5 border-rose-900/10' : 'bg-black/5 border-black/5'} flex items-start space-x-5`}>
@@ -237,7 +237,7 @@ const SearchBattery: React.FC = () => {
                                 </div>
                                 {item.dealerId && (
                                   <div className="space-y-1">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">SERVICING PARTNER</p>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">SERVICING DEALER</p>
                                     <p className="text-lg font-black text-slate-800 leading-none truncate">{getDealer(item.dealerId)?.name || 'UNKNOWN'}</p>
                                   </div>
                                 )}

@@ -95,7 +95,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState(0);
   const [showBatchSuccess, setShowBatchSuccess] = useState(false);
-  const [batchSuccessDetails, setBatchSuccessDetails] = useState({ partnerName: '', count: 0 });
+  const [batchSuccessDetails, setBatchSuccessDetails] = useState({ dealerName: '', count: 0 });
 
   // Lock Screen State
   const [isLocked, setIsLocked] = useState(false);
@@ -660,7 +660,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         oldBatteryId: activeAsset.battery.id,
         newBatteryId: replacementData.newBatteryId,
         dealerId: replacementData.dealerId,
-        partnerName: dealers.find(d => d.id === replacementData.dealerId)?.name || 'N/A',
+        dealerName: dealers.find(d => d.id === replacementData.dealerId)?.name || 'N/A',
         type: replacementData.settlementMethod
       });
 
@@ -841,8 +841,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
                   </div>
                   <button
                     onClick={async () => {
-                      const dealerName = dealers.find(d => d.id === batchConfig.dealerId)?.name || 'Unknown Partner';
-                      setBatchSuccessDetails({ partnerName: dealerName, count: stagedItems.length });
+                      const dealerName = dealers.find(d => d.id === batchConfig.dealerId)?.name || 'Unknown Dealer';
+                      setBatchSuccessDetails({ dealerName: dealerName, count: stagedItems.length });
 
                       isBatchProcessingRef.current = true;
                       setIsBatchProcessing(true);
@@ -882,7 +882,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
                         });
 
                         await Database.batchAssign(stagedItems, batchConfig.date);
-                        await Database.logActivity('BATCH_ASSIGN', `Batch assigned ${stagedItems.length} items to ${dealerName}`, { count: stagedItems.length, dealerId: batchConfig.dealerId, partnerName: dealerName, batteryIds: stagedItems.map(i => i.id) });
+                        await Database.logActivity('BATCH_ASSIGN', `Batch assigned ${stagedItems.length} items to ${dealerName}`, { count: stagedItems.length, dealerId: batchConfig.dealerId, dealerName: dealerName, batteryIds: stagedItems.map(i => i.id) });
 
                         isBatchProcessingRef.current = false;
                         setIsBatchProcessing(false);
@@ -920,7 +920,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
           <h3 className="text-xl font-bold text-slate-900 mb-2">Unregistered Unit Found</h3>
           <p className="text-slate-500 font-medium mb-8">
             The identifier <span className="font-mono font-bold text-slate-900">{missingSerial}</span> is not in the registry.
-            To add new stock and assign it to a partner, please switch to Batch Mode.
+            To add new stock and assign it to a dealer, please switch to Batch Mode.
           </p>
 
           <button
@@ -1790,7 +1790,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
           <div className="w-full max-w-md space-y-8">
             <div className="space-y-2">
               <h2 className="text-2xl font-black text-white uppercase tracking-tight">Assigning Batteries</h2>
-              <p className="text-indigo-200 font-bold uppercase tracking-widest text-xs">Partner: {batchSuccessDetails.partnerName}</p>
+              <p className="text-indigo-200 font-bold uppercase tracking-widest text-xs">Dealer: {batchSuccessDetails.dealerName}</p>
             </div>
 
             <div className="relative h-4 w-full bg-white/10 rounded-full overflow-hidden border border-white/10">
@@ -1855,7 +1855,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
 
                 <div className="flex flex-col items-center space-y-1">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Dealer Name</span>
-                  <span className="text-xs font-black text-blue-600 uppercase text-center leading-tight">{batchSuccessDetails.partnerName}</span>
+                  <span className="text-xs font-black text-blue-600 uppercase text-center leading-tight">{batchSuccessDetails.dealerName}</span>
                 </div>
               </div>
 

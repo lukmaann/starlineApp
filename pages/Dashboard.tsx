@@ -19,7 +19,7 @@ const Dashboard: React.FC = () => {
       setStats([
         { label: 'Active', value: dashboard.activeWarranties.toLocaleString(), icon: ShieldCheck, color: 'bg-emerald-600', text: 'Live' },
         { label: 'Exchanges', value: dashboard.claimedUnits.toLocaleString(), icon: RefreshCw, color: 'bg-blue-600', text: 'Done' },
-        { label: 'Dealers', value: dashboard.totalDealers.toString(), icon: Users, color: 'bg-indigo-600', text: 'Partners' },
+        { label: 'Dealers', value: dashboard.totalDealers.toString(), icon: Users, color: 'bg-indigo-600', text: 'Dealers' },
         { label: 'Status', value: 'SECURE', icon: Zap, color: 'bg-amber-500', text: 'Health' },
       ]);
 

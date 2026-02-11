@@ -59,7 +59,7 @@ const DealerPrintTemplate: React.FC<{
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-black uppercase tracking-tight text-black">{dealer.name}</h1>
-            <p className="text-sm font-bold text-gray-600 uppercase tracking-widest mt-1">Partner ID: {dealer.id}</p>
+            <p className="text-sm font-bold text-gray-600 uppercase tracking-widest mt-1">Dealer ID: {dealer.id}</p>
             <p className="text-xs font-bold text-gray-500 mt-1">{dealer.location}</p>
           </div>
           <div className="text-right">
@@ -428,17 +428,17 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
 
     if (selectedDealer) {
       await Database.updateDealer(dealerData);
-      await Database.logActivity('PARTNER_UPDATE', `Updated partner details for ${dealerData.name}`, { dealerId: dealerData.id, changes: dealerData });
+      await Database.logActivity('PARTNER_UPDATE', `Updated dealer details for ${dealerData.name}`, { dealerId: dealerData.id, changes: dealerData });
     } else {
       await Database.addDealer(dealerData);
-      await Database.logActivity('PARTNER_ENROLL', `Enrolled new partner ${dealerData.name}`, { dealerId: dealerData.id, initialData: dealerData });
+      await Database.logActivity('PARTNER_ENROLL', `Enrolled new dealer ${dealerData.name}`, { dealerId: dealerData.id, initialData: dealerData });
     }
 
     setIsSubmitting(false);
 
     await loadData();
     setViewMode('LIST');
-    window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: selectedDealer ? 'Partner details updated' : 'Partner enrollment complete' } }));
+    window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: selectedDealer ? 'Dealer details updated' : 'Dealer enrollment complete' } }));
   };
 
   const loadDealerDetail = (dealer: Dealer) => {
@@ -485,11 +485,11 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
     if (!dealerId) return;
 
     if (analytics?.activeUnitCount > 0) {
-      if (!window.confirm(`WARNING: This partner has ${analytics.activeUnitCount} active warranty units.\n\nAre you sure you want to proceed?`)) {
+      if (!window.confirm(`WARNING: This dealer has ${analytics.activeUnitCount} active warranty units.\n\nAre you sure you want to proceed?`)) {
         return;
       }
     } else {
-      if (!window.confirm(`Delete partner ${selectedDealer?.name} permanently?`)) {
+      if (!window.confirm(`Delete dealer ${selectedDealer?.name} permanently?`)) {
         return;
       }
     }
@@ -571,7 +571,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
           onClick={() => { setIsLocked(false); setPendingDealer(null); setLockPassword(''); setLockError(''); }}
           className="mb-8 flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold text-sm transition-all group"
         >
-          <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" /> Back to Partners
+          <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" /> Back to Dealers
         </button>
 
         <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl p-0 max-w-md mx-auto animate-in zoom-in-95 duration-300 relative overflow-hidden text-slate-900">
@@ -589,8 +589,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
               <div className="w-16 h-16 bg-slate-50 border border-slate-200 text-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
                 <Lock size={28} strokeWidth={2} />
               </div>
-              <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">Partner Vault</h3>
-              <p className="text-xs text-slate-500 font-medium">Authorization required for <span className="text-slate-900 font-bold">{pendingDealer?.name || 'Partner'}</span></p>
+              <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">Dealer Vault</h3>
+              <p className="text-xs text-slate-500 font-medium">Authorization required for <span className="text-slate-900 font-bold">{pendingDealer?.name || 'Dealer'}</span></p>
             </div>
 
             {lockError && (
@@ -1100,8 +1100,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
           <div className="mb-8 flex items-center gap-4">
             <button onClick={() => setViewMode('LIST')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500 hover:text-slate-900 transition-all shadow-sm"><ArrowLeft size={20} /></button>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Enrollment Wizard</h1>
-              <p className="text-sm font-medium text-slate-500">Register a new authorized partner in 3 steps</p>
+              <h1 className="text-2xl font-bold text-slate-900">Dealer Enrollment</h1>
+              <p className="text-sm font-medium text-slate-500">Register a new authorized dealer in 3 steps</p>
             </div>
           </div>
 
@@ -1150,7 +1150,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                 <div className="space-y-8 animate-in fade-in slide-in-from-left-4 duration-300">
                   <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-2xl text-blue-700 mb-8 border border-blue-100">
                     <Info size={24} className="shrink-0" />
-                    <p className="text-sm font-medium leading-relaxed">Please ensure the business name matches the legal registration documents. This ID will be used for all warranty claims.</p>
+                    <p className="text-sm font-medium leading-relaxed">Please ensure the business name matches the legal registration documents. This ID will be used for all dealer records.</p>
                   </div>
 
                   <div className="space-y-6 max-w-lg mx-auto">
@@ -1221,7 +1221,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
 
                   <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 text-left space-y-4">
                     <div className="flex justify-between border-b border-slate-200 pb-4">
-                      <span className="text-xs font-bold text-slate-400 uppercase">Partner ID</span>
+                      <span className="text-xs font-bold text-slate-400 uppercase">Dealer ID</span>
                       <span className="text-sm font-black text-slate-700">{generatedId}</span>
                     </div>
                     <div className="flex justify-between border-b border-slate-200 pb-4">
@@ -1265,7 +1265,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                         d.id !== generatedId
                       );
                       if (isDuplicate) {
-                        setError('Partner name already exists in registry');
+                        setError('Dealer name already exists in registry');
                         return;
                       }
                     }
@@ -1294,87 +1294,73 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
     // --- LIST VIEW (Default) ---
     return (
       <>
-        <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 pb-20 text-slate-900">
-          <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm space-y-6">
-            <div className="flex justify-between items-center">
-              {/* <div> */}
-              {/* <h2 className="text-xl font-bold text-slate-700 tracking-tight ">Partner Network</h2> */}
-              {/* <p className="text-sm font-medium text-slate-400 mt-1  tracking-widest">Authorized Distribution Nodes</p> */}
-              {/* </div> */}
+        <div className="max-w-[1600px] mx-auto space-y-6 animate-in fade-in duration-500 pb-20 text-slate-900">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row items-center gap-4">
+            <div className="flex-1 w-full relative group/search">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-blue-500 transition-colors" size={20} />
+              <input
+                placeholder="SEARCH DEALER NAME, ID OR REGION..."
+                className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-lg transition-all uppercase tracking-widest mono text-slate-900 focus:bg-white focus:border-blue-500"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
             </div>
-
-            <div className="flex flex-col md:flex-row items-center gap-4">
-              <div className="flex-1 w-full relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                <input
-                  placeholder="SEARCH PARTNER NAME, ID OR REGION..."
-                  className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-lg transition-all uppercase tracking-widest mono text-slate-900 focus:bg-white focus:border-blue-500"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <button
-                onClick={() => handleStartWizard()}
-                className="px-8 py-4 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-black transition-all shadow-lg active:scale-95 flex items-center justify-center gap-3 group/btn"
-              >
-                <Plus size={18} />
-                <span className="uppercase tracking-widest">Enroll Partner</span>
-              </button>
-            </div>
+            <button
+              onClick={() => handleStartWizard()}
+              className="w-full md:w-auto px-8 py-4 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-black transition-all shadow-lg active:scale-95 flex items-center justify-center gap-3"
+            >
+              <Plus size={18} />
+              <span className="uppercase tracking-widest">Enroll Dealer</span>
+            </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {filteredDealers.map(dealer => (
               <div
                 key={dealer.id}
                 onClick={() => loadDealerDetail(dealer)}
-                className="group relative bg-white border border-slate-200 rounded-[2.5rem] p-10 hover:border-blue-500/30 hover:shadow-[0_20px_50px_rgba(59,130,246,0.1)] transition-all duration-500 cursor-pointer overflow-hidden flex flex-col justify-between min-h-[320px]"
+                className="group bg-white border border-slate-200 rounded-3xl p-8 hover:border-blue-500/50 hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[280px]"
               >
-                {/* Decorative Background Elements */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-500/5 to-transparent rounded-bl-[5rem] -mr-8 -mt-8 group-hover:scale-150 transition-transform duration-700"></div>
-                <div className="absolute bottom-0 right-0 p-12 opacity-[0.03] text-slate-900 rotate-12 pointer-events-none group-hover:scale-110 group-hover:rotate-0 transition-all duration-700">
-                  <Building2 size={200} />
-                </div>
-
-                <div className="relative z-10 space-y-8">
+                <div className="space-y-6">
                   <div className="flex justify-between items-start">
-                    <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-blue-600 group-hover:text-white group-hover:shadow-lg group-hover:shadow-blue-500/20 transition-all duration-500">
+                    <div className="w-14 h-14 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
                       <Store size={28} />
                     </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <div className="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-sm">ID: {dealer.id}</div>
-                      {/* <div className="text-[9px] font-black text-emerald-500 uppercase tracking-widest pl-1 border-l-2 border-emerald-500/20">Active Node</div> */}
+                    <div className="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">
+                      ID: {dealer.id}
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-2 group-hover:text-blue-600 transition-colors">
+                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-tight mb-2 group-hover:text-blue-600 transition-colors">
                       {dealer.name}
                     </h3>
                     <div className="flex items-center gap-2">
-                      <User size={14} className="text-slate-300" />
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{dealer.ownerName}</span>
+                      <UserCheck size={14} className="text-slate-400" />
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{dealer.ownerName || 'Unknown Principal'}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="relative z-10 pt-8 mt-10 border-t border-slate-100 flex flex-col gap-1">
-                  {/* <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Regional HQ</label> */}
-                  <p className="text-[11px] font-bold text-slate-600 uppercase truncate leading-none flex items-center gap-1.5">
-                    <MapPin size={12} className="text-blue-500 shrink-0" />
-                    {dealer.location}
-                  </p>
+                <div className="pt-6 mt-6 border-t border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <MapPin size={14} className="text-blue-500" />
+                    <span className="text-[11px] font-bold uppercase tracking-tight truncate max-w-[200px]">
+                      {dealer.location}
+                    </span>
+                  </div>
+                  <ChevronRight size={18} className="text-slate-300 group-hover:translate-x-1 transition-transform" />
                 </div>
-
-                {/* Interaction Indicator */}
-
               </div>
             ))}
-            {filteredDealers.length === 0 && <div className="col-span-full py-20 flex flex-col items-center justify-center opacity-40"><Store size={64} className="text-slate-300 mb-4" /><p className="text-sm font-black text-slate-400 uppercase tracking-widest">No partners found matching criteria</p></div>}
+            {filteredDealers.length === 0 && (
+              <div className="col-span-full py-20 flex flex-col items-center justify-center opacity-40">
+                <Store size={64} className="text-slate-300 mb-4" />
+                <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No dealers found matching criteria</p>
+              </div>
+            )}
           </div>
-
         </div>
-
       </>
     );
   }

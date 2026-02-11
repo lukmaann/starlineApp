@@ -675,8 +675,8 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
                                           <span className="font-bold text-slate-700">{metadata.type}</span>
                                         </div>
                                         <div className="flex justify-between p-2 border-b border-slate-100">
-                                          <span className="text-slate-400 font-bold uppercase">Partner </span>
-                                          <span className="font-bold text-slate-700">{metadata.partnerName}</span>
+                                          <span className="text-slate-400 font-bold uppercase">Dealer </span>
+                                          <span className="font-bold text-slate-700">{metadata.dealerName}</span>
                                         </div>
                                       </div>
                                     </div>
@@ -1036,13 +1036,13 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
                 {/* Dealer Deletion */}
                 <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm">
                   <div className="mb-4">
-                    <h5 className="font-bold text-slate-900 text-sm">Remove Partner</h5>
+                    <h5 className="font-bold text-slate-900 text-sm">Remove Dealer</h5>
                     <p className="text-xs text-slate-500 mt-1">Permanently delete a dealer and their records.</p>
                   </div>
 
                   <div className="space-y-3">
                     <select className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-rose-500" value={deletingDealer?.id || ''} onChange={e => { setDeletingDealer(dealers.find(d => d.id === e.target.value) as any); setModelDeleteConfirmName(''); }}>
-                      <option value="">Select Partner...</option>
+                      <option value="">Select Dealer...</option>
                       {dealers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
 
@@ -1061,17 +1061,17 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
                         if (deletingDealer) {
                           setIsActionLoading(true);
                           await Database.deleteDealer(deletingDealer.id);
-                          await Database.logActivity('PARTNER_DELETE', `Deleted partner ${deletingDealer.name}`, { dealerId: deletingDealer.id, name: deletingDealer.name });
+                          await Database.logActivity('PARTNER_DELETE', `Deleted dealer ${deletingDealer.name}`, { dealerId: deletingDealer.id, name: deletingDealer.name });
                           setDeletingDealer(null);
                           setModelDeleteConfirmName('');
                           loadModelData();
-                          notify('Partner removed successfully', 'success');
+                          notify('Dealer removed successfully', 'success');
                           setIsActionLoading(false);
                         }
                       }}
                       className="w-full py-2 bg-white border border-rose-200 text-rose-600 font-bold rounded-lg text-xs hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
-                      {isActionLoading ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Delete Partner'}
+                      {isActionLoading ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Delete Dealer'}
                     </button>
                   </div>
                 </div>

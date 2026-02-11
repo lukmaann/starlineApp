@@ -477,7 +477,7 @@ const Sales: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-8">
               <div className="relative" ref={dealerRef}>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">AUTHORIZED CHANNEL PARTNER</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">AUTHORIZED DEALER</label>
                 <div className="relative mt-3">
                   <Store size={18} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" />
                   <input

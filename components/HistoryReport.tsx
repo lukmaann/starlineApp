@@ -13,7 +13,7 @@ interface HistoryReportProps {
 }
 
 const HistoryReport: React.FC<HistoryReportProps> = ({ battery, lineage, replacements, dealers, saleDate }) => {
-    const getDealerName = (id?: string) => dealers.find(d => d.id === id)?.name || 'UNKNOWN PARTNER';
+    const getDealerName = (id?: string) => dealers.find(d => d.id === id)?.name || 'UNKNOWN DEALER';
     const getDealterLocation = (id?: string) => dealers.find(d => d.id === id)?.location || 'UNKNOWN LOCATION';
 
 
@@ -60,7 +60,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ battery, lineage, replace
 
                     <p>
                         <strong>2. SALE & ACTIVATION</strong><br />
-                        The unit was procured by <strong>{battery.customerName || 'an unregistered customer'}</strong> {battery.customerPhone ? `(Contact: ${battery.customerPhone})` : ''} from our authorized channel partner, <strong>{getDealerName(battery.dealerId)}</strong> based in {getDealterLocation(battery.dealerId)}.
+                        The unit was procured by <strong>{battery.customerName || 'an unregistered customer'}</strong> {battery.customerPhone ? `(Contact: ${battery.customerPhone})` : ''} from our authorized dealer, <strong>{getDealerName(battery.dealerId)}</strong> based in {getDealterLocation(battery.dealerId)}.
                         The transaction was recorded on <strong>{formatDate(saleDate || originalBattery?.activationDate)}</strong>, marking the official commencement of the warranty protection period.
                     </p>
 

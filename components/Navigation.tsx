@@ -33,7 +33,7 @@ interface NavigationProps {
 const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
   const menuItems = [
     { id: 'scanner', label: 'Hub Trace', icon: Barcode },
-    { id: 'dealers', label: 'Partners', icon: Users },
+    { id: 'dealers', label: 'Dealers', icon: Users },
   ];
 
   return (

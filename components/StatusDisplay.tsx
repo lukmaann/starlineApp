@@ -68,13 +68,13 @@ export const StatusDisplay: React.FC<StatusDisplayProps> = ({
                     border: isBanner ? 'border-transparent' : 'border-orange-100'
                 };
             case BatteryStatus.MANUFACTURED:
-                const isPartner = !!dealerId;
+                const isDealer = !!dealerId;
                 return {
-                    label: isPartner ? 'Partner Stock' : 'Central Stock',
-                    icon: isPartner ? Building2 : Package,
-                    bg: isBanner ? (isPartner ? 'bg-indigo-600' : 'bg-blue-600') : (isPartner ? 'bg-indigo-50' : 'bg-blue-50'),
-                    text: isBanner ? 'text-white' : (isPartner ? 'text-indigo-600' : 'text-blue-600'),
-                    border: isBanner ? 'border-transparent' : (isPartner ? 'border-indigo-100' : 'border-blue-100')
+                    label: isDealer ? 'Dealer Stock' : 'Central Stock',
+                    icon: isDealer ? Building2 : Package,
+                    bg: isBanner ? (isDealer ? 'bg-indigo-600' : 'bg-blue-600') : (isDealer ? 'bg-indigo-50' : 'bg-blue-50'),
+                    text: isBanner ? 'text-white' : (isDealer ? 'text-indigo-600' : 'text-blue-600'),
+                    border: isBanner ? 'border-transparent' : (isDealer ? 'border-indigo-100' : 'border-blue-100')
                 };
             default:
                 return {

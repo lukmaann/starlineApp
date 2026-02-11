@@ -121,7 +121,7 @@ const Reports: React.FC = () => {
           <table className="w-full text-left border-collapse border-t border-slate-200">
             <thead>
               <tr className="bg-slate-900 text-white uppercase text-[9px] font-black tracking-widest border-b border-slate-100">
-                <th className="px-10 py-5">Rank & Partner</th>
+                <th className="px-10 py-5">Rank & Dealer</th>
                 <th className="px-10 py-5">Units Sold</th>
                 <th className="px-10 py-5">Gross Volume</th>
                 <th className="px-10 py-5 text-right">Market Share</th>
