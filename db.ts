@@ -780,8 +780,9 @@ export class Database {
           const modelName = oldBattery ? oldBattery.model : 'UNKNOWN';
 
           // 2. Get Warranty Duration for this model
-          const modelConfig = (await this.query<{ defaultWarrantyMonths: number }>('SELECT defaultWarrantyMonths FROM models WHERE name = ?', [modelName]))[0];
+          const modelConfig = (await this.query<{ defaultWarrantyMonths: number, defaultCapacity: string }>('SELECT defaultWarrantyMonths, defaultCapacity FROM models WHERE name = ?', [modelName]))[0];
           const warrantyMonths = modelConfig ? modelConfig.defaultWarrantyMonths : 24;
+          const capacity = modelConfig ? modelConfig.defaultCapacity : 'UNKNOWN';
 
           const expiryDate = new Date(date);
           expiryDate.setMonth(expiryDate.getMonth() + warrantyMonths);
@@ -789,7 +790,7 @@ export class Database {
           await this.addBattery({
             id: replId,
             model: modelName,
-            capacity: 'UNKNOWN',
+            capacity: capacity,
             manufactureDate: getLocalDate(),
             status: BatteryStatus.ACTIVE,
             replacementCount: 0,
@@ -854,7 +855,7 @@ export class Database {
       JOIN batteries ob ON r.oldBatteryId = ob.id
       LEFT JOIN batteries nb ON r.newBatteryId = nb.id
       LEFT JOIN sales s ON r.oldBatteryId = s.batteryId
-      WHERE r.settlementDate IS NULL
+      WHERE r.settlementType IS NULL
 
       UNION ALL
 
@@ -894,7 +895,7 @@ export class Database {
       FROM dealers d
       JOIN replacements r ON d.id = r.dealerId
       LEFT JOIN sales s ON r.oldBatteryId = s.batteryId
-      WHERE r.settlementDate IS NULL
+      WHERE r.settlementType IS NULL
       GROUP BY d.id
       ORDER BY pendingClaims DESC
     `;
