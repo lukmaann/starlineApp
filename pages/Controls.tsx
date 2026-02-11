@@ -4,17 +4,17 @@ import {
   Shield, Key, User as UserIcon, Save, Loader2, Lock, ArrowRight,
   ShieldCheck, ShieldAlert, AlertTriangle, Fingerprint, Layers,
   Box, FileSignature, Settings2, ClipboardCheck, ChevronLeft,
-  ChevronRight, CheckCircle2, Plus, Edit2, Trash2, Info, X, RefreshCw, Activity
+  ChevronRight, CheckCircle2, Plus, Edit2, Trash2, Info, X, RefreshCw, Activity, Sliders
 } from 'lucide-react';
 import { Database } from '../db';
 import { BatteryModel, Dealer } from '../types';
 import { AuthSession } from '../utils/AuthSession';
 
-interface SettingsProps {
+interface ControlsProps {
   active?: boolean;
 }
 
-const Settings: React.FC<SettingsProps> = ({ active }) => {
+const Controls: React.FC<ControlsProps> = ({ active }) => {
   // Global Lock State
   const [isLocked, setIsLocked] = useState(!AuthSession.isValid());
 
@@ -166,7 +166,7 @@ const Settings: React.FC<SettingsProps> = ({ active }) => {
       await Database.setConfig('starline_admin_pass', formData.newPassword);
     }
 
-    notify('Security settings updated successfully');
+    notify('Security controls updated successfully');
     setIsLoading(false);
     // Reset sensitive fields
     setFormData(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
@@ -245,9 +245,9 @@ const Settings: React.FC<SettingsProps> = ({ active }) => {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-100px)] text-slate-900 animate-in fade-in duration-500">
         <div className="w-20 h-20 bg-slate-100 rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-slate-200">
-          <Lock size={32} className="text-slate-400" />
+          <Sliders size={32} className="text-slate-400" />
         </div>
-        <h2 className="text-2xl font-black uppercase tracking-tight mb-2">Settings Locked</h2>
+        <h2 className="text-2xl font-black uppercase tracking-tight mb-2">Controls Locked</h2>
         <p className="text-slate-400 font-medium text-sm mb-8">Unlock the session from the top bar to access configuration.</p>
       </div>
     );
@@ -258,7 +258,7 @@ const Settings: React.FC<SettingsProps> = ({ active }) => {
       {/* Header & Tabs */}
       <div className="flex flex-col md:flex-row items-center justify-between gap-4 px-4 pt-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Settings</h1>
+          <h1 className="text-xl font-bold text-slate-900">Controls</h1>
         </div>
         <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm overflow-x-auto max-w-full">
           <button
@@ -333,7 +333,7 @@ const Settings: React.FC<SettingsProps> = ({ active }) => {
                       <div><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</p><p className="text-sm font-bold truncate w-32">{editingModelId || 'New Model'}</p></div>
                     </div>
                     <div className="space-y-2">
-                      {[{ step: 0, label: 'Identity', icon: FileSignature }, { step: 1, label: 'Specifications', icon: Settings2 }, { step: 2, label: 'Review', icon: ClipboardCheck }].map((s, idx) => (
+                      {[{ step: 0, label: 'Identity', icon: FileSignature }, { step: 1, label: 'Specifications', icon: Sliders }, { step: 2, label: 'Review', icon: ClipboardCheck }].map((s, idx) => (
                         <div key={idx} className={`flex items-center space-x-3 p-3 rounded-xl transition-all ${modelWizardStep === s.step ? 'bg-white shadow-sm border border-slate-200 text-blue-600' : 'text-slate-400'}`}>
                           <s.icon size={16} />
                           <span className="text-xs font-bold">{s.label}</span>
@@ -1143,4 +1143,4 @@ const Settings: React.FC<SettingsProps> = ({ active }) => {
   );
 };
 
-export default Settings;
+export default Controls;

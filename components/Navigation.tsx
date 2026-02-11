@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Battery, Users, Zap, ChevronRight, Barcode, ShieldCheck, Settings } from 'lucide-react';
+import { Battery, Users, Zap, ChevronRight, Barcode, ShieldCheck, Sliders } from 'lucide-react';
 
 interface NavItemProps {
   icon: React.ElementType;
@@ -65,12 +65,12 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
 
       <div className="mt-auto border-t border-slate-100 p-4 bg-slate-50/50">
         <button
-          onClick={() => setActiveTab('settings')}
-          className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all ${activeTab === 'settings' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-100'
+          onClick={() => setActiveTab('controls')}
+          className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all ${activeTab === 'controls' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-100'
             }`}
         >
-          <Settings size={18} />
-          <span className="text-[13px] font-semibold">Settings</span>
+          <Sliders size={18} />
+          <span className="text-[13px] font-semibold">Controls</span>
         </button>
 
       </div>

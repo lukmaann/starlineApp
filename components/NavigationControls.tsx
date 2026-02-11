@@ -20,7 +20,7 @@ const NavigationControls: React.FC<NavigationControlsProps> = ({
     activeTab
 }) => {
     const handleRefresh = () => {
-        window.location.reload();
+        window.dispatchEvent(new CustomEvent('app-refresh'));
     };
 
     const handleClearHistory = () => {

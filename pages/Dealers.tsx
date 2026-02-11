@@ -151,10 +151,10 @@ const DealerPrintTemplate: React.FC<{
           </div>
         </div>
 
-        <div className="bg-gray-50 p-6 rounded-2xl border-l-4 border-black">
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Report Description</p>
+        <div className="bg-gray-50 p-6 rounded-2xl ">
+          <p className="text-[10px] font-black text-gray-400  tracking-widest mb-1">Report Description</p>
           <p className="text-base font-bold text-black leading-relaxed">
-            Inventory report for <span className="uppercase text-black">{reportTitle}</span> {modelText} • {dateRangeText || ' '}
+            Inventory report for <span className=" text-black">{reportTitle}</span> {modelText} • {dateRangeText || ' '}
           </p>
         </div>
       </div>
@@ -259,6 +259,10 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   useEffect(() => {
     if (active) {
       loadData();
+      // Refresh analytics if we are in detail view
+      if (selectedDealer && viewMode === 'DETAIL') {
+        Database.getDealerAnalytics(selectedDealer.id).then(setAnalytics);
+      }
     }
   }, [active]);
 
@@ -353,8 +357,10 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   };
 
   useEffect(() => {
-    fetchTabData();
-  }, [selectedDealer, activeLogTab, unitPage, logSearchQuery, filterDateStart, filterDateEnd, filterModel]);
+    if (active) {
+      fetchTabData();
+    }
+  }, [selectedDealer, activeLogTab, unitPage, logSearchQuery, filterDateStart, filterDateEnd, filterModel, active]);
 
   // --- ACTIONS ---
 

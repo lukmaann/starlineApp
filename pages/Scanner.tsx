@@ -33,6 +33,8 @@ interface ScannerProps {
 const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, initialState, onStateChange, active }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const replacementInputRef = useRef<HTMLInputElement>(null);
+  const batchIntervalRef = useRef<any>(null);
+  const isBatchProcessingRef = useRef(false);
 
   const [scanBuffer, setScanBuffer] = useState('');
   const [activeAsset, setActiveAsset] = useState<any>(null);
@@ -89,6 +91,12 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   const [warrantyCalculation, setWarrantyCalculation] = useState<any>(null);
   const [isApplyingCorrection, setIsApplyingCorrection] = useState(false);
 
+  // Batch Feedback State
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [showBatchSuccess, setShowBatchSuccess] = useState(false);
+  const [batchSuccessDetails, setBatchSuccessDetails] = useState({ partnerName: '', count: 0 });
+
   // Lock Screen State
   const [isLocked, setIsLocked] = useState(false);
   const [lockPassword, setLockPassword] = useState('');
@@ -140,6 +148,15 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     window.addEventListener('session-changed' as any, handleSessionChange);
     return () => window.removeEventListener('session-changed' as any, handleSessionChange);
   }, []);
+
+  const handleCancelBatch = () => {
+    if (batchIntervalRef.current) {
+      clearInterval(batchIntervalRef.current);
+    }
+    isBatchProcessingRef.current = false;
+    setIsBatchProcessing(false);
+    setBatchProgress(0);
+  };
 
   // Save State on Change
   useEffect(() => {
@@ -824,13 +841,63 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
                   </div>
                   <button
                     onClick={async () => {
-                      setIsActionLoading(true);
-                      await Database.batchAssign(stagedItems, batchConfig.date);
-                      const dealerName = dealers.find(d => d.id === batchConfig.dealerId)?.name;
-                      await Database.logActivity('BATCH_ASSIGN', `Batch assigned ${stagedItems.length} items to ${dealerName}`, { count: stagedItems.length, dealerId: batchConfig.dealerId, partnerName: dealerName, batteryIds: stagedItems.map(i => i.id) });
-                      notify(`Processed ${stagedItems.length} items`);
-                      setStagedItems([]);
-                      setIsActionLoading(false);
+                      const dealerName = dealers.find(d => d.id === batchConfig.dealerId)?.name || 'Unknown Partner';
+                      setBatchSuccessDetails({ partnerName: dealerName, count: stagedItems.length });
+
+                      isBatchProcessingRef.current = true;
+                      setIsBatchProcessing(true);
+                      setBatchProgress(0);
+
+                      // Progress animation over 5 seconds
+                      const duration = 5000;
+                      const interval = 50;
+                      const steps = duration / interval;
+                      let currentStep = 0;
+
+                      batchIntervalRef.current = setInterval(() => {
+                        currentStep++;
+                        const progress = (currentStep / steps) * 100;
+                        setBatchProgress(progress);
+
+                        if (currentStep >= steps) {
+                          clearInterval(batchIntervalRef.current);
+                        }
+                      }, interval);
+
+                      try {
+                        // Create a promise that can be cancelled if needed
+                        await new Promise((resolve, reject) => {
+                          const timeout = setTimeout(resolve, duration);
+                          // Periodically check if we should abort using the Ref
+                          const abortCheck = setInterval(() => {
+                            if (!isBatchProcessingRef.current && currentStep < steps) {
+                              clearTimeout(timeout);
+                              clearInterval(abortCheck);
+                              reject('CANCELLED');
+                            } else if (currentStep >= steps || !isBatchProcessingRef.current) {
+                              clearInterval(abortCheck);
+                              if (!isBatchProcessingRef.current) reject('CANCELLED');
+                            }
+                          }, 100);
+                        });
+
+                        await Database.batchAssign(stagedItems, batchConfig.date);
+                        await Database.logActivity('BATCH_ASSIGN', `Batch assigned ${stagedItems.length} items to ${dealerName}`, { count: stagedItems.length, dealerId: batchConfig.dealerId, partnerName: dealerName, batteryIds: stagedItems.map(i => i.id) });
+
+                        isBatchProcessingRef.current = false;
+                        setIsBatchProcessing(false);
+                        setShowBatchSuccess(true);
+                        setStagedItems([]);
+                      } catch (err) {
+                        isBatchProcessingRef.current = false;
+                        setIsBatchProcessing(false);
+                        if (err === 'CANCELLED') {
+                          console.log('Batch assignment cancelled by user');
+                        } else {
+                          console.error('Batch assignment failed:', err);
+                          notify('Error: Batch processing failed. Please try again.', 'error');
+                        }
+                      }
                     }}
                     disabled={isActionLoading}
                     className="mt-6 w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg font-bold text-xs uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2"
@@ -1716,6 +1783,96 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       </div>
 
       {/* Session Lock handled via Navigation */}
+
+      {/* Batch Processing Overlay */}
+      {isBatchProcessing && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
+          <div className="w-full max-w-md space-y-8">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-black text-white uppercase tracking-tight">Assigning Batteries</h2>
+              <p className="text-indigo-200 font-bold uppercase tracking-widest text-xs">Partner: {batchSuccessDetails.partnerName}</p>
+            </div>
+
+            <div className="relative h-4 w-full bg-white/10 rounded-full overflow-hidden border border-white/10">
+              <div
+                className="absolute top-0 left-0 h-full bg-indigo-500 transition-all duration-100 ease-linear shadow-[0_0_20px_rgba(99,102,241,0.5)]"
+                style={{ width: `${batchProgress}%` }}
+              />
+            </div>
+
+            <div className="flex justify-between items-center text-white mono text-xs font-bold">
+              <span>{Math.round(batchProgress)}% COMPLETE</span>
+              <span>{stagedItems.length} UNITS</span>
+            </div>
+
+            <div className="pt-4 space-y-4">
+              <p className="text-indigo-300 text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">
+                DO NOT CLOSE THE APPLICATION
+              </p>
+
+              <button
+                onClick={handleCancelBatch}
+                className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all border border-white/10"
+              >
+                Cancel Process
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Success Dialog */}
+      {showBatchSuccess && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in zoom-in duration-300">
+          <div className="bg-white rounded-[2.5rem] p-1 shadow-2xl max-w-sm w-full relative overflow-hidden">
+            {/* Animated Background Gradients */}
+            <div className="absolute top-0 inset-x-0 h-40 bg-gradient-to-b from-emerald-50 to-transparent -z-10" />
+
+            <div className="p-10 space-y-8">
+              <div className="flex flex-col items-center">
+                <div className="relative">
+                  {/* Outer pulse ring */}
+                  <div className="absolute inset-0 bg-emerald-500 rounded-full animate-ping opacity-20" />
+                  <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center relative shadow-inner">
+                    <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-xl shadow-emerald-500/40 animate-in bounce-in duration-700">
+                      <CheckCircle2 size={40} strokeWidth={3} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight mt-6">Done</h3> */}
+                <div className="h-1 w-12 bg-emerald-500 rounded-full mt-3" />
+                <p className="text-slate-500 font-bold text-sm mt-3">Batch assigned successfully</p>
+              </div>
+
+              <div className="bg-slate-50 rounded-3xl p-8 space-y-6">
+                <div className="flex flex-col items-center space-y-1">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Units Processed</span>
+                  <span className="text-4xl font-black text-slate-900 tracking-tighter">{batchSuccessDetails.count}</span>
+                </div>
+
+                <div className="h-px bg-slate-200" />
+
+                <div className="flex flex-col items-center space-y-1">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Dealer Name</span>
+                  <span className="text-xs font-black text-blue-600 uppercase text-center leading-tight">{batchSuccessDetails.partnerName}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowBatchSuccess(false);
+                  window.location.reload();
+                }}
+                className="w-full py-5 bg-slate-900 hover:bg-black text-white rounded-2xl font-black uppercase tracking-widest text-[11px] transition-all shadow-xl active:scale-95 flex items-center justify-center gap-2 group"
+              >
+                Close
+                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

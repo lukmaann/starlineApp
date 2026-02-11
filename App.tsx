@@ -4,7 +4,7 @@ import Navigation from './components/Navigation';
 import Scanner from './pages/Scanner';
 import SessionLock from './components/SessionLock';
 import Dealers from './pages/Dealers';
-import Settings from './pages/Settings';
+import Controls from './pages/Controls';
 import Login from './pages/Login';
 import { Database } from './db';
 import { Zap, Download, AlertTriangle, CheckCircle2, X, Settings as SettingsIcon, LogOut, Bell } from 'lucide-react';
@@ -28,6 +28,7 @@ const App: React.FC = () => {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [pendingSearch, setPendingSearch] = useState<string | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -60,6 +61,14 @@ const App: React.FC = () => {
 
     window.addEventListener('db-synced' as any, () => showToast('Database Synced'));
     window.addEventListener('app-notify' as any, handleNotify);
+
+    const handleAppRefresh = () => {
+      setIsRefreshing(true);
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000); // 20ms refresh effect as requested
+    };
+    window.addEventListener('app-refresh' as any, handleAppRefresh);
 
     // Backup Reminder Check
     const lastBackup = localStorage.getItem('lastBackupDate');
@@ -109,21 +118,21 @@ const App: React.FC = () => {
             active={activeTab === 'dealers'}
           />
         </div>
-        <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
-          <Settings active={activeTab === 'settings'} />
+        <div style={{ display: activeTab === 'controls' ? 'block' : 'none' }}>
+          <Controls active={activeTab === 'controls'} />
         </div>
       </>
     );
   };
 
-  if (isLoading) return (
+  if (isLoading || isRefreshing) return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center space-y-4">
       <div className="bg-blue-600 p-4 rounded-3xl shadow-2xl shadow-blue-500/40 animate-bounce">
         <Zap size={40} className="text-white" fill="currentColor" />
       </div>
       <div className="text-center">
         <h2 className="text-slate-900 font-bold text-lg">Starline Enterprise</h2>
-        <p className="text-slate-400 font-medium text-sm">Synchronizing Registry...</p>
+        <p className="text-slate-400 font-medium text-sm">{isRefreshing ? 'Refreshing registry...' : 'Synchronizing Registry...'}</p>
       </div>
     </div>
   );

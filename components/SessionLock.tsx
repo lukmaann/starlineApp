@@ -81,63 +81,90 @@ const SessionLock: React.FC<{
         <div className={`relative ${className || ''}`}>
             <button
                 onClick={handleToggle}
-                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg font-bold text-xs transition-all border ${isLocked
-                    ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
-                    : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
+                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg font-bold text-[10px] tracking-widest transition-all border shadow-sm active:scale-95 ${isLocked
+                    ? 'bg-white text-rose-600 border-rose-100 hover:bg-rose-50 hover:border-rose-200'
+                    : 'bg-white text-emerald-600 border-emerald-100 hover:bg-emerald-50 hover:border-emerald-200'
                     }`}
                 title={isLocked ? "Click to Unlock Session" : "Click to Lock Session"}
             >
-                {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
-                {/* <span>{isLocked ? 'SESSION LOCKED' : 'SESSION ACTIVE'}</span> */}
+                <div className={`p-1 rounded-md ${isLocked ? 'bg-rose-50' : 'bg-emerald-50'}`}>
+                    {isLocked ? <Lock size={12} strokeWidth={3} /> : <Unlock size={12} strokeWidth={3} />}
+                </div>
+                <span className="uppercase">{isLocked ? 'Locked' : 'Active'}</span>
             </button>
 
             {showModal && (
                 <>
-                    <div className="fixed inset-0 z-[100] cursor-default" onClick={() => setShowModal(false)} />
-                    <div className={`absolute right-0 w-80 z-[200] bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${popoverDirection === 'up' ? 'bottom-full mb-3 slide-in-from-bottom-2' : 'top-full mt-3 slide-in-from-top-2'}`}>
-                        <div className="bg-slate-50 p-3 border-b border-slate-100 flex justify-between items-center">
-                            <div className="flex items-center gap-2 text-slate-500 font-bold text-[10px] uppercase tracking-wider">
-                                <ShieldCheck size={14} />
-                                <span>Security Check</span>
+                    <div className="fixed inset-0 z-[100] cursor-default bg-slate-900/5 backdrop-blur-[2px]" onClick={() => setShowModal(false)} />
+                    <div className={`absolute right-0 w-80 z-[200] bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${popoverDirection === 'up' ? 'bottom-full mb-4 slide-in-from-bottom-2' : 'top-full mt-2 slide-in-from-top-2'}`}>
+                        {/* Header */}
+                        <div className="bg-slate-50/50 p-4 border-b border-slate-50 flex justify-between items-center">
+                            <div className="flex items-center gap-2.5">
+                                <div className="bg-white p-1.5 rounded-lg border border-slate-200 shadow-sm text-slate-400">
+                                    <ShieldCheck size={16} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none">Security Control</p>
+                                    <p className="text-[11px] font-bold text-slate-900 mt-1">Verified Access Required</p>
+                                </div>
                             </div>
-                            <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                                <X size={14} />
+                            <button onClick={() => setShowModal(false)} className="p-1.5 text-slate-300 hover:text-slate-500 hover:bg-slate-100 rounded-lg transition-all">
+                                <X size={16} />
                             </button>
                         </div>
 
-                        <div className="p-4">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${error ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-600'}`}>
-                                    {error ? <ShieldAlert size={20} /> : <Key size={20} />}
+                        {/* Content */}
+                        <div className="p-6">
+                            <div className="flex flex-col items-center text-center mb-6">
+                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 shadow-inner transition-all duration-300 ${error ? 'bg-rose-50 text-rose-500 animate-shake' : 'bg-slate-50 text-slate-400'}`}>
+                                    {error ? <ShieldAlert size={28} /> : <Key size={28} />}
                                 </div>
-                                <div>
-                                    <h3 className="text-slate-900 font-black text-sm uppercase tracking-tight">Unlock Session</h3>
-                                    <p className="text-[10px] text-slate-500 font-medium">Enter admin key to proceed</p>
-                                </div>
+                                <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Unlock Session</h3>
+                                <p className="text-xs text-slate-500 font-medium mt-1 px-4 leading-relaxed">Enter your master authorization key to enable restricted controls.</p>
                             </div>
 
-                            <form onSubmit={handleUnlock} className="space-y-3">
-                                <div>
-                                    <input
-                                        id="session-lock-input"
-                                        type="password"
-                                        value={password}
-                                        onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                                        placeholder="ENTER KEY..."
-                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-center text-sm text-slate-900 outline-none focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-300 uppercase tracking-widest"
-                                        autoFocus
-                                    />
-                                    {error && <p className="text-[9px] font-bold text-rose-500 text-center mt-1 animate-pulse">{error}</p>}
+                            <form onSubmit={handleUnlock} className="space-y-4">
+                                <div className="space-y-2">
+                                    <div className="relative group">
+                                        <input
+                                            id="session-lock-input"
+                                            type="password"
+                                            value={password}
+                                            onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                                            placeholder="••••••••"
+                                            className={`w-full px-4 py-3.5 bg-slate-50 border rounded-xl font-bold text-center text-lg text-slate-900 outline-none transition-all placeholder:text-slate-300 tracking-[0.3em] ${error ? 'border-rose-200 focus:border-rose-400 bg-rose-50/30' : 'border-slate-100 focus:border-blue-500 focus:bg-white focus:shadow-lg focus:shadow-blue-500/5'}`}
+                                            autoFocus
+                                        />
+                                        <div className="absolute inset-0 border border-transparent group-focus-within:border-blue-500/10 rounded-xl pointer-events-none transition-all" />
+                                    </div>
+                                    {error && (
+                                        <div className="flex items-center justify-center gap-1.5 py-1 px-2 bg-rose-50 border border-rose-100 rounded-lg animate-in slide-in-from-top-1">
+                                            <ShieldAlert size={12} className="text-rose-500" />
+                                            <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">{error}</p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <button
                                     type="submit"
                                     disabled={isLoading || !password}
-                                    className="w-full py-2.5 bg-slate-900 hover:bg-black text-white rounded-lg font-bold text-[10px] uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-slate-900/10 transition-all disabled:opacity-50 disabled:scale-[0.98] disabled:cursor-not-allowed flex items-center justify-center gap-2 group"
                                 >
-                                    {isLoading ? <Loader2 size={14} className="animate-spin" /> : 'Authorize Access'}
+                                    {isLoading ? (
+                                        <Loader2 size={16} className="animate-spin" />
+                                    ) : (
+                                        <>
+                                            <span>Authorize Access</span>
+                                            <Unlock size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                                        </>
+                                    )}
                                 </button>
                             </form>
+                        </div>
+
+                        {/* Footer Info */}
+                        <div className="bg-slate-50/30 px-6 py-4 border-t border-slate-50 text-center">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Starline Secure Protocol v4.0</p>
                         </div>
                     </div>
                 </>
