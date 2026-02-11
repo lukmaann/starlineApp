@@ -26,6 +26,7 @@ import {
   PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 import { SettlementModal, SettlementTarget } from '../components/SettlementModal';
+import BatteryPrintTemplate from '../components/BatteryPrintTemplate';
 
 interface DealersProps {
   onNavigateToHub?: (serial: string) => void;
@@ -34,134 +35,7 @@ interface DealersProps {
   active?: boolean;
 }
 
-const DealerPrintTemplate: React.FC<{
-  dealer: Dealer;
-  data: any[];
-  type: 'ACTIVE' | 'EXPIRED' | 'EXCHANGES' | 'RETURNED';
-  startDate?: string;
-  endDate?: string;
-  filterModel?: string;
-}> = ({ dealer, data, type, startDate, endDate, filterModel }) => {
 
-  const reportTitle = type === 'ACTIVE' ? 'Active Batteries' : type === 'EXPIRED' ? 'Expired Batteries' : type === 'RETURNED' ? 'Returned Batteries (Pending)' : 'Exchange History';
-  const modelText = filterModel ? `[Model: ${filterModel}]` : 'for all models';
-  const dateRangeText = startDate && endDate
-    ? `from ${formatDate(startDate)} to ${formatDate(endDate)}`
-    : startDate
-      ? `from ${formatDate(startDate)} onwards`
-      : endDate
-        ? `up to ${formatDate(endDate)}`
-        : '';
-
-  return (
-    <div id="dealer-printable" className="w-full max-w-[210mm] mx-auto bg-white p-8 font-sans">
-      {/* Header */}
-      <div className="border-b-2 border-black pb-6 mb-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-black uppercase tracking-tight text-black">{dealer.name}</h1>
-            <p className="text-sm font-bold text-gray-600 uppercase tracking-widest mt-1">Dealer ID: {dealer.id}</p>
-            <p className="text-xs font-bold text-gray-500 mt-1">{dealer.location}</p>
-          </div>
-          <div className="text-right">
-            <div className="text-black text-xs font-black uppercase tracking-widest inline-block border-2 border-black px-3 py-1">
-              Date: {formatDate(new Date())}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-8 border-l-4 border-black pl-4">
-          <p className="text-sm font-medium text-gray-400 uppercase tracking-widest mb-1 font-mono">Section</p>
-          <p className="text-lg font-black text-black leading-relaxed uppercase tracking-tight">
-            Battery Details
-          </p>
-        </div>
-      </div>
-
-      {/* Table */}
-      <table className="w-full text-left text-xs text-black">
-        <thead>
-          <tr className="border-b-2 border-black">
-            {type === 'EXCHANGES' ? (
-              <>
-                <th className="py-3 px-2 font-black uppercase tracking-wider">Old Unit</th>
-                <th className="py-3 px-2 font-black uppercase tracking-wider text-center">Dates (Sent / Sold)</th>
-                <th className="py-3 px-2 font-black uppercase tracking-wider">Replacement Date</th>
-                <th className="py-3 px-2 font-black uppercase tracking-wider">New Unit</th>
-                <th className="py-3 px-2 font-black uppercase tracking-wider">Settlement</th>
-              </>
-            ) : (
-              <>
-                <th className="py-3 px-2 font-black uppercase tracking-wider">Serial No.</th>
-                <th className="py-3 px-2 font-black uppercase tracking-wider">Model</th>
-                <th className="py-3 px-2 font-black uppercase tracking-wider text-right">Sold to Dealer</th>
-              </>
-            )}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200">
-          {data.map((item, idx) => (
-            <tr key={idx} className="break-inside-avoid border-b border-gray-100">
-              {type === 'EXCHANGES' ? (
-                <>
-                  <td className="py-4 px-2 align-top">
-                    <div className="font-bold text-black text-sm">{item.oldBatteryId}</div>
-                    <div className="text-[10px] text-gray-500 uppercase font-bold">{item.batteryModel}</div>
-                  </td>
-                  <td className="py-4 px-2 align-top text-center">
-                    <div className="text-[10px] font-black">{formatDate(item.sentDate)}</div>
-                    <div className="text-[10px] font-bold text-gray-500 mt-1">{formatDate(item.soldDate)}</div>
-                  </td>
-                  <td className="py-4 px-2 align-top">
-                    <div className="font-bold text-black text-xs">{formatDate(item.replacementDate)}</div>
-                  </td>
-                  <td className="py-4 px-2 align-top">
-                    <div className="font-bold text-black text-sm">{item.newBatteryId}</div>
-                    <div className="text-[10px] text-gray-500 uppercase font-bold">{item.reason}</div>
-                  </td>
-                  <td className="py-4 px-2 align-top">
-                    <div className="font-bold text-gray-800 uppercase text-[11px]">
-                      {item.settlementType === 'DIRECT' ? 'Direct Swap' : item.settlementType === 'STOCK' ? 'Stock Given' : 'Credit/Pay'}
-                    </div>
-                    {item.replenishmentBatteryId && <div className="text-[10px] text-gray-600 mono bg-gray-100 px-1 rounded inline-block mt-1 font-bold">{item.replenishmentBatteryId}</div>}
-                  </td>
-                </>
-              ) : (
-                <>
-                  <td className="py-4 px-2 align-top font-black text-black mono text-sm">{item.id}</td>
-                  <td className="py-4 px-2 align-top font-bold text-gray-700 text-sm">{item.model}</td>
-                  <td className="py-4 px-2 align-top font-medium text-black text-right">
-                    {formatDate(item.manufactureDate)}
-                  </td>
-                </>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* Footer */}
-      <div className="mt-auto pt-6 border-t border-black space-y-6">
-        <div className="flex justify-between items-end">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Batteries</span>
-            <span className="text-xl font-black text-black leading-none">{data.length}</span>
-          </div>
-          <div className="text-right">
-            {/* Footer text removed as per user request */}
-          </div>
-        </div>
-
-        <div className="bg-gray-50 p-6 rounded-2xl ">
-          <p className="text-[10px] font-black text-gray-400  tracking-widest mb-1">Report Description</p>
-          <p className="text-base font-bold text-black leading-relaxed">
-            Inventory report for <span className=" text-black">{reportTitle}</span> {modelText} • {dateRangeText || ' '}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: string }> {
   constructor(props: any) {
@@ -221,7 +95,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const [unitPage, setUnitPage] = useState(0);
-  const unitsLimit = 10;
+  const unitsLimit = 100;
   const [analytics, setAnalytics] = useState<any>(null);
 
   const [formData, setFormData] = useState({
@@ -979,13 +853,23 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
         {createPortal(
           <div id="print-portal-root">
             {selectedDealer && (
-              <DealerPrintTemplate
-                dealer={selectedDealer}
-                data={paginatedData}
-                type={activeLogTab}
-                startDate={filterDateStart}
-                endDate={filterDateEnd}
+              <BatteryPrintTemplate
+                dealerName={selectedDealer.name}
+                dealerId={selectedDealer.id}
+                reportTitle={activeLogTab === 'ACTIVE' ? 'Active Batteries' : activeLogTab === 'EXPIRED' ? 'Expired Batteries' : activeLogTab === 'RETURNED' ? 'Returned Batteries (Pending)' : 'Exchange History'}
+                reportType="dealer"
+                dateRange={
+                  filterDateStart && filterDateEnd
+                    ? `${formatDate(filterDateStart)} - ${formatDate(filterDateEnd)}`
+                    : filterDateStart
+                      ? `${formatDate(filterDateStart)}+`
+                      : filterDateEnd
+                        ? `Up to ${formatDate(filterDateEnd)}`
+                        : 'All Time'
+                }
                 filterModel={filterModel}
+                data={paginatedData}
+                tableType={activeLogTab}
               />
             )}
           </div>,
@@ -1059,7 +943,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Business Name</label>
                       <div className="relative group">
                         <Store className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" />
-                        <input autoFocus className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-all uppercase placeholder:text-slate-300" placeholder="e.g. STARLINE BATTERIES" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                        <input autoFocus maxLength={32} className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-all uppercase placeholder:text-slate-300" placeholder="e.g. STARLINE BATTERIES" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                       </div>
                     </div>
 
@@ -1233,7 +1117,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                   </div>
 
                   <div>
-                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-tight mb-2 group-hover:text-blue-600 transition-colors">
+                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-tight mb-2 group-hover:text-blue-600 transition-colors truncate">
                       {dealer.name}
                     </h3>
                     <div className="flex items-center gap-2">

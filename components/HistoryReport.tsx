@@ -36,7 +36,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ battery, lineage, replace
                 <div className="flex items-center gap-4">
                     <div className="p-3 bg-slate-900 text-white"><Zap size={32} fill="currentColor" /></div>
                     <div>
-                        <h1 className="text-3xl font-black uppercase tracking-tighter">Starline Enterprise</h1>
+                        <h1 className="text-3xl font-black uppercase tracking-tighter">Starline Batteries</h1>
                         <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Official Lifecycle Narrative Report</p>
                     </div>
                 </div>

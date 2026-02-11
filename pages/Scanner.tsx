@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Database } from '../db';
 import { WarrantyCalculator } from '../utils/warrantyCalculator';
 import {
@@ -21,6 +22,7 @@ import BatteryEdit from '../components/BatteryEdit';
 import SessionLock from '../components/SessionLock';
 import { BatteryStatus, type Battery, type Dealer, WarrantyCardStatus, type Sale, Replacement, BatteryModel, WarrantyStatus } from '../types';
 import { AuthSession } from '../utils/AuthSession';
+import BatteryPrintTemplate from '../components/BatteryPrintTemplate';
 
 interface ScannerProps {
   initialSearch?: string | null;
@@ -29,6 +31,7 @@ interface ScannerProps {
   onStateChange?: (state: any) => void;
   active?: boolean;
 }
+
 
 const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, initialState, onStateChange, active }) => {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -95,7 +98,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState(0);
   const [showBatchSuccess, setShowBatchSuccess] = useState(false);
-  const [batchSuccessDetails, setBatchSuccessDetails] = useState({ dealerName: '', count: 0 });
+  const [batchSuccessDetails, setBatchSuccessDetails] = useState<{ dealerName: string; count: number; items: any[] }>({ dealerName: '', count: 0, items: [] });
 
   // Lock Screen State
   const [isLocked, setIsLocked] = useState(false);
@@ -851,7 +854,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
                   <button
                     onClick={async () => {
                       const dealerName = dealers.find(d => d.id === batchConfig.dealerId)?.name || 'Unknown Dealer';
-                      setBatchSuccessDetails({ dealerName: dealerName, count: stagedItems.length });
+                      setBatchSuccessDetails({ dealerName: dealerName, count: stagedItems.length, items: [...stagedItems] });
 
                       isBatchProcessingRef.current = true;
                       setIsBatchProcessing(true);
@@ -1868,17 +1871,44 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
                 </div>
               </div>
 
-              <button
-                onClick={() => {
-                  setShowBatchSuccess(false);
-                  window.location.reload();
-                }}
-                className="w-full py-5 bg-slate-900 hover:bg-black text-white rounded-2xl font-black uppercase tracking-widest text-[11px] transition-all shadow-xl active:scale-95 flex items-center justify-center gap-2 group"
-              >
-                Close
-                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-              </button>
+
+              <div className="grid grid-cols-2 gap-4 w-full">
+                <button
+                  onClick={() => {
+                    window.print();
+                  }}
+                  className="py-4 bg-white border-2 border-slate-200 text-slate-700 rounded-xl font-bold uppercase tracking-widest text-[10px] hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center justify-center gap-2"
+                >
+                  <Printer size={16} /> Print Receipt
+                </button>
+                <button
+                  onClick={() => {
+                    setShowBatchSuccess(false);
+                    window.location.reload();
+                  }}
+                  className="py-4 bg-slate-900 hover:bg-black text-white rounded-xl font-black uppercase tracking-widest text-[10px] transition-all shadow-xl active:scale-95 flex items-center justify-center gap-2 group"
+                >
+                  Close
+                  <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                </button>
+              </div>
             </div>
+
+            {/* Hidden Print Portal */}
+            {createPortal(
+              <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
+                <BatteryPrintTemplate
+                  dealerName={batchSuccessDetails.dealerName}
+                  dealerId={batchConfig.dealerId}
+                  reportTitle={formatDate(batchConfig.date)}
+                  reportType="batch"
+                  date={batchConfig.date}
+                  data={batchSuccessDetails.items}
+                  tableType="BATCH"
+                />
+              </div>,
+              document.body
+            )}
           </div>
         </div>
       )}

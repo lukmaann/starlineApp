@@ -142,7 +142,7 @@ const App: React.FC = () => {
         <Zap size={40} className="text-white" fill="currentColor" />
       </div>
       <div className="text-center">
-        <h2 className="text-slate-900 font-bold text-lg">Starline Enterprise</h2>
+        <h2 className="text-slate-900 font-bold text-lg">Starline Batteries</h2>
         <p className="text-slate-400 font-medium text-sm">{isRefreshing ? 'Refreshing registry...' : 'Synchronizing Registry...'}</p>
       </div>
     </div>
