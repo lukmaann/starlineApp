@@ -543,20 +543,24 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     }
 
     // ✅ Fix: Use ORIGINAL battery manufacture date for validation (Start of Lineage)
-    // For replacement chains (A101 -> A102 -> A103), we must validate against A101's manufacture date
-    // because the "Sold Date" refers to the original sale of A101.
-    const originalBattery = activeAsset.lineage && activeAsset.lineage.length > 0
-      ? activeAsset.lineage[0]
-      : activeAsset.battery;
+    // We collect all known batteries in the lineage + current one, and find the EARLIEST manufacture date.
+    // This handles cases where lineage arrays might be unsorted or incomplete.
+    const allKnownBatteries = [activeAsset.battery, ...(activeAsset.lineage || [])];
 
-    const originalManufactureDate = new Date(originalBattery.manufactureDate);
+    const earliestBattery = allKnownBatteries.reduce((earliest, current) => {
+      const eDate = new Date(earliest.manufactureDate);
+      const cDate = new Date(current.manufactureDate);
+      return cDate < eDate ? current : earliest;
+    }, activeAsset.battery);
+
+    const originalManufactureDate = new Date(earliestBattery.manufactureDate);
     originalManufactureDate.setHours(0, 0, 0, 0);
 
     // Relaxed Validation: Allow dates before manufacture/activation for legacy data support
     // BUT Enforce Strict rule: Sold Date cannot be before ORIGINAL battery manufacture date
     if (soldDate < originalManufactureDate) {
       // This is the Original Battery's manufacture date. Strictly impossible to sell before made.
-      notify(`Invalid Date: Sold date cannot be before Original Battery manufacture (${formatDate(originalBattery.manufactureDate)})`, 'error');
+      notify(`Invalid Date: Sold date cannot be before Original Battery manufacture (${formatDate(earliestBattery.manufactureDate)})`, 'error');
       return;
     }
 

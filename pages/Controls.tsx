@@ -564,7 +564,7 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
                             className={`cursor-pointer transition-all border-b border-slate-50 group ${isExpanded ? 'bg-blue-50/50' : 'hover:bg-slate-50/80'}`}
                           >
                             <td className="px-6 py-4 font-mono text-xs font-bold text-slate-500 whitespace-nowrap">
-                              {new Date(log.timestamp).toLocaleString()}
+                              {new Date(log.timestamp.replace(' ', 'T') + 'Z').toLocaleString()}
                             </td>
                             <td className="px-6 py-4">
                               <span className={`px-2 py-1 rounded text-[10px] font-bold border whitespace-nowrap ${log.type.includes('FAIL') || log.type.includes('DELETE') ? 'bg-rose-50 text-rose-700 border-rose-200' :

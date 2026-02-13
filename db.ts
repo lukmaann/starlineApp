@@ -855,7 +855,7 @@ export class Database {
       JOIN batteries ob ON r.oldBatteryId = ob.id
       LEFT JOIN batteries nb ON r.newBatteryId = nb.id
       LEFT JOIN sales s ON r.oldBatteryId = s.batteryId
-      WHERE r.settlementType IS NULL
+      WHERE r.settlementType IS NULL OR (r.settlementType = 'CREDIT' AND r.paidInAccount = 0)
 
       UNION ALL
 
@@ -889,13 +889,13 @@ export class Database {
           d.name as dealerName,
           d.location as dealerLocation,
           COUNT(r.id) as pendingClaims,
-          SUM(CASE WHEN (r.settlementType = 'STOCK' AND r.replenishmentBatteryId IS NULL) OR r.settlementType IS NULL THEN 1 ELSE 0 END) as pendingStock,
+          SUM(CASE WHEN (r.settlementType = 'STOCK' AND r.replenishmentBatteryId IS NULL) OR r.settlementType IS NULL OR (r.settlementType = 'CREDIT' AND r.paidInAccount = 0) THEN 1 ELSE 0 END) as pendingStock,
           SUM(CASE WHEN r.paidInAccount = 0 THEN 1 ELSE 0 END) as totalOwedItems,
           SUM(COALESCE(s.salePrice, 4200)) as totalEstimatedCredit
       FROM dealers d
       JOIN replacements r ON d.id = r.dealerId
       LEFT JOIN sales s ON r.oldBatteryId = s.batteryId
-      WHERE r.settlementType IS NULL
+      WHERE r.settlementType IS NULL OR (r.settlementType = 'CREDIT' AND r.paidInAccount = 0)
       GROUP BY d.id
       ORDER BY pendingClaims DESC
     `;
