@@ -29,33 +29,6 @@ export class Database {
 
   static async init(): Promise<void> {
     console.log('Database Client Initialized [Mode: Enterprise IPC]');
-    // Ensure Activity Log Table Exists (Client-side check/init as we can send SQL)
-    try {
-      await this.run(`
-        CREATE TABLE IF NOT EXISTS activity_logs (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          type TEXT NOT NULL,
-          description TEXT NOT NULL,
-          metadata TEXT,
-          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-    } catch (e) {
-      console.warn('Failed to ensure activity_logs table:', e);
-    }
-
-    try {
-      await this.run(`
-        CREATE TABLE IF NOT EXISTS models (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT UNIQUE NOT NULL,
-          defaultCapacity TEXT,
-          warrantyMonths INTEGER DEFAULT 24
-        )
-      `);
-    } catch (e) {
-      console.warn('Failed to ensure models table:', e);
-    }
   }
 
   // --- GENERIC HELPERS ---

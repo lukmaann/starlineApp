@@ -65,6 +65,7 @@ const App: React.FC = () => {
             setIsDbReady(true);
             const auth = localStorage.getItem('starline_auth');
             if (auth === 'true') setIsLoggedIn(true);
+            await Database.init();
             AuthSession.initialize();
           } else {
             // Config invalid or drive missing - show selector

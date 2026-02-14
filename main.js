@@ -114,6 +114,14 @@ function initDatabase(config) {
         value TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS activity_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        description TEXT NOT NULL,
+        metadata TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
       /* Seed Default Credentials */
       INSERT OR IGNORE INTO app_config (key, value) VALUES ('starline_admin_user', 'admin');
       INSERT OR IGNORE INTO app_config (key, value) VALUES ('starline_admin_pass', 'starline@2025');
