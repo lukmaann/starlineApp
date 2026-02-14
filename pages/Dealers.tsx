@@ -26,6 +26,7 @@ import {
 } from 'recharts';
 import { SettlementModal, SettlementTarget } from '../components/SettlementModal';
 import BatteryPrintTemplate from '../components/BatteryPrintTemplate';
+import { DealerWizard } from '../components/DealerWizard';
 
 interface DealersProps {
   onNavigateToHub?: (serial: string) => void;
@@ -91,7 +92,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   const [filterDateStart, setFilterDateStart] = useState('');
   const [filterDateEnd, setFilterDateEnd] = useState('');
   const [filterModel, setFilterModel] = useState('');
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState<'TABS' | 'FILTERS' | ''>('');
 
   const [unitPage, setUnitPage] = useState(0);
   const unitsLimit = 100;
@@ -241,64 +242,29 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   // --- ACTIONS ---
 
   const handleStartWizard = (existing?: Dealer) => {
-    if (existing) {
-      setGeneratedId(existing.id);
-      const locParts = (existing.location || "").split(/, | - /);
-      setFormData({
-        name: existing.name,
-        owner: existing.ownerName,
-        address: existing.address,
-        contact: existing.contact,
-        city: locParts[0] || "",
-        state: locParts[1] || "",
-        pincode: locParts[2] || ""
-      });
-      setSelectedDealer(existing); // keep selected for update context if needed
-    } else {
-      // Robust Unique ID Generation
+    setSelectedDealer(existing || null);
+    if (!existing) {
       let newId = '';
       let attempts = 0;
       do {
-        newId = `DL - ${Math.floor(100000 + Math.random() * 899999)} `;
+        newId = `DL-${Math.floor(100000 + Math.random() * 899999)}`;
         attempts++;
       } while (dealers.some(d => d.id === newId) && attempts < 100);
-
-      if (attempts >= 100) {
-        console.error('Failed to generate unique dealer ID after 100 attempts');
-        // Fallback to timestamp just in case
-        newId = `DL - ${Date.now().toString().slice(-6)} `;
-      }
-
       setGeneratedId(newId);
-      setFormData({ name: '', owner: '', address: '', contact: '', city: '', state: '', pincode: '' });
-      setSelectedDealer(null);
+    } else {
+      setGeneratedId(existing.id);
     }
-    setWizardStep(0);
     setViewMode('WIZARD');
   };
 
-  const handleAddOrUpdate = async () => {
-    setIsSubmitting(true);
-    const locationString = `${formData.city}, ${formData.state} - ${formData.pincode} `.toUpperCase();
-
-    // Safety Check: Ensure ID exists
-    let finalId = generatedId;
-    if (!finalId && !selectedDealer) {
-      // Fallback unique check if generatedId was somehow lost
-      let newId = '';
-      do {
-        newId = `DL - ${Math.floor(100000 + Math.random() * 899999)} `;
-      } while (dealers.some(d => d.id === newId));
-      finalId = newId;
-      console.warn('Generated ID was missing, created fallback:', finalId);
-    }
-
+  const handleWizardComplete = async (wizardData: any) => {
+    const locationString = `${wizardData.city}, ${wizardData.state} - ${wizardData.pincode}`.toUpperCase();
     const dealerData = {
-      id: finalId,
-      name: formData.name.toUpperCase(),
-      ownerName: formData.owner.toUpperCase(),
-      address: formData.address.toUpperCase(),
-      contact: formData.contact,
+      id: generatedId,
+      name: wizardData.name.toUpperCase(),
+      ownerName: wizardData.owner.toUpperCase(),
+      address: wizardData.address.toUpperCase(),
+      contact: wizardData.contact,
       location: locationString
     };
 
@@ -307,10 +273,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
       await Database.logActivity('PARTNER_UPDATE', `Updated dealer details for ${dealerData.name}`, { dealerId: dealerData.id, changes: dealerData });
     } else {
       await Database.addDealer(dealerData);
-      await Database.logActivity('PARTNER_ENROLL', `Enrolled new dealer ${dealerData.name} `, { dealerId: dealerData.id, initialData: dealerData });
+      await Database.logActivity('PARTNER_ENROLL', `Enrolled new dealer ${dealerData.name}`, { dealerId: dealerData.id, initialData: dealerData });
     }
-
-    setIsSubmitting(false);
 
     await loadData();
     setViewMode('LIST');
@@ -535,7 +499,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setViewMode('LIST')}
-                className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-slate-500 hover:text-slate-900 shadow-sm hover:shadow-md active:scale-95"
+                className="p-3 bg-white border border-slate-200 rounded-md hover:bg-slate-50 transition-all text-slate-500 hover:text-slate-900 shadow-sm hover:shadow-md active:scale-95"
               >
                 <ArrowLeft size={18} />
               </button>
@@ -553,101 +517,171 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                 <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">Growth Vector</span>
                 <span className="text-lg font-black text-slate-900">+12.4%</span>
               </div>
-              <button onClick={() => handleStartWizard(selectedDealer)} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-all shadow-sm active:scale-95">
+              <button onClick={() => handleStartWizard(selectedDealer)} className="p-3 bg-white border border-slate-200 rounded-md hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-all shadow-sm active:scale-95">
                 <Settings size={18} />
               </button>
             </div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden min-h-[600px] flex flex-col">
-            <div className="p-6 bg-white border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="flex items-center gap-4 overflow-x-auto no-scrollbar pb-2 md:pb-0">
-                {[
-                  { id: 'ACTIVE', label: 'Active Warranty', icon: Box },
-                  { id: 'EXCHANGES', label: 'Exchange Log', icon: RefreshCw },
-                  { id: 'RETURNED', label: 'Returned Units', icon: Landmark },
-                  { id: 'EXPIRED', label: 'Expired Units', icon: Clock }
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => { setActiveLogTab(tab.id as any); setUnitPage(0); }}
-                    className={`flex items - center gap - 2 px - 4 py - 2.5 rounded - lg font - bold text - xs uppercase tracking - wide transition - all whitespace - nowrap active: scale - 95 ${activeLogTab === tab.id ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'} `}
-                  >
-                    <tab.icon size={14} />
-                    {tab.label}
-                  </button>
-                ))}
+            <div className="p-4 px-6 bg-white border-b border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4">
+              {/* LEFT: REGISTRY SELECTOR */}
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                {/* <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap ml-1">Registry Mode</span> */}
+                <div className="relative group/tabs flex-1 md:flex-none">
+                  {(() => {
+                    const activeTab = [
+                      { id: 'ACTIVE', label: 'Active Warranty', icon: Box, color: 'text-blue-600' },
+                      { id: 'EXCHANGES', label: 'Exchange Log', icon: RefreshCw, color: 'text-purple-600' },
+                      { id: 'RETURNED', label: 'Returned Units', icon: Landmark, color: 'text-emerald-600' },
+                      { id: 'EXPIRED', label: 'Expired Units', icon: Clock, color: 'text-rose-600' }
+                    ].find(t => t.id === activeLogTab) || { id: 'ACTIVE', label: 'Active Warranty', icon: Box, color: 'text-blue-600' };
+
+                    return (
+                      <div className="relative">
+                        <button
+                          onClick={() => setIsFilterOpen(prev => prev === 'TABS' ? '' as any : 'TABS' as any)}
+                          className="flex items-center gap-3 px-4 py-2 bg-slate-50 border border-slate-200 rounded-md hover:bg-slate-100 transition-all group/btn min-w-[200px] w-full md:w-auto h-10"
+                        >
+                          <div className={`p-1 rounded-md bg-white shadow-sm border border-slate-100 ${activeTab.color}`}>
+                            <activeTab.icon size={12} strokeWidth={2.5} />
+                          </div>
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex-1 text-left">{activeTab.label}</span>
+                          <ChevronDown size={14} className={`text-slate-400 transition-transform duration-300 ${isFilterOpen === 'TABS' ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isFilterOpen === 'TABS' && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setIsFilterOpen('' as any)}></div>
+                            <div className="absolute left-0 top-12 w-64 bg-white border border-slate-200 rounded-xl shadow-xl p-2 z-50 animate-in zoom-in-95 duration-200">
+                              {[
+                                { id: 'ACTIVE', label: 'Active Warranty', icon: Box, color: 'text-blue-600', bg: 'hover:bg-blue-50' },
+                                { id: 'EXCHANGES', label: 'Exchange Log', icon: RefreshCw, color: 'text-purple-600', bg: 'hover:bg-purple-50' },
+                                { id: 'RETURNED', label: 'Returned Units', icon: Landmark, color: 'text-emerald-600', bg: 'hover:bg-emerald-50' },
+                                { id: 'EXPIRED', label: 'Expired Units', icon: Clock, color: 'text-rose-600', bg: 'hover:bg-rose-50' }
+                              ].map((tab) => (
+                                <button
+                                  key={tab.id}
+                                  onClick={() => { setActiveLogTab(tab.id as any); setUnitPage(0); setIsFilterOpen('' as any); }}
+                                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all ${tab.bg} group/item ${activeLogTab === tab.id ? 'bg-slate-50' : ''}`}
+                                >
+                                  <div className={`p-1.5 rounded-md transition-colors ${activeLogTab === tab.id ? 'bg-white shadow-sm border border-slate-100' : 'bg-transparent'} ${tab.color}`}>
+                                    <tab.icon size={14} strokeWidth={activeLogTab === tab.id ? 2.5 : 2} />
+                                  </div>
+                                  <span className={`text-[11px] font-bold uppercase tracking-wider ${activeLogTab === tab.id ? 'text-slate-900' : 'text-slate-500 group-hover/item:text-slate-900'}`}>
+                                    {tab.label}
+                                  </span>
+                                  {activeLogTab === tab.id && <Check size={14} className="ml-auto text-blue-600" />}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
 
-              <div className="flex items-center gap-3 w-full md:w-auto">
+              {/* RIGHT: SEARCH & TOOLS */}
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <div className="relative flex-1 md:flex-none">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    placeholder="SEARCH REGISTRY..."
+                    className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold outline-none focus:border-blue-500 uppercase transition-all w-full md:w-64 h-10 focus:bg-white focus:shadow-sm"
+                    value={logSearchQuery}
+                    onChange={e => { setLogSearchQuery(e.target.value); setUnitPage(0); }}
+                  />
+                </div>
+
+                <div className="h-6 w-px bg-slate-100 mx-1 hidden md:block"></div>
+
+                {/* FILTER GHOST */}
                 <div className="relative group/filter">
                   <button
-                    onClick={() => setIsFilterOpen(!isFilterOpen)}
-                    className={`flex items - center gap - 2 px - 3 py - 2.5 bg - white border ${isFilterOpen ? 'border-blue-500 text-blue-600' : 'border-slate-200 text-slate-600'} rounded - lg text - xs font - bold uppercase tracking - wide shadow - sm hover: shadow - md transition - all`}
+                    onClick={() => setIsFilterOpen(prev => prev === 'FILTERS' ? '' as any : 'FILTERS' as any)}
+                    className={`p-2.5 rounded-full transition-all active:scale-90 relative ${isFilterOpen === 'FILTERS' || (filterDateStart || filterDateEnd || filterModel) ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}
+                    title="Reference Filters"
                   >
-                    <Filter size={14} />
-                    Filters
-                    {(filterDateStart || filterDateEnd || filterModel) && <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse ml-1"></span>}
+                    <Filter size={20} strokeWidth={2} />
+                    {(filterDateStart || filterDateEnd || filterModel) && (
+                      <span className="absolute top-2 right-2 w-2 h-2 bg-blue-600 rounded-full border-2 border-white shadow-sm" />
+                    )}
                   </button>
 
-                  {isFilterOpen && (
+                  {isFilterOpen === 'FILTERS' && (
                     <>
-                      <div className="fixed inset-0 z-40" onClick={() => setIsFilterOpen(false)}></div>
+                      <div className="fixed inset-0 z-40" onClick={() => setIsFilterOpen('' as any)}></div>
                       <div className="absolute right-0 top-12 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-5 z-50 space-y-5 animate-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2"><ListFilter size={14} /> Filter Analytics</h4>
-                          <button onClick={() => { setFilterDateStart(''); setFilterDateEnd(''); setFilterModel(''); }} className="text-[10px] font-black text-blue-600 hover:underline uppercase">Reset</button>
+                          <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.15em] flex items-center gap-2">
+                            <ListFilter size={14} className="text-blue-600" /> Filter Analytics
+                          </h4>
+                          <button
+                            onClick={() => { setFilterDateStart(''); setFilterDateEnd(''); setFilterModel(''); }}
+                            className="text-[10px] font-black text-blue-600 hover:text-blue-700 transition-colors uppercase tracking-wider"
+                          >
+                            Reset Defaults
+                          </button>
                         </div>
 
                         {/* Date Range */}
                         <div className="space-y-3">
-                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Lifecycle Window</label>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">Lifecycle Window</label>
                           <div className="grid grid-cols-2 gap-2">
-                            <input type="date" className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-blue-500" value={filterDateStart} onChange={e => { setFilterDateStart(e.target.value); setUnitPage(0); }} />
-                            <input type="date" className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-blue-500" value={filterDateEnd} onChange={e => { setFilterDateEnd(e.target.value); setUnitPage(0); }} />
+                            <input
+                              type="date"
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-bold outline-none focus:border-blue-500 focus:bg-white transition-all"
+                              value={filterDateStart}
+                              onChange={e => { setFilterDateStart(e.target.value); setUnitPage(0); }}
+                            />
+                            <input
+                              type="date"
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-bold outline-none focus:border-blue-500 focus:bg-white transition-all"
+                              value={filterDateEnd}
+                              onChange={e => { setFilterDateEnd(e.target.value); setUnitPage(0); }}
+                            />
                           </div>
                         </div>
 
                         {/* Model Filter */}
                         <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Product Model</label>
-                          <select
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold uppercase outline-none focus:border-blue-500 transition-all text-slate-900 appearance-none cursor-pointer"
-                            value={filterModel}
-                            onChange={e => { setFilterModel(e.target.value); setUnitPage(0); }}
-                          >
-                            <option value="">ALL MODELS</option>
-                            {models.map(m => (
-                              <option key={m.id} value={m.name}>{m.name}</option>
-                            ))}
-                          </select>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">Product Model</label>
+                          <div className="relative">
+                            <select
+                              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-md text-xs font-bold uppercase outline-none focus:border-blue-500 focus:bg-white transition-all text-slate-900 appearance-none cursor-pointer"
+                              value={filterModel}
+                              onChange={e => { setFilterModel(e.target.value); setUnitPage(0); }}
+                            >
+                              <option value="">ALL MODELS</option>
+                              {models.map(m => (
+                                <option key={m.id} value={m.name}>{m.name}</option>
+                              ))}
+                            </select>
+                            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          </div>
                         </div>
 
                         <button
-                          onClick={() => setIsFilterOpen(false)}
-                          className="w-full py-2.5 bg-slate-900 text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-black transition-all shadow-md active:scale-95"
+                          onClick={() => setIsFilterOpen('' as any)}
+                          className="w-full py-3 bg-slate-900 text-white rounded-md text-[10px] font-black uppercase tracking-[0.15em] hover:bg-black transition-all shadow-lg shadow-slate-900/10 active:scale-95"
                         >
-                          Apply Filters
+                          Synchronize Views
                         </button>
                       </div>
                     </>
                   )}
                 </div>
 
-                <div className="h-5 w-px bg-slate-200 mx-1"></div>
-
-                {/* PRINT BUTTON */}
+                {/* PRINT GHOST */}
                 <button
                   onClick={handlePrint}
-                  className="p-2.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all text-slate-500 hover:text-slate-900 shadow-sm"
+                  className="p-2.5 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all active:scale-90"
                   title="Print Table"
                 >
-                  <Printer size={16} />
+                  <Printer size={20} strokeWidth={2} />
                 </button>
-              </div>
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input placeholder="Search records..." className="pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-blue-500 uppercase transition-all w-64 focus:bg-white" value={logSearchQuery} onChange={e => { setLogSearchQuery(e.target.value); setUnitPage(0); }} />
               </div>
             </div>
 
@@ -714,7 +748,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                             ) : (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleOpenSettlement(item); }}
-                                className={`px - 2.5 py - 1 rounded text - [9px] font - bold uppercase tracking - wide border transition - all ${item.paidInAccount ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 hover:shadow-sm active:scale-95'} `}
+                                className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase tracking-wide border transition-all ${item.paidInAccount ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 hover:shadow-sm active:scale-95'}`}
                               >
                                 {item.paidInAccount ? 'Settled' : 'Pending Settlement'}
                               </button>
@@ -755,7 +789,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                             {item.status === BatteryStatus.RETURNED_PENDING ? (
                               <button
                                 onClick={(e) => { e.stopPropagation(); onNavigateToHub && onNavigateToHub(item.id); }}
-                                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-bold uppercase tracking-wide hover:bg-blue-700 transition-all shadow-sm active:scale-95 flex items-center gap-1.5 justify-end ml-auto"
+                                className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-[10px] font-bold uppercase tracking-wide hover:bg-blue-700 transition-all shadow-sm active:scale-95 flex items-center gap-1.5 justify-end ml-auto"
                               >
                                 Complete Exchange <ArrowRight size={12} />
                               </button>
@@ -813,8 +847,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
             <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
               <span>Showing {unitPage * unitsLimit + 1}-{Math.min((unitPage + 1) * unitsLimit, totalItems)} of {totalItems} Records</span>
               <div className="flex gap-2">
-                <button disabled={unitPage === 0} onClick={() => setUnitPage(p => p - 1)} className="p-2 bg-white border border-slate-200 rounded-lg hover:border-blue-400 disabled:opacity-30 transition-all"><ChevronLeft size={16} /></button>
-                <button disabled={(unitPage + 1) * unitsLimit >= totalItems} onClick={() => setUnitPage(p => p + 1)} className="p-2 bg-white border border-slate-200 rounded-lg hover:border-blue-400 disabled:opacity-30 transition-all"><ChevronRight size={16} /></button>
+                <button disabled={unitPage === 0} onClick={() => setUnitPage(p => p - 1)} className="p-2 bg-white border border-slate-200 rounded-md hover:border-blue-400 disabled:opacity-30 transition-all"><ChevronLeft size={16} /></button>
+                <button disabled={(unitPage + 1) * unitsLimit >= totalItems} onClick={() => setUnitPage(p => p + 1)} className="p-2 bg-white border border-slate-200 rounded-md hover:border-blue-400 disabled:opacity-30 transition-all"><ChevronRight size={16} /></button>
               </div>
             </div>
           </div>
@@ -831,11 +865,11 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                 reportType="dealer"
                 dateRange={
                   filterDateStart && filterDateEnd
-                    ? `${formatDate(filterDateStart)} - ${formatDate(filterDateEnd)} `
+                    ? `${formatDate(filterDateStart)} - ${formatDate(filterDateEnd)}`
                     : filterDateStart
                       ? `${formatDate(filterDateStart)} +`
                       : filterDateEnd
-                        ? `Up to ${formatDate(filterDateEnd)} `
+                        ? `Up to ${formatDate(filterDateEnd)}`
                         : 'All Time'
                 }
                 filterModel={filterModel}
@@ -849,199 +883,14 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
       </>
     );
   } else if (viewMode === 'WIZARD') {
-    // --- WIZARD VIEW (Modal-Free) ---
     return (
-      <>
-        <div className="max-w-3xl mx-auto py-8 animate-in slide-in-from-right-4 duration-500">
-          <div className="mb-6 flex items-center gap-4">
-            <button onClick={() => setViewMode('LIST')} className="p-2.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 hover:text-slate-900 transition-all shadow-sm"><ArrowLeft size={18} /></button>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 uppercase tracking-tight">Dealer Enrollment</h1>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">Register a new authorized dealer</p>
-            </div>
-          </div>
-
-          {/* Stepper */}
-          <div className="mb-10 flex items-center justify-between relative px-12">
-            <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-0.5 bg-slate-100 -z-10">
-              <div
-                className="bg-slate-900 h-full transition-all duration-700 ease-out"
-                style={{ width: `${(wizardStep / 2) * 100}% ` }}
-              />
-            </div>
-            {[
-              { id: 0, label: 'Identity', icon: Store },
-              { id: 1, label: 'Location', icon: MapPin },
-              { id: 2, label: 'Confirm', icon: CheckCircle2 }
-            ].map((step, idx) => (
-              <div key={idx} className="flex flex-col items-center gap-3 relative bg-white px-2">
-                <div
-                  className={`w - 12 h - 12 rounded - xl flex items - center justify - center border transition - all duration - 500 shadow - sm ${idx < wizardStep ? 'bg-slate-900 border-slate-900 text-white' :
-                    idx === wizardStep ? 'bg-white border-slate-900 text-slate-900 scale-110 shadow-lg' :
-                      'bg-white border-slate-200 text-slate-300'
-                    } `}
-                >
-                  <step.icon size={idx === wizardStep ? 20 : 18} />
-
-                  {idx < wizardStep && (
-                    <div className="absolute -top-1 -right-1 bg-emerald-500 text-white rounded-full p-0.5 border-2 border-white">
-                      <Check size={8} strokeWidth={4} />
-                    </div>
-                  )}
-                </div>
-                <span className={`text - [9px] font - bold uppercase tracking - widest transition - all duration - 300 ${idx <= wizardStep ? 'text-slate-900' : 'text-slate-300'} `}>
-                  {step.label}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* Form Card */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-xl shadow-slate-200/40 min-h-[500px] flex flex-col justify-between relative overflow-hidden">
-            <div className="flex-1">
-              {wizardStep === 0 && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg text-slate-600 mb-6 border border-slate-100">
-                    <Info size={18} className="shrink-0 text-blue-500" />
-                    <p className="text-xs font-bold leading-relaxed">Ensure business name matches legal documents.</p>
-                  </div>
-
-                  <div className="space-y-5 max-w-lg mx-auto">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Business Name</label>
-                      <div className="relative group">
-                        <Store className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-900 transition-colors" size={18} />
-                        <input autoFocus maxLength={32} className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-base outline-none focus:bg-white focus:border-slate-900 transition-all uppercase placeholder:text-slate-300" placeholder="e.g. STARLINE BATTERIES" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Owner Full Name</label>
-                      <div className="relative group">
-                        <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-900 transition-colors" size={18} />
-                        <input className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-slate-900 transition-all uppercase" placeholder="e.g. Salid Nadaf" value={formData.owner} onChange={e => setFormData({ ...formData, owner: e.target.value })} />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Contact Number</label>
-                      <div className="relative group">
-                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-900 transition-colors" size={18} />
-                        <input className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-slate-900 transition-all uppercase" placeholder="e.g. 9876543210" value={formData.contact} onChange={e => setFormData({ ...formData, contact: e.target.value })} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {wizardStep === 1 && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                  <div className="text-center mb-6">
-                    <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Location Details</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mt-1">For logistics and regional mapping</p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl mx-auto">
-                    <div className="space-y-2 col-span-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Street Address</label>
-                      <textarea rows={2} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:bg-white focus:border-slate-900 transition-all uppercase" placeholder="SHOP NO, STREET, AREA" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">City</label>
-                      <input className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:bg-white focus:border-slate-900 transition-all uppercase" placeholder="CITY NAME" value={formData.city} onChange={e => setFormData({ ...formData, city: e.target.value })} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">State</label>
-                      <input className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:bg-white focus:border-slate-900 transition-all uppercase" placeholder="STATE" value={formData.state} onChange={e => setFormData({ ...formData, state: e.target.value })} />
-                    </div>
-                    <div className="space-y-2 col-span-2 md:col-span-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Pincode</label>
-                      <input className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:bg-white focus:border-slate-900 transition-all uppercase" placeholder="591313" value={formData.pincode} onChange={e => setFormData({ ...formData, pincode: e.target.value })} />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {wizardStep === 2 && (
-                <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 max-w-md mx-auto text-center">
-                  <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-emerald-100 shadow-sm">
-                    <ShieldCheck size={32} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-slate-900 uppercase tracking-tight">Confirm Enrollment</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mt-2">Review dealer details</p>
-                  </div>
-
-                  <div className="bg-slate-50 rounded-xl p-6 border border-slate-200 text-left space-y-3">
-                    <div className="flex justify-between border-b border-slate-200 pb-3">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Dealer ID</span>
-                      <span className="text-sm font-black text-slate-900">{generatedId}</span>
-                    </div>
-                    <div className="flex justify-between border-b border-slate-200 pb-3">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Business</span>
-                      <span className="text-sm font-black text-slate-900">{formData.name}</span>
-                    </div>
-                    <div className="flex justify-between border-b border-slate-200 pb-3">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Owner</span>
-                      <span className="text-xs font-bold text-slate-700 uppercase">{formData.owner}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Location</span>
-                      <span className="text-xs font-bold text-slate-700 uppercase text-right">{formData.city}, {formData.state}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Footer Nav */}
-            <div className="flex justify-between pt-6 border-t border-slate-100 mt-6">
-              <button
-                onClick={() => {
-                  if (wizardStep > 0) setWizardStep(s => s - 1);
-                  else setViewMode('LIST');
-                  setError('');
-                }}
-                className="px-5 py-2.5 text-slate-500 font-bold text-xs hover:bg-slate-50 rounded-lg transition-all uppercase tracking-wide"
-              >
-                {wizardStep === 0 ? 'Cancel' : 'Back'}
-              </button>
-
-              <div className="flex flex-col items-end gap-2">
-                {error && <span className="text-[10px] font-bold text-rose-500 animate-pulse">{error}</span>}
-                <button
-                  onClick={() => {
-                    setError('');
-                    if (wizardStep === 0) {
-                      const isDuplicate = dealers.some(d =>
-                        d.name.trim().toUpperCase() === formData.name.trim().toUpperCase() &&
-                        d.id !== generatedId
-                      );
-                      if (isDuplicate) {
-                        setError('Dealer name already exists in registry');
-                        return;
-                      }
-                    }
-
-                    if (wizardStep < 2) setWizardStep(s => s + 1);
-                    else handleAddOrUpdate();
-                  }}
-                  disabled={
-                    (wizardStep === 0 && (!formData.name || !formData.contact)) ||
-                    (wizardStep === 1 && (!formData.city || !formData.state)) ||
-                    isSubmitting
-                  }
-                  className="px-8 py-2.5 bg-slate-900 text-white font-bold text-xs rounded-lg shadow-md hover:bg-black transition-all flex items-center gap-2 disabled:opacity-50 uppercase tracking-wide"
-                >
-                  {wizardStep === 2 ? (isSubmitting ? 'Enrolling...' : 'Confirm Enrollment') : 'Continue'}
-                  {!isSubmitting && wizardStep < 2 && <ArrowRight size={14} />}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </>
+      <DealerWizard
+        onCancel={() => setViewMode('LIST')}
+        onComplete={handleWizardComplete}
+        dealers={dealers}
+        initialData={selectedDealer}
+        generatedId={generatedId}
+      />
     );
   } else {
     // --- LIST VIEW (Default) ---
@@ -1052,14 +901,14 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-blue-500 transition-colors" size={18} />
             <input
               placeholder="Search Dealer Name, ID or Region..."
-              className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg outline-none font-bold text-sm transition-all uppercase tracking-wide mono text-slate-900 focus:bg-white focus:border-blue-500"
+              className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-md outline-none font-bold text-sm transition-all uppercase tracking-wide mono text-slate-900 focus:bg-white focus:border-blue-500"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
           <button
             onClick={() => handleStartWizard()}
-            className="w-full md:w-auto px-6 py-3 bg-slate-900 text-white rounded-lg font-bold text-xs hover:bg-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+            className="w-full md:w-auto px-6 py-3 bg-slate-900 text-white rounded-md font-bold text-xs hover:bg-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
           >
             <Plus size={16} />
             <span className="uppercase tracking-wide">Enroll Dealer</span>
