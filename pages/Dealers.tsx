@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Database } from '../db';
@@ -13,7 +12,7 @@ import {
   CheckCircle2, FileSignature, MapPinned,
   Building2, Loader2, ArrowRight, Settings, ShieldQuestion,
   Trophy, Activity, PieChart as IconPieChart, TrendingUp, Zap, QrCode,
-  Fingerprint, CreditCard, FileCheck, Map, ChevronDown,
+  KeyRound, CreditCard, FileCheck, Map, ChevronDown,
   Building, Hash, Navigation, LocateFixed, Package,
   TrendingDown, AlertTriangle, FileText, Download, Printer,
   LayoutGrid, Mail, Building as BuildingIcon, Check
@@ -163,15 +162,17 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   }, [selectedDealer, viewMode, searchTerm, activeLogTab]);
 
   // --- FILTER & CALCULATIONS ---
-  const filteredDealers = useMemo(() => {
-    return dealers.filter(d => {
+  const sortedDealers = useMemo(() => {
+    const filtered = dealers.filter(d => {
       const matchesSearch =
         d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         d.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         d.location.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesSearch;
     });
+    return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
   }, [dealers, searchTerm]);
+
 
   const [paginatedData, setPaginatedData] = useState<any[]>([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -192,20 +193,20 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
       setPaginatedData(result.data);
       setTotalItems(result.total);
     } else {
-      let where = `dealerId = ?`;
+      let where = `dealerId = ? `;
       let params: any[] = [selectedDealer.id];
 
       if (activeLogTab === 'ACTIVE') {
-        where += ` AND (status = 'ACTIVE' OR status = 'REPLACEMENT') AND datetime(warrantyExpiry) >= datetime('now')`;
+        where += ` AND(status = 'ACTIVE' OR status = 'REPLACEMENT') AND datetime(warrantyExpiry) >= datetime('now')`;
       } else if (activeLogTab === 'EXPIRED') {
-        where += ` AND (status = 'EXPIRED' OR datetime(warrantyExpiry) < datetime('now'))`;
+        where += ` AND(status = 'EXPIRED' OR datetime(warrantyExpiry) < datetime('now'))`;
       } else if (activeLogTab === 'RETURNED') {
-        where += ` AND (status = 'RETURNED_PENDING' OR status = 'RETURNED')`;
+        where += ` AND(status = 'RETURNED_PENDING' OR status = 'RETURNED')`;
       }
 
       if (logSearchQuery) {
-        where += ` AND id LIKE ?`;
-        params.push(`%${logSearchQuery}%`);
+        where += ` AND id LIKE ? `;
+        params.push(`% ${logSearchQuery}% `);
       }
 
       if (filterDateStart) {
@@ -220,7 +221,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
       }
 
       if (filterModel) {
-        where += ` AND model = ?`;
+        where += ` AND model = ? `;
         params.push(filterModel);
       }
 
@@ -258,14 +259,14 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
       let newId = '';
       let attempts = 0;
       do {
-        newId = `DL-${Math.floor(100000 + Math.random() * 899999)}`;
+        newId = `DL - ${Math.floor(100000 + Math.random() * 899999)} `;
         attempts++;
       } while (dealers.some(d => d.id === newId) && attempts < 100);
 
       if (attempts >= 100) {
         console.error('Failed to generate unique dealer ID after 100 attempts');
         // Fallback to timestamp just in case
-        newId = `DL-${Date.now().toString().slice(-6)}`;
+        newId = `DL - ${Date.now().toString().slice(-6)} `;
       }
 
       setGeneratedId(newId);
@@ -278,7 +279,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
 
   const handleAddOrUpdate = async () => {
     setIsSubmitting(true);
-    const locationString = `${formData.city}, ${formData.state} - ${formData.pincode}`.toUpperCase();
+    const locationString = `${formData.city}, ${formData.state} - ${formData.pincode} `.toUpperCase();
 
     // Safety Check: Ensure ID exists
     let finalId = generatedId;
@@ -286,7 +287,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
       // Fallback unique check if generatedId was somehow lost
       let newId = '';
       do {
-        newId = `DL-${Math.floor(100000 + Math.random() * 899999)}`;
+        newId = `DL - ${Math.floor(100000 + Math.random() * 899999)} `;
       } while (dealers.some(d => d.id === newId));
       finalId = newId;
       console.warn('Generated ID was missing, created fallback:', finalId);
@@ -306,7 +307,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
       await Database.logActivity('PARTNER_UPDATE', `Updated dealer details for ${dealerData.name}`, { dealerId: dealerData.id, changes: dealerData });
     } else {
       await Database.addDealer(dealerData);
-      await Database.logActivity('PARTNER_ENROLL', `Enrolled new dealer ${dealerData.name}`, { dealerId: dealerData.id, initialData: dealerData });
+      await Database.logActivity('PARTNER_ENROLL', `Enrolled new dealer ${dealerData.name} `, { dealerId: dealerData.id, initialData: dealerData });
     }
 
     setIsSubmitting(false);
@@ -360,11 +361,11 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
     if (!dealerId) return;
 
     if (analytics?.activeUnitCount > 0) {
-      if (!window.confirm(`WARNING: This dealer has ${analytics.activeUnitCount} active warranty units.\n\nAre you sure you want to proceed?`)) {
+      if (!window.confirm(`WARNING: This dealer has ${analytics.activeUnitCount} active warranty units.\n\nAre you sure you want to proceed ? `)) {
         return;
       }
     } else {
-      if (!window.confirm(`Delete dealer ${selectedDealer?.name} permanently?`)) {
+      if (!window.confirm(`Delete dealer ${selectedDealer?.name} permanently ? `)) {
         return;
       }
     }
@@ -401,81 +402,55 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   // 2. The table cell content (Line ~580)
 
 
-
-  // --- RENDER ---
   if (isLocked) {
     return (
-      <div className="max-w-4xl mx-auto animate-in slide-in-from-bottom-4 duration-500 pb-20">
-        <button
-          onClick={() => { setIsLocked(false); setPendingDealer(null); setLockPassword(''); setLockError(''); }}
-          className="mb-8 flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold text-sm transition-all group"
-        >
-          <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" /> Back to Dealers
-        </button>
+      <div className="h-full flex flex-col items-center justify-center p-6 animate-in fade-in duration-500 bg-slate-50/50">
+        <div className="w-full max-w-sm text-center">
+          <div className="w-20 h-20 bg-white border border-slate-200 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-slate-200/50">
+            <Lock size={32} className="text-slate-900" />
+          </div>
+          <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900 mb-2">Registry Locked</h2>
+          <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mb-8">Authorization Required</p>
 
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl p-0 max-w-md mx-auto animate-in zoom-in-95 duration-300 relative overflow-hidden text-slate-900">
-          {/* Header Bar */}
-          <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
-              <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Access Restricted</span>
-            </div>
-            <div className="text-[10px] font-mono text-slate-400">AUTH_LVL_2</div>
+          <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl text-left mb-6">
+            <p className="text-blue-700 text-[10px] font-bold uppercase tracking-wider leading-relaxed">
+              Security Clearance Required. Please enter the access key for <span className="text-blue-900">{pendingDealer?.name || 'Authorized Dealer'}</span> to proceed.
+            </p>
           </div>
 
-          <div className="p-8 space-y-8">
-            <div className="text-center space-y-2">
-              <div className="w-16 h-16 bg-slate-50 border border-slate-200 text-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
-                <Lock size={28} strokeWidth={2} />
-              </div>
-              <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">Dealer Vault</h3>
-              <p className="text-xs text-slate-500 font-medium">Authorization required for <span className="text-slate-900 font-bold">{pendingDealer?.name || 'Dealer'}</span></p>
+          <form onSubmit={handleUnlockDealer} className="space-y-4">
+            <div className="relative group">
+              <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+              <input
+                type="password"
+                autoFocus
+                placeholder="Access Key"
+                className={`w-full pl-12 pr-4 py-3.5 bg-white border rounded-xl text-sm font-bold outline-none transition-all placeholder:text-slate-300
+                  ${lockError
+                    ? 'border-rose-300 bg-rose-50 text-rose-600 focus:border-rose-500 shadow-sm shadow-rose-100'
+                    : 'border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5'
+                  }`}
+                value={lockPassword}
+                onChange={e => { setLockPassword(e.target.value); setLockError(''); }}
+              />
             </div>
 
-            {lockError && (
-              <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 text-rose-600 animate-shake">
-                <ShieldAlert size={18} />
-                <span className="text-[10px] font-black">{lockError}</span>
-              </div>
-            )}
+            <button
+              type="submit"
+              disabled={!lockPassword}
+              className="w-full py-4 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all shadow-xl shadow-slate-900/10 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              Authorize Access
+            </button>
 
-            <form onSubmit={handleUnlockDealer} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Identity Verification</label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Fingerprint className="text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
-                  </div>
-                  <input
-                    type="password"
-                    autoFocus
-                    placeholder="ENTER ACCESS KEY"
-                    className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-xl font-mono text-base text-slate-900 outline-none focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-300 uppercase tracking-widest"
-                    value={lockPassword}
-                    onChange={e => setLockPassword(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  className="w-full py-4 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-slate-900/10 active:scale-95 flex items-center justify-center gap-2"
-                >
-                  Authorize Access
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* Footer Status */}
-          <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center text-[9px] font-mono text-slate-400">
-            <div className="flex items-center gap-2">
-              <ShieldCheck size={10} className="text-emerald-500" />
-              <span>SECURE ENDPOINT</span>
-            </div>
-            <div>LOC: {pendingDealer?.id || 'Unknown'}</div>
-          </div>
+            <button
+              type="button"
+              onClick={() => { setIsLocked(false); setPendingDealer(null); setLockPassword(''); setLockError(''); }}
+              className="mt-4 text-slate-400 hover:text-slate-900 font-bold text-[10px] uppercase tracking-widest transition-colors"
+            >
+              Cancel Access
+            </button>
+          </form>
         </div>
       </div>
     );
@@ -484,8 +459,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   if (viewMode === 'DETAIL' && selectedDealer) {
     const handlePrint = () => {
       const originalTitle = document.title;
-      document.title = `${selectedDealer.name}_${activeLogTab}_Report`;
-      document.title = `${selectedDealer.name}_${activeLogTab}_Report`;
+      document.title = `${selectedDealer.name}_${activeLogTab} _Report`;
       Database.logActivity('PRINT_REPORT', `Printed dealer report for ${selectedDealer.name}`, { dealerId: selectedDealer.id, tab: activeLogTab });
       window.print();
       document.title = originalTitle;
@@ -493,55 +467,55 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
 
     return (
       <>
-        <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 pb-20 text-slate-900 relative">
+        <div className="max-w-[1600px] mx-auto space-y-6 animate-in fade-in duration-500 pb-20 text-slate-900 relative">
           <style>
             {`
             @media print {
-              /* HIDE EVERYTHING ELSE */
-              body > *:not(#print-portal-root) {
-                display: none !important;
-              }
+  /* HIDE EVERYTHING ELSE */
+  body > *: not(#print - portal - root) {
+    display: none!important;
+  }
 
-              /* Reset Body for Print */
-              html, body {
-                margin: 0 !important;
-                padding: 0 !important;
-                background-color: white !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                height: auto !important;
-                overflow: visible !important;
-              }
+  /* Reset Body for Print */
+  html, body {
+    margin: 0!important;
+    padding: 0!important;
+    background - color: white!important;
+    -webkit - print - color - adjust: exact!important;
+    print - color - adjust: exact!important;
+    height: auto!important;
+    overflow: visible!important;
+  }
 
-              /* Ensure Portal is Visible and positioned correctly */
-              #print-portal-root {
-                display: block !important;
-                position: absolute !important;
-                top: 0 !important;
-                left: 0 !important;
-                width: 100% !important;
-                height: auto !important;
-                z-index: 9999 !important;
-                background-color: white !important;
-              }
+  /* Ensure Portal is Visible and positioned correctly */
+  #print - portal - root {
+    display: block!important;
+    position: absolute!important;
+    top: 0!important;
+    left: 0!important;
+    width: 100 % !important;
+    height: auto!important;
+    z - index: 9999!important;
+    background - color: white!important;
+  }
 
-              #dealer-printable {
-                background-color: white !important;
-                width: 100% !important;
-                max-width: none !important;
-                height: auto !important;
-                overflow: visible !important;
-                margin: 0 auto !important;
-              }
+  #dealer - printable {
+    background - color: white!important;
+    width: 100 % !important;
+    max - width: none!important;
+    height: auto!important;
+    overflow: visible!important;
+    margin: 0 auto!important;
+  }
 
-              .no-print { display: none !important; }
-            }
+              .no - print { display: none!important; }
+}
 
-            /* Hide Print Portal on Screen */
-            #print-portal-root {
-              display: none;
-            }
-          `}
+/* Hide Print Portal on Screen */
+#print - portal - root {
+  display: none;
+}
+`}
           </style>
 
 
@@ -557,40 +531,37 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
           />
 
           {/* Header */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 p-8 bg-white/40 backdrop-blur-xl border border-white/20 rounded-[2.5rem] shadow-xl shadow-slate-200/20">
-            <div className="flex items-center gap-6">
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-4">
               <button
                 onClick={() => setViewMode('LIST')}
-                className="p-4 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all text-slate-500 hover:text-slate-900 shadow-sm hover:shadow-md active:scale-95"
+                className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-slate-500 hover:text-slate-900 shadow-sm hover:shadow-md active:scale-95"
               >
-                <ArrowLeft size={24} />
+                <ArrowLeft size={18} />
               </button>
               <div>
-                <h1 className="text-4xl font-black tracking-tighter text-slate-900 uppercase leading-none mb-1">{selectedDealer.name}</h1>
+                <h1 className="text-xl font-bold tracking-tight text-slate-900 uppercase leading-none mb-1">{selectedDealer.name}</h1>
                 <div className="flex items-center gap-2">
-                  <div className="bg-slate-900 text-white px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-widest shadow-sm">UID: {selectedDealer.id}</div>
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest tracking-tighter">• {selectedDealer.location}</span>
+                  <div className="bg-slate-900 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide shadow-sm">UID: {selectedDealer.id}</div>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">• {selectedDealer.location}</span>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
               <div className="hidden lg:flex flex-col items-end mr-4">
-                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Growth Vector</span>
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">Growth Vector</span>
                 <span className="text-lg font-black text-slate-900">+12.4%</span>
               </div>
-              <button onClick={() => handleStartWizard(selectedDealer)} className="p-4 bg-white border border-slate-200 rounded-2xl hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-all shadow-sm active:scale-95">
-                <Settings size={20} />
+              <button onClick={() => handleStartWizard(selectedDealer)} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-all shadow-sm active:scale-95">
+                <Settings size={18} />
               </button>
-              {/* <button onClick={() => handleDeleteDealer(selectedDealer.id)} className="p-4 bg-white border border-slate-200 rounded-2xl hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all shadow-sm active:scale-95">
-                <Trash2 size={20} />
-              </button> */}
             </div>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden min-h-[600px] flex flex-col">
-            <div className="p-8 bg-slate-50/50 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="flex items-center gap-6 overflow-x-auto no-scrollbar pb-2 md:pb-0">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden min-h-[600px] flex flex-col">
+            <div className="p-6 bg-white border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="flex items-center gap-4 overflow-x-auto no-scrollbar pb-2 md:pb-0">
                 {[
                   { id: 'ACTIVE', label: 'Active Warranty', icon: Box },
                   { id: 'EXCHANGES', label: 'Exchange Log', icon: RefreshCw },
@@ -600,36 +571,36 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                   <button
                     key={tab.id}
                     onClick={() => { setActiveLogTab(tab.id as any); setUnitPage(0); }}
-                    className={`flex items-center gap-3 px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition-all whitespace-nowrap shadow-sm active:scale-95 ${activeLogTab === tab.id ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-400 hover:bg-slate-100 border border-slate-200'}`}
+                    className={`flex items - center gap - 2 px - 4 py - 2.5 rounded - lg font - bold text - xs uppercase tracking - wide transition - all whitespace - nowrap active: scale - 95 ${activeLogTab === tab.id ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'} `}
                   >
-                    <tab.icon size={16} />
+                    <tab.icon size={14} />
                     {tab.label}
                   </button>
                 ))}
               </div>
 
-              <div className="flex items-center gap-4 w-full md:w-auto">
+              <div className="flex items-center gap-3 w-full md:w-auto">
                 <div className="relative group/filter">
                   <button
                     onClick={() => setIsFilterOpen(!isFilterOpen)}
-                    className={`flex items-center gap-2 px-4 py-3 bg-white border ${isFilterOpen ? 'border-blue-500 text-blue-600' : 'border-slate-200 text-slate-600'} rounded-xl text-xs font-black uppercase tracking-widest shadow-sm hover:shadow-md transition-all`}
+                    className={`flex items - center gap - 2 px - 3 py - 2.5 bg - white border ${isFilterOpen ? 'border-blue-500 text-blue-600' : 'border-slate-200 text-slate-600'} rounded - lg text - xs font - bold uppercase tracking - wide shadow - sm hover: shadow - md transition - all`}
                   >
-                    <Filter size={16} />
+                    <Filter size={14} />
                     Filters
-                    {(filterDateStart || filterDateEnd || filterModel) && <span className="w-2 h-2 bg-blue-600 rounded-full animate-pulse ml-1"></span>}
+                    {(filterDateStart || filterDateEnd || filterModel) && <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse ml-1"></span>}
                   </button>
 
                   {isFilterOpen && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setIsFilterOpen(false)}></div>
-                      <div className="absolute right-0 top-14 w-80 bg-white border border-slate-200 rounded-2xl shadow-2xl p-6 z-50 space-y-6 animate-in zoom-in-95 duration-200">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                      <div className="absolute right-0 top-12 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-5 z-50 space-y-5 animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                           <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2"><ListFilter size={14} /> Filter Analytics</h4>
                           <button onClick={() => { setFilterDateStart(''); setFilterDateEnd(''); setFilterModel(''); }} className="text-[10px] font-black text-blue-600 hover:underline uppercase">Reset</button>
                         </div>
 
                         {/* Date Range */}
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Lifecycle Window</label>
                           <div className="grid grid-cols-2 gap-2">
                             <input type="date" className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-blue-500" value={filterDateStart} onChange={e => { setFilterDateStart(e.target.value); setUnitPage(0); }} />
@@ -654,7 +625,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
 
                         <button
                           onClick={() => setIsFilterOpen(false)}
-                          className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-black transition-all shadow-md active:scale-95"
+                          className="w-full py-2.5 bg-slate-900 text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-black transition-all shadow-md active:scale-95"
                         >
                           Apply Filters
                         </button>
@@ -663,7 +634,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                   )}
                 </div>
 
-                <div className="h-6 w-px bg-slate-200 mx-2"></div>
+                <div className="h-5 w-px bg-slate-200 mx-1"></div>
 
                 {/* PRINT BUTTON */}
                 <button
@@ -671,108 +642,108 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                   className="p-2.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all text-slate-500 hover:text-slate-900 shadow-sm"
                   title="Print Table"
                 >
-                  <Printer size={18} />
+                  <Printer size={16} />
                 </button>
               </div>
               <div className="relative">
-                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input placeholder="Search records..." className="pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-blue-500 uppercase transition-all w-64 shadow-sm" value={logSearchQuery} onChange={e => { setLogSearchQuery(e.target.value); setUnitPage(0); }} />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input placeholder="Search records..." className="pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-blue-500 uppercase transition-all w-64 focus:bg-white" value={logSearchQuery} onChange={e => { setLogSearchQuery(e.target.value); setUnitPage(0); }} />
               </div>
             </div>
 
             <div className="flex-1 overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="bg-slate-50/50 text-slate-400 text-xs font-black border-b border-slate-100 uppercase tracking-widest">
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-wider">
                     {activeLogTab === 'EXCHANGES' ? (
                       <>
-                        <th className="px-6 py-4 whitespace-nowrap">Old Battery</th>
+                        <th className="px-6 py-4 whitespace-nowrap pl-8">Old Battery</th>
                         <th className="px-6 py-4 whitespace-nowrap">Model</th>
                         <th className="px-6 py-4 whitespace-nowrap">Sent Date</th>
                         <th className="px-6 py-4 whitespace-nowrap">Sold Date</th>
                         <th className="px-6 py-4 whitespace-nowrap">Replaced On</th>
                         <th className="px-6 py-4 whitespace-nowrap">Replaced By</th>
                         <th className="px-6 py-4 whitespace-nowrap">Settlement</th>
-                        <th className="px-6 py-4 whitespace-nowrap">Outcome / Evidence</th>
+                        <th className="px-6 py-4 whitespace-nowrap pr-8">Outcome / Evidence</th>
                       </>
                     ) : activeLogTab === 'RETURNED' ? (
                       <>
-                        <th className="px-8 py-5 pl-10 font-black uppercase tracking-widest text-left">Identifier</th>
-                        <th className="px-8 py-5 font-black uppercase tracking-widest text-left">Returning Date</th>
-                        <th className="px-8 py-5 font-black uppercase tracking-widest text-left">Status Info</th>
-                        <th className="px-8 py-5 font-black uppercase tracking-widest text-right pr-10">Action</th>
+                        <th className="px-6 py-4 pl-8">Identifier</th>
+                        <th className="px-6 py-4">Returning Date</th>
+                        <th className="px-6 py-4">Status Info</th>
+                        <th className="px-6 py-4 text-right pr-8">Action</th>
                       </>
                     ) : (
                       <>
-                        <th className="px-8 py-5 pl-10 font-black uppercase tracking-widest text-left">Units In Warranty</th>
-                        <th className="px-8 py-5 font-black uppercase tracking-widest text-left">Model Summary</th>
-                        <th className="px-8 py-5 font-black uppercase tracking-widest text-left">Status Badge</th>
-                        <th className="px-8 py-5 font-black uppercase tracking-widest text-right pr-10">Lifespan Timeline</th>
+                        <th className="px-6 py-4 pl-8">Units In Warranty</th>
+                        <th className="px-6 py-4">Model Summary</th>
+                        <th className="px-6 py-4">Status Badge</th>
+                        <th className="px-6 py-4 text-right pr-8">Lifespan Timeline</th>
                       </>
                     )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-y divide-slate-100">
                   {paginatedData.map((item: any) => (
                     <tr
                       key={item.id || item.rowid}
                       onClick={() => onNavigateToHub?.(activeLogTab === 'EXCHANGES' ? item.oldBatteryId : item.id)}
-                      className="group/row hover:bg-slate-50/80 transition-all cursor-pointer"
+                      className="group/row hover:bg-slate-50 transition-all cursor-pointer"
                     >
                       {activeLogTab === 'EXCHANGES' ? (
                         <>
-                          <td className="px-6 py-5 font-bold text-slate-900 mono text-xs">{item.oldBatteryId}</td>
-                          <td className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.batteryModel}</td>
-                          <td className="px-6 py-5 font-bold text-slate-500 mono text-[10px]">{formatDate(item.sentDate)}</td>
-                          <td className="px-6 py-5 font-bold text-slate-500 mono text-[10px]">{formatDate(item.soldDate)}</td>
-                          <td className="px-6 py-5 font-bold text-slate-500 mono text-[10px]">{formatDate(item.replacementDate)}</td>
-                          <td className="px-6 py-5 font-black text-blue-600 mono text-xs">
+                          <td className="px-6 py-4 font-bold text-slate-900 mono text-xs pl-8">{item.oldBatteryId}</td>
+                          <td className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wide">{item.batteryModel}</td>
+                          <td className="px-6 py-4 font-medium text-slate-600 mono text-[10px]">{formatDate(item.sentDate)}</td>
+                          <td className="px-6 py-4 font-medium text-slate-600 mono text-[10px]">{formatDate(item.soldDate)}</td>
+                          <td className="px-6 py-4 font-medium text-slate-600 mono text-[10px]">{formatDate(item.replacementDate)}</td>
+                          <td className="px-6 py-4 font-bold text-blue-600 mono text-xs">
                             <div className="flex items-center gap-2">
                               {item.newBatteryId}
                               <ArrowRight size={12} />
                             </div>
                           </td>
-                          <td className="px-6 py-5">
+                          <td className="px-6 py-4">
                             {item.replenishmentBatteryId ? (
                               <div className="flex flex-col">
-                                <span className="text-[9px] font-black text-indigo-500 uppercase">Stock Replaced</span>
-                                <span className="text-xs font-black text-slate-900 mono">{item.replenishmentBatteryId}</span>
+                                <span className="text-[9px] font-bold text-indigo-500 uppercase">Stock Replaced</span>
+                                <span className="text-xs font-bold text-slate-900 mono">{item.replenishmentBatteryId}</span>
                               </div>
                             ) : item.settlementType === 'DIRECT' ? (
-                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded text-[9px] font-black uppercase">Direct</span>
+                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded text-[9px] font-bold uppercase">Direct</span>
                             ) : (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleOpenSettlement(item); }}
-                                className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${item.paidInAccount ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 hover:shadow-md active:scale-95'}`}
+                                className={`px - 2.5 py - 1 rounded text - [9px] font - bold uppercase tracking - wide border transition - all ${item.paidInAccount ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 hover:shadow-sm active:scale-95'} `}
                               >
                                 {item.paidInAccount ? 'Settled' : 'Pending Settlement'}
                               </button>
                             )}
                           </td>
-                          <td className="px-6 py-5">
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[10px] font-black text-rose-600 uppercase">FAILED: {item.reason || 'N/A'}</span>
-                              <span className="text-[9px] font-bold text-slate-400 uppercase">Evidence: {item.warrantyCardStatus || 'N/A'}</span>
+                          <td className="px-6 py-4 pr-8">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[10px] font-bold text-rose-600 uppercase">FAILED: {item.reason || 'N/A'}</span>
+                              <span className="text-[9px] font-medium text-slate-400 uppercase">Evidence: {item.warrantyCardStatus || 'N/A'}</span>
                             </div>
                           </td>
                         </>
                       ) : activeLogTab === 'RETURNED' ? (
                         <>
-                          <td className="px-8 py-6 pl-10">
+                          <td className="px-6 py-4 pl-8">
                             <div className="flex flex-col">
                               <span className="font-bold text-slate-900 mono text-xs">{item.id}</span>
                               <span className="text-[10px] text-slate-400 font-bold uppercase">{item.model}</span>
                             </div>
                           </td>
-                          <td className="px-8 py-6">
+                          <td className="px-6 py-4">
                             <div className="flex flex-col">
-                              <span className="text-xs font-bold text-slate-900">{formatDate(item.activationDate)}</span>
-                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                              <span className="text-xs font-bold text-slate-700">{formatDate(item.activationDate)}</span>
+                              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">
                                 {item.status === BatteryStatus.RETURNED_PENDING ? 'Returned Date' : 'Exchanged Date'}
                               </span>
                             </div>
                           </td>
-                          <td className="px-8 py-6">
+                          <td className="px-6 py-4">
                             <StatusDisplay
                               status={item.status}
                               isExpired={false}
@@ -780,37 +751,37 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                               variant="badge"
                             />
                           </td>
-                          <td className="px-8 py-6 text-right pr-10">
+                          <td className="px-6 py-4 text-right pr-8">
                             {item.status === BatteryStatus.RETURNED_PENDING ? (
                               <button
                                 onClick={(e) => { e.stopPropagation(); onNavigateToHub && onNavigateToHub(item.id); }}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-md active:scale-95 flex items-center gap-2 justify-end ml-auto"
+                                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-bold uppercase tracking-wide hover:bg-blue-700 transition-all shadow-sm active:scale-95 flex items-center gap-1.5 justify-end ml-auto"
                               >
-                                Complete Exchange <ArrowRight size={14} />
+                                Complete Exchange <ArrowRight size={12} />
                               </button>
                             ) : (
                               <div className="flex flex-col items-end gap-1">
-                                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 text-slate-400 rounded-full border border-slate-100 text-[10px] font-black uppercase ml-auto">
+                                <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 text-slate-500 rounded-full border border-slate-200 text-[10px] font-bold uppercase ml-auto">
                                   <CheckCircle2 size={12} /> Exchanged
                                 </div>
-                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mr-2">{formatDate(item.activationDate)}</span>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mr-1">{formatDate(item.activationDate)}</span>
                               </div>
                             )}
                           </td>
                         </>
                       ) : (
                         <>
-                          <td className="px-8 py-5 pl-10 font-bold text-slate-900 mono text-xs flex items-center gap-3">
+                          <td className="px-6 py-4 pl-8 font-bold text-slate-900 mono text-xs flex items-center gap-3">
                             <div className="w-1.5 h-1.5 rounded-full group-hover/row:scale-150 transition-transform bg-blue-500"></div>
                             {item.id}
                           </td>
-                          <td className="px-8 py-5">
+                          <td className="px-6 py-4">
                             <div className="flex flex-col">
-                              <span className="text-xs font-black text-slate-900">{item.model}</span>
-                              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{item.capacity || 'Auto-Cap'}</span>
+                              <span className="text-xs font-bold text-slate-900">{item.model}</span>
+                              <span className="text-[9px] font-medium text-slate-500 uppercase tracking-wide">{item.capacity || 'Auto-Cap'}</span>
                             </div>
                           </td>
-                          <td className="px-8 py-5">
+                          <td className="px-6 py-4">
                             <StatusDisplay
                               status={item.status}
                               isExpired={activeLogTab === 'EXPIRED'}
@@ -818,7 +789,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                               variant="badge"
                             />
                           </td>
-                          <td className="px-8 py-5 text-right pr-10 font-mono text-xs text-slate-500 font-bold">
+                          <td className="px-6 py-4 text-right pr-8 font-mono text-xs text-slate-500 font-bold">
                             <div>
                               <span className="text-slate-900">{formatDate(item.activationDate || item.manufactureDate)}</span>
                               {item.warrantyExpiry && (
@@ -860,11 +831,11 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                 reportType="dealer"
                 dateRange={
                   filterDateStart && filterDateEnd
-                    ? `${formatDate(filterDateStart)} - ${formatDate(filterDateEnd)}`
+                    ? `${formatDate(filterDateStart)} - ${formatDate(filterDateEnd)} `
                     : filterDateStart
-                      ? `${formatDate(filterDateStart)}+`
+                      ? `${formatDate(filterDateStart)} +`
                       : filterDateEnd
-                        ? `Up to ${formatDate(filterDateEnd)}`
+                        ? `Up to ${formatDate(filterDateEnd)} `
                         : 'All Time'
                 }
                 filterModel={filterModel}
@@ -881,21 +852,21 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
     // --- WIZARD VIEW (Modal-Free) ---
     return (
       <>
-        <div className="max-w-4xl mx-auto py-8 animate-in slide-in-from-right-4 duration-500">
-          <div className="mb-8 flex items-center gap-4">
-            <button onClick={() => setViewMode('LIST')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500 hover:text-slate-900 transition-all shadow-sm"><ArrowLeft size={20} /></button>
+        <div className="max-w-3xl mx-auto py-8 animate-in slide-in-from-right-4 duration-500">
+          <div className="mb-6 flex items-center gap-4">
+            <button onClick={() => setViewMode('LIST')} className="p-2.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 hover:text-slate-900 transition-all shadow-sm"><ArrowLeft size={18} /></button>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Dealer Enrollment</h1>
-              <p className="text-sm font-medium text-slate-500">Register a new authorized dealer in 3 steps</p>
+              <h1 className="text-xl font-bold text-slate-900 uppercase tracking-tight">Dealer Enrollment</h1>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">Register a new authorized dealer</p>
             </div>
           </div>
 
           {/* Stepper */}
-          <div className="mb-12 flex items-center justify-between relative px-20">
-            <div className="absolute left-20 right-20 top-1/2 -translate-y-1/2 h-1 bg-slate-100 -z-10 rounded-full overflow-hidden">
+          <div className="mb-10 flex items-center justify-between relative px-12">
+            <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-0.5 bg-slate-100 -z-10">
               <div
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full transition-all duration-700 ease-out"
-                style={{ width: `${(wizardStep / 2) * 100}%` }}
+                className="bg-slate-900 h-full transition-all duration-700 ease-out"
+                style={{ width: `${(wizardStep / 2) * 100}% ` }}
               />
             </div>
             {[
@@ -903,22 +874,22 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
               { id: 1, label: 'Location', icon: MapPin },
               { id: 2, label: 'Confirm', icon: CheckCircle2 }
             ].map((step, idx) => (
-              <div key={idx} className="flex flex-col items-center gap-4 relative">
+              <div key={idx} className="flex flex-col items-center gap-3 relative bg-white px-2">
                 <div
-                  className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center border-2 transition-all duration-500 shadow-xl ${idx < wizardStep ? 'bg-blue-600 border-blue-600 text-white' :
-                    idx === wizardStep ? 'bg-white border-blue-600 text-blue-600 scale-110 shadow-blue-500/20' :
+                  className={`w - 12 h - 12 rounded - xl flex items - center justify - center border transition - all duration - 500 shadow - sm ${idx < wizardStep ? 'bg-slate-900 border-slate-900 text-white' :
+                    idx === wizardStep ? 'bg-white border-slate-900 text-slate-900 scale-110 shadow-lg' :
                       'bg-white border-slate-200 text-slate-300'
-                    }`}
+                    } `}
                 >
-                  <step.icon size={idx === wizardStep ? 28 : 24} className={idx === wizardStep ? 'animate-pulse' : ''} />
+                  <step.icon size={idx === wizardStep ? 20 : 18} />
 
                   {idx < wizardStep && (
-                    <div className="absolute -top-1 -right-1 bg-emerald-500 text-white rounded-full p-1 border-2 border-white">
-                      <Check size={10} strokeWidth={4} />
+                    <div className="absolute -top-1 -right-1 bg-emerald-500 text-white rounded-full p-0.5 border-2 border-white">
+                      <Check size={8} strokeWidth={4} />
                     </div>
                   )}
                 </div>
-                <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-2 py-1 rounded-md transition-all duration-300 ${idx <= wizardStep ? 'text-slate-900' : 'text-slate-300'}`}>
+                <span className={`text - [9px] font - bold uppercase tracking - widest transition - all duration - 300 ${idx <= wizardStep ? 'text-slate-900' : 'text-slate-300'} `}>
                   {step.label}
                 </span>
               </div>
@@ -926,40 +897,37 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
           </div>
 
           {/* Form Card */}
-          <div className="bg-white/70 backdrop-blur-xl border border-white rounded-[3rem] p-12 shadow-2xl shadow-blue-500/10 min-h-[600px] flex flex-col justify-between relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl -mr-32 -mt-32"></div>
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl -ml-32 -mb-32"></div>
-
+          <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-xl shadow-slate-200/40 min-h-[500px] flex flex-col justify-between relative overflow-hidden">
             <div className="flex-1">
               {wizardStep === 0 && (
-                <div className="space-y-8 animate-in fade-in slide-in-from-left-4 duration-300">
-                  <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-2xl text-blue-700 mb-8 border border-blue-100">
-                    <Info size={24} className="shrink-0" />
-                    <p className="text-sm font-medium leading-relaxed">Please ensure the business name matches the legal registration documents. This ID will be used for all dealer records.</p>
+                <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg text-slate-600 mb-6 border border-slate-100">
+                    <Info size={18} className="shrink-0 text-blue-500" />
+                    <p className="text-xs font-bold leading-relaxed">Ensure business name matches legal documents.</p>
                   </div>
 
-                  <div className="space-y-6 max-w-lg mx-auto">
+                  <div className="space-y-5 max-w-lg mx-auto">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Business Name</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Business Name</label>
                       <div className="relative group">
-                        <Store className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" />
-                        <input autoFocus maxLength={32} className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-all uppercase placeholder:text-slate-300" placeholder="e.g. STARLINE BATTERIES" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                        <Store className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-900 transition-colors" size={18} />
+                        <input autoFocus maxLength={32} className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-base outline-none focus:bg-white focus:border-slate-900 transition-all uppercase placeholder:text-slate-300" placeholder="e.g. STARLINE BATTERIES" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Owner Full Name</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Owner Full Name</label>
                       <div className="relative group">
-                        <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" />
-                        <input className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-base outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="e.g. Salid Nadaf" value={formData.owner} onChange={e => setFormData({ ...formData, owner: e.target.value })} />
+                        <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-900 transition-colors" size={18} />
+                        <input className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-slate-900 transition-all uppercase" placeholder="e.g. Salid Nadaf" value={formData.owner} onChange={e => setFormData({ ...formData, owner: e.target.value })} />
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Contact Number</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Contact Number</label>
                       <div className="relative group">
-                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" />
-                        <input className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-base outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="e.g. 9876543210" value={formData.contact} onChange={e => setFormData({ ...formData, contact: e.target.value })} />
+                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-900 transition-colors" size={18} />
+                        <input className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-slate-900 transition-all uppercase" placeholder="e.g. 9876543210" value={formData.contact} onChange={e => setFormData({ ...formData, contact: e.target.value })} />
                       </div>
                     </div>
                   </div>
@@ -967,59 +935,59 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
               )}
 
               {wizardStep === 1 && (
-                <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                  <div className="text-center mb-8">
-                    <h3 className="text-xl font-bold text-slate-900">Where are they located?</h3>
-                    <p className="text-sm text-slate-400 mt-1">Accurate location data helps in logistics planning</p>
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="text-center mb-6">
+                    <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Location Details</h3>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mt-1">For logistics and regional mapping</p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl mx-auto">
                     <div className="space-y-2 col-span-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Street Address</label>
-                      <textarea rows={2} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="SHOP NO, STREET, AREA" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Street Address</label>
+                      <textarea rows={2} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:bg-white focus:border-slate-900 transition-all uppercase" placeholder="SHOP NO, STREET, AREA" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">City</label>
-                      <input className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="CITY NAME" value={formData.city} onChange={e => setFormData({ ...formData, city: e.target.value })} />
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">City</label>
+                      <input className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:bg-white focus:border-slate-900 transition-all uppercase" placeholder="CITY NAME" value={formData.city} onChange={e => setFormData({ ...formData, city: e.target.value })} />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">State</label>
-                      <input className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="STATE" value={formData.state} onChange={e => setFormData({ ...formData, state: e.target.value })} />
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">State</label>
+                      <input className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:bg-white focus:border-slate-900 transition-all uppercase" placeholder="STATE" value={formData.state} onChange={e => setFormData({ ...formData, state: e.target.value })} />
                     </div>
                     <div className="space-y-2 col-span-2 md:col-span-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Pincode</label>
-                      <input className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-blue-500 transition-all uppercase" placeholder="591313" value={formData.pincode} onChange={e => setFormData({ ...formData, pincode: e.target.value })} />
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Pincode</label>
+                      <input className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:bg-white focus:border-slate-900 transition-all uppercase" placeholder="591313" value={formData.pincode} onChange={e => setFormData({ ...formData, pincode: e.target.value })} />
                     </div>
                   </div>
                 </div>
               )}
 
               {wizardStep === 2 && (
-                <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300 max-w-lg mx-auto text-center">
-                  <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <ShieldCheck size={40} />
+                <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 max-w-md mx-auto text-center">
+                  <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-emerald-100 shadow-sm">
+                    <ShieldCheck size={32} />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-bold text-slate-900">Ready to Enroll?</h3>
-                    <p className="text-slate-500 mt-2">Please review the details below before confirming.</p>
+                    <h3 className="text-xl font-bold text-slate-900 uppercase tracking-tight">Confirm Enrollment</h3>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mt-2">Review dealer details</p>
                   </div>
 
-                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 text-left space-y-4">
-                    <div className="flex justify-between border-b border-slate-200 pb-4">
-                      <span className="text-xs font-bold text-slate-400 uppercase">Dealer ID</span>
-                      <span className="text-sm font-black text-slate-700">{generatedId}</span>
+                  <div className="bg-slate-50 rounded-xl p-6 border border-slate-200 text-left space-y-3">
+                    <div className="flex justify-between border-b border-slate-200 pb-3">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Dealer ID</span>
+                      <span className="text-sm font-black text-slate-900">{generatedId}</span>
                     </div>
-                    <div className="flex justify-between border-b border-slate-200 pb-4">
-                      <span className="text-xs font-bold text-slate-400 uppercase">Business</span>
+                    <div className="flex justify-between border-b border-slate-200 pb-3">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Business</span>
                       <span className="text-sm font-black text-slate-900">{formData.name}</span>
                     </div>
-                    <div className="flex justify-between border-b border-slate-200 pb-4">
-                      <span className="text-xs font-bold text-slate-400 uppercase">Owner</span>
-                      <span className="text-sm font-bold text-slate-700">{formData.owner}</span>
+                    <div className="flex justify-between border-b border-slate-200 pb-3">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Owner</span>
+                      <span className="text-xs font-bold text-slate-700 uppercase">{formData.owner}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-xs font-bold text-slate-400 uppercase">Location</span>
-                      <span className="text-sm font-bold text-slate-700 text-right">{formData.city}, {formData.state}</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Location</span>
+                      <span className="text-xs font-bold text-slate-700 uppercase text-right">{formData.city}, {formData.state}</span>
                     </div>
                   </div>
                 </div>
@@ -1027,20 +995,20 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
             </div>
 
             {/* Footer Nav */}
-            <div className="flex justify-between pt-8 border-t border-slate-100 mt-8">
+            <div className="flex justify-between pt-6 border-t border-slate-100 mt-6">
               <button
                 onClick={() => {
                   if (wizardStep > 0) setWizardStep(s => s - 1);
                   else setViewMode('LIST');
                   setError('');
                 }}
-                className="px-6 py-3 text-slate-500 font-bold text-sm hover:bg-slate-50 rounded-xl transition-all"
+                className="px-5 py-2.5 text-slate-500 font-bold text-xs hover:bg-slate-50 rounded-lg transition-all uppercase tracking-wide"
               >
                 {wizardStep === 0 ? 'Cancel' : 'Back'}
               </button>
 
               <div className="flex flex-col items-end gap-2">
-                {error && <span className="text-xs font-bold text-rose-500 animate-pulse">{error}</span>}
+                {error && <span className="text-[10px] font-bold text-rose-500 animate-pulse">{error}</span>}
                 <button
                   onClick={() => {
                     setError('');
@@ -1063,10 +1031,10 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                     (wizardStep === 1 && (!formData.city || !formData.state)) ||
                     isSubmitting
                   }
-                  className="px-10 py-3 bg-slate-900 text-white font-bold text-sm rounded-xl shadow-lg hover:bg-black transition-all flex items-center gap-2 disabled:opacity-50"
+                  className="px-8 py-2.5 bg-slate-900 text-white font-bold text-xs rounded-lg shadow-md hover:bg-black transition-all flex items-center gap-2 disabled:opacity-50 uppercase tracking-wide"
                 >
                   {wizardStep === 2 ? (isSubmitting ? 'Enrolling...' : 'Confirm Enrollment') : 'Continue'}
-                  {!isSubmitting && wizardStep < 2 && <ArrowRight size={16} />}
+                  {!isSubmitting && wizardStep < 2 && <ArrowRight size={14} />}
                 </button>
               </div>
             </div>
@@ -1078,75 +1046,73 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   } else {
     // --- LIST VIEW (Default) ---
     return (
-      <>
-        <div className="max-w-[1600px] mx-auto space-y-6 animate-in fade-in duration-500 pb-20 text-slate-900">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row items-center gap-4">
-            <div className="flex-1 w-full relative group/search">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-blue-500 transition-colors" size={20} />
-              <input
-                placeholder="SEARCH DEALER NAME, ID OR REGION..."
-                className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-lg transition-all uppercase tracking-widest mono text-slate-900 focus:bg-white focus:border-blue-500"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <button
-              onClick={() => handleStartWizard()}
-              className="w-full md:w-auto px-8 py-4 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-black transition-all shadow-lg active:scale-95 flex items-center justify-center gap-3"
-            >
-              <Plus size={18} />
-              <span className="uppercase tracking-widest">Enroll Dealer</span>
-            </button>
+      <div className="max-w-[1600px] mx-auto space-y-6 animate-in fade-in duration-500 pb-20 text-slate-900">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col md:flex-row items-center gap-4">
+          <div className="flex-1 w-full relative group/search">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-blue-500 transition-colors" size={18} />
+            <input
+              placeholder="Search Dealer Name, ID or Region..."
+              className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg outline-none font-bold text-sm transition-all uppercase tracking-wide mono text-slate-900 focus:bg-white focus:border-blue-500"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredDealers.map(dealer => (
-              <div
-                key={dealer.id}
-                onClick={() => loadDealerDetail(dealer)}
-                className="group bg-white border border-slate-200 rounded-3xl p-8 hover:border-blue-500/50 hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[280px]"
-              >
-                <div className="space-y-6">
-                  <div className="flex justify-between items-start">
-                    <div className="w-14 h-14 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
-                      <Store size={28} />
-                    </div>
-                    <div className="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">
-                      ID: {dealer.id}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-tight mb-2 group-hover:text-blue-600 transition-colors truncate">
-                      {dealer.name}
-                    </h3>
-                    <div className="flex items-center gap-2">
-                      <UserCheck size={14} className="text-slate-400" />
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{dealer.ownerName || 'Unknown Principal'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-6 mt-6 border-t border-slate-100 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-slate-500">
-                    <MapPin size={14} className="text-blue-500" />
-                    <span className="text-[11px] font-bold uppercase tracking-tight truncate max-w-[200px]">
-                      {dealer.location}
-                    </span>
-                  </div>
-                  <ChevronRight size={18} className="text-slate-300 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </div>
-            ))}
-            {filteredDealers.length === 0 && (
-              <div className="col-span-full py-20 flex flex-col items-center justify-center opacity-40">
-                <Store size={64} className="text-slate-300 mb-4" />
-                <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No dealers found matching criteria</p>
-              </div>
-            )}
-          </div>
+          <button
+            onClick={() => handleStartWizard()}
+            className="w-full md:w-auto px-6 py-3 bg-slate-900 text-white rounded-lg font-bold text-xs hover:bg-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+          >
+            <Plus size={16} />
+            <span className="uppercase tracking-wide">Enroll Dealer</span>
+          </button>
         </div>
-      </>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 relative">
+          {sortedDealers.map(dealer => (
+            <div
+              key={dealer.id}
+              onClick={() => loadDealerDetail(dealer)}
+              className="group bg-white border border-slate-200 rounded-xl p-6 hover:border-blue-500 hover:shadow-lg transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[240px]"
+            >
+              <div className="space-y-4">
+                <div className="flex justify-between items-start">
+                  <div className="w-12 h-12 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
+                    <Store size={24} />
+                  </div>
+                  <div className="bg-slate-900 text-white px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wide">
+                    ID: {dealer.id}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900 uppercase tracking-tight leading-tight mb-1 group-hover:text-blue-600 transition-colors truncate">
+                    {dealer.name}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <UserCheck size={14} className="text-slate-400" />
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">{dealer.ownerName || 'Unknown Principal'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 mt-4 border-t border-slate-50 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-slate-500">
+                  <MapPin size={14} className="text-blue-500" />
+                  <span className="text-[11px] font-bold uppercase tracking-wide truncate max-w-[200px]">
+                    {dealer.location}
+                  </span>
+                </div>
+                <ChevronRight size={16} className="text-slate-300 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </div>
+          ))}
+          {sortedDealers.length === 0 && (
+            <div className="col-span-full py-20 flex flex-col items-center justify-center opacity-40">
+              <Store size={48} className="text-slate-300 mb-4" />
+              <p className="text-sm font-bold text-slate-400 uppercase tracking-wide">No dealers found matching criteria</p>
+            </div>
+          )}
+        </div>
+      </div>
     );
   }
 };

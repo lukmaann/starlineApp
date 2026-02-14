@@ -4,11 +4,13 @@ import {
   Shield, Key, User as UserIcon, Save, Loader2, Lock, ArrowRight,
   ShieldCheck, ShieldAlert, AlertTriangle, Fingerprint, Layers,
   Box, FileSignature, Settings2, ClipboardCheck, ChevronLeft,
-  ChevronRight, CheckCircle2, Plus, Edit2, Trash2, Info, X, RefreshCw, Activity, Sliders
+  ChevronRight, CheckCircle2, Plus, Edit2, Trash2, Info, X, RefreshCw, Activity, Sliders,
+  KeyRound
 } from 'lucide-react';
 import { Database } from '../db';
 import { BatteryModel, Dealer } from '../types';
 import { AuthSession } from '../utils/AuthSession';
+import { toast } from 'sonner';
 
 interface ControlsProps {
   active?: boolean;
@@ -17,6 +19,9 @@ interface ControlsProps {
 const Controls: React.FC<ControlsProps> = ({ active }) => {
   // Global Lock State
   const [isLocked, setIsLocked] = useState(!AuthSession.isValid());
+  const [lockPassword, setLockPassword] = useState('');
+  const [lockError, setLockError] = useState('');
+  const [isUnlocking, setIsUnlocking] = useState(false);
 
   // Listen for session changes
   useEffect(() => {
@@ -241,14 +246,72 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
     m.id.includes(modelSearch.toUpperCase())
   );
 
+  const handleLocalUnlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsUnlocking(true);
+    setLockError('');
+
+    try {
+      const adminPass = await Database.getConfig('starline_admin_pass') || 'starline@2025';
+      if (lockPassword === adminPass) {
+        AuthSession.saveSession();
+        setIsLocked(false);
+        setLockPassword('');
+        toast.success('Controls Registry Unlocked');
+      } else {
+        setLockError('Incorrect Access Key');
+        setLockPassword('');
+        toast.error('Incorrect Access Key');
+      }
+    } catch (err) {
+      toast.error('Verification Failed');
+    } finally {
+      setIsUnlocking(false);
+    }
+  };
+
   if (isLocked) {
     return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-100px)] text-slate-900 animate-in fade-in duration-500">
-        <div className="w-20 h-20 bg-slate-100 rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-slate-200">
-          <Sliders size={32} className="text-slate-400" />
+      <div className="h-full flex flex-col items-center justify-center p-6 animate-in fade-in duration-500 bg-slate-50/50">
+        <div className="w-full max-w-sm text-center">
+          <div className="w-20 h-20 bg-white border border-slate-200 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-slate-200/50">
+            <Lock size={32} className="text-slate-900" />
+          </div>
+          <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900 mb-2">Registry Locked</h2>
+          <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mb-8">Authorization Required</p>
+
+          <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl text-left mb-6">
+            <p className="text-blue-700 text-[10px] font-bold uppercase tracking-wider leading-relaxed">
+              Security Clearance Required. Please enter the administrator access key to proceed with system configuration.
+            </p>
+          </div>
+
+          <form onSubmit={handleLocalUnlock} className="space-y-4">
+            <div className="relative group">
+              <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+              <input
+                type="password"
+                autoFocus
+                placeholder="Access Key"
+                className={`w-full pl-12 pr-4 py-3.5 bg-white border rounded-xl text-sm font-bold outline-none transition-all placeholder:text-slate-300
+                    ${lockError
+                    ? 'border-rose-300 bg-rose-50 text-rose-600 focus:border-rose-500 shadow-sm shadow-rose-100'
+                    : 'border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5'
+                  }`}
+                value={lockPassword}
+                onChange={e => { setLockPassword(e.target.value); setLockError(''); }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isUnlocking || !lockPassword}
+              className="w-full py-4 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all shadow-xl shadow-slate-900/10 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {isUnlocking ? <Loader2 size={16} className="animate-spin text-white/50" /> : 'Authorize Access'}
+            </button>
+          </form>
         </div>
-        <h2 className="text-2xl font-black uppercase tracking-tight mb-2">Controls Locked</h2>
-        <p className="text-slate-400 font-medium text-sm mb-8">Unlock the session from the top bar to access configuration.</p>
       </div>
     );
   }

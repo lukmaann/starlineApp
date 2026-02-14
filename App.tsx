@@ -12,6 +12,7 @@ import DatabaseSelector from './pages/DatabaseSelector';
 import DatabaseManagement from './pages/DatabaseManagement';
 import { Database } from './db';
 import { Zap, Download, LogOut, Database as DatabaseIcon } from 'lucide-react';
+import UnlockPage from './pages/UnlockPage';
 import { Toaster } from './components/ui/sonner';
 import { toast } from "sonner";
 import { useNavigationHistory } from './hooks/useNavigationHistory';
@@ -153,6 +154,13 @@ const App: React.FC = () => {
 
       case 'database-management':
         return <DatabaseManagement />;
+      case 'session-lock':
+        return (
+          <UnlockPage
+            onUnlock={() => navigate(history[historyIndex - 1] || 'scanner')}
+            onBack={goBack}
+          />
+        );
       default:
         return null;
     }
@@ -195,7 +203,6 @@ const App: React.FC = () => {
               onBack={goBack}
               onForward={goForward}
               onClear={clearHistory}
-              activeTab={activeTab}
             />
             <span className="hover:text-slate-600 transition-colors cursor-default">Starline</span>
             <span>/</span>
@@ -205,8 +212,8 @@ const App: React.FC = () => {
           <div className="flex items-center space-x-2">
 
             {/* Database Source Indicator & Switch */}
-            <div className="flex items-center mr-2 bg-slate-50 border border-slate-200 rounded-lg p-1">
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${localStorage.getItem('dbConfig') && JSON.parse(localStorage.getItem('dbConfig') || '{}').type === 'EXTERNAL'
+            <div className="flex items-center mr-2 bg-slate-50 border border-slate-200 rounded-full p-1 h-9">
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${localStorage.getItem('dbConfig') && JSON.parse(localStorage.getItem('dbConfig') || '{}').type === 'EXTERNAL'
                 ? 'bg-purple-100 text-purple-700'
                 : 'bg-blue-100 text-blue-700'
                 }`}>
@@ -215,12 +222,12 @@ const App: React.FC = () => {
               <button
                 title="Manage Database"
                 onClick={() => navigate('database-management')}
-                className={`ml-1 p-1.5 rounded-md transition-all ${activeTab === 'database-management'
-                  ? 'bg-slate-900 text-white'
+                className={`ml-1 p-1.5 rounded-full transition-all ${activeTab === 'database-management'
+                  ? 'bg-slate-900 text-white shadow-md'
                   : 'text-slate-400 hover:text-slate-900 hover:bg-slate-200'
                   }`}
               >
-                <DatabaseIcon size={14} />
+                <DatabaseIcon size={16} />
               </button>
             </div>
 
@@ -228,23 +235,23 @@ const App: React.FC = () => {
 
             <button
               onClick={() => navigate('backup')}
-              className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg font-bold text-xs transition-all border ${activeTab === 'backup'
-                ? 'bg-slate-900 text-white border-slate-900 shadow-lg shadow-slate-900/20'
-                : 'text-slate-600 hover:bg-slate-100 border-slate-200'
+              className={`p-2 rounded-full transition-all flex items-center justify-center ${activeTab === 'backup'
+                ? 'bg-slate-900 text-white shadow-md'
+                : 'text-slate-600 hover:bg-slate-100'
                 }`}
+              title="Backup to SSD"
             >
-              <Download size={14} />
-              <span>Backup to SSD</span>
+              <Download size={18} />
             </button>
             <div className="w-px h-6 bg-slate-200 mx-1" />
-            <SessionLock />
+            <SessionLock onUnlockRequest={() => navigate('session-lock')} />
             <div className="w-px h-6 bg-slate-200 mx-1" />
             <div className="flex items-center space-x-3">
               {/* <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 overflow-hidden">
                 <div className="bg-blue-600 w-full h-full flex items-center justify-center text-white text-[10px] font-bold">AD</div>
               </div> */}
-              <button onClick={handleLogoutClick} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all">
-                <LogOut size={18} />
+              <button onClick={handleLogoutClick} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-all active:bg-rose-100">
+                <LogOut size={20} strokeWidth={2} />
               </button>
             </div>
           </div>
