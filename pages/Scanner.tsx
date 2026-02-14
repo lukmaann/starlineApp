@@ -23,6 +23,8 @@ import SessionLock from '../components/SessionLock';
 import { BatteryStatus, type Battery, type Dealer, WarrantyCardStatus, type Sale, Replacement, BatteryModel, WarrantyStatus } from '../types';
 import { AuthSession } from '../utils/AuthSession';
 import BatteryPrintTemplate from '../components/BatteryPrintTemplate';
+import { ProgressFlow } from '../components/ProgressFlow';
+import { SuccessFlow } from '../components/SuccessFlow';
 
 interface ScannerProps {
   initialSearch?: string | null;
@@ -1801,120 +1803,44 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       {/* Session Lock handled via Navigation */}
 
       {/* Batch Processing Overlay */}
-      {isBatchProcessing && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
-          <div className="w-full max-w-md space-y-8">
-            <div className="space-y-2">
-              <h2 className="text-2xl font-black text-white uppercase tracking-tight">Assigning Batteries</h2>
-              <p className="text-indigo-200 font-bold uppercase tracking-widest text-xs">Dealer: {batchSuccessDetails.dealerName}</p>
-            </div>
-
-            <div className="relative h-4 w-full bg-white/10 rounded-full overflow-hidden border border-white/10">
-              <div
-                className="absolute top-0 left-0 h-full bg-indigo-500 transition-all duration-100 ease-linear shadow-[0_0_20px_rgba(99,102,241,0.5)]"
-                style={{ width: `${batchProgress}%` }}
-              />
-            </div>
-
-            <div className="flex justify-between items-center text-white mono text-xs font-bold">
-              <span>{Math.round(batchProgress)}% COMPLETE</span>
-              <span>{stagedItems.length} UNITS</span>
-            </div>
-
-            <div className="pt-4 space-y-4">
-              <p className="text-indigo-300 text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">
-                DO NOT CLOSE THE APPLICATION
-              </p>
-
-              <button
-                onClick={handleCancelBatch}
-                className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all border border-white/10"
-              >
-                Cancel Process
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ProgressFlow
+        isOpen={isBatchProcessing}
+        title="Assigning Batteries"
+        subtitle={`Dealer: ${batchSuccessDetails.dealerName}`}
+        progress={batchProgress}
+        stageLabel="DO NOT CLOSE THE APPLICATION"
+        onCancel={handleCancelBatch}
+      />
 
       {/* Batch Success Dialog */}
-      {showBatchSuccess && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in zoom-in duration-300">
-          <div className="bg-white rounded-[2.5rem] p-1 shadow-2xl max-w-sm w-full relative overflow-hidden">
-            {/* Animated Background Gradients */}
-            <div className="absolute top-0 inset-x-0 h-40 bg-gradient-to-b from-emerald-50 to-transparent -z-10" />
+      <SuccessFlow
+        isOpen={showBatchSuccess}
+        title="Batch Processed"
+        details={[
+          { label: 'Units Processed', value: batchSuccessDetails.count, primary: true },
+          { label: 'Dealer Name', value: batchSuccessDetails.dealerName }
+        ]}
+        onPrint={() => window.print()}
+        onClose={() => {
+          setShowBatchSuccess(false);
+          window.location.reload();
+        }}
+      />
 
-            <div className="p-10 space-y-8">
-              <div className="flex flex-col items-center">
-                <div className="relative">
-                  {/* Outer pulse ring */}
-                  <div className="absolute inset-0 bg-emerald-500 rounded-full animate-ping opacity-20" />
-                  <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center relative shadow-inner">
-                    <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-xl shadow-emerald-500/40 animate-in bounce-in duration-700">
-                      <CheckCircle2 size={40} strokeWidth={3} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight mt-6">Done</h3> */}
-                <div className="h-1 w-12 bg-emerald-500 rounded-full mt-3" />
-                <p className="text-slate-500 font-bold text-sm mt-3">Batch assigned successfully</p>
-              </div>
-
-              <div className="bg-slate-50 rounded-3xl p-8 space-y-6">
-                <div className="flex flex-col items-center space-y-1">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Units Processed</span>
-                  <span className="text-4xl font-black text-slate-900 tracking-tighter">{batchSuccessDetails.count}</span>
-                </div>
-
-                <div className="h-px bg-slate-200" />
-
-                <div className="flex flex-col items-center space-y-1">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Dealer Name</span>
-                  <span className="text-xs font-black text-blue-600 uppercase text-center leading-tight">{batchSuccessDetails.dealerName}</span>
-                </div>
-              </div>
-
-
-              <div className="grid grid-cols-2 gap-4 w-full">
-                <button
-                  onClick={() => {
-                    window.print();
-                  }}
-                  className="py-4 bg-white border-2 border-slate-200 text-slate-700 rounded-xl font-bold uppercase tracking-widest text-[10px] hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center justify-center gap-2"
-                >
-                  <Printer size={16} /> Print Receipt
-                </button>
-                <button
-                  onClick={() => {
-                    setShowBatchSuccess(false);
-                    window.location.reload();
-                  }}
-                  className="py-4 bg-slate-900 hover:bg-black text-white rounded-xl font-black uppercase tracking-widest text-[10px] transition-all shadow-xl active:scale-95 flex items-center justify-center gap-2 group"
-                >
-                  Close
-                  <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-                </button>
-              </div>
-            </div>
-
-            {/* Hidden Print Portal */}
-            {createPortal(
-              <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
-                <BatteryPrintTemplate
-                  dealerName={batchSuccessDetails.dealerName}
-                  dealerId={batchConfig.dealerId}
-                  reportTitle={formatDate(batchConfig.date)}
-                  reportType="batch"
-                  date={batchConfig.date}
-                  data={batchSuccessDetails.items}
-                  tableType="BATCH"
-                />
-              </div>,
-              document.body
-            )}
-          </div>
-        </div>
+      {/* Hidden Print Portal */}
+      {createPortal(
+        <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
+          <BatteryPrintTemplate
+            dealerName={batchSuccessDetails.dealerName}
+            dealerId={batchConfig.dealerId}
+            reportTitle={formatDate(batchConfig.date)}
+            reportType="batch"
+            date={batchConfig.date}
+            data={batchSuccessDetails.items}
+            tableType="BATCH"
+          />
+        </div>,
+        document.body
       )}
     </div>
   );

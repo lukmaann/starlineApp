@@ -435,51 +435,51 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
           <style>
             {`
             @media print {
-  /* HIDE EVERYTHING ELSE */
-  body > *: not(#print - portal - root) {
-    display: none!important;
-  }
+              /* HIDE EVERYTHING ELSE */
+              body > *:not(#print-portal-root) {
+                display: none !important;
+              }
 
-  /* Reset Body for Print */
-  html, body {
-    margin: 0!important;
-    padding: 0!important;
-    background - color: white!important;
-    -webkit - print - color - adjust: exact!important;
-    print - color - adjust: exact!important;
-    height: auto!important;
-    overflow: visible!important;
-  }
+              /* Reset Body for Print */
+              html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background-color: white !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                height: auto !important;
+                overflow: visible !important;
+              }
 
-  /* Ensure Portal is Visible and positioned correctly */
-  #print - portal - root {
-    display: block!important;
-    position: absolute!important;
-    top: 0!important;
-    left: 0!important;
-    width: 100 % !important;
-    height: auto!important;
-    z - index: 9999!important;
-    background - color: white!important;
-  }
+              /* Ensure Portal is Visible and positioned correctly */
+              #print-portal-root {
+                display: block !important;
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                z-index: 9999 !important;
+                background-color: white !important;
+              }
 
-  #dealer - printable {
-    background - color: white!important;
-    width: 100 % !important;
-    max - width: none!important;
-    height: auto!important;
-    overflow: visible!important;
-    margin: 0 auto!important;
-  }
+              #dealer-printable {
+                background-color: white !important;
+                width: 100% !important;
+                max-width: none !important;
+                height: auto !important;
+                overflow: visible !important;
+                margin: 0 auto !important;
+              }
 
-              .no - print { display: none!important; }
-}
+              .no-print { display: none !important; }
+            }
 
-/* Hide Print Portal on Screen */
-#print - portal - root {
-  display: none;
-}
-`}
+            /* Hide Print Portal on Screen */
+            #print-portal-root {
+              display: none;
+            }
+            `}
           </style>
 
 
@@ -862,7 +862,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                 dealerName={selectedDealer.name}
                 dealerId={selectedDealer.id}
                 reportTitle={activeLogTab === 'ACTIVE' ? 'Active Batteries' : activeLogTab === 'EXPIRED' ? 'Expired Batteries' : activeLogTab === 'RETURNED' ? 'Returned Batteries (Pending)' : 'Exchange History'}
-                reportType="dealer"
+                reportType="batch"
                 dateRange={
                   filterDateStart && filterDateEnd
                     ? `${formatDate(filterDateStart)} - ${formatDate(filterDateEnd)}`
@@ -874,7 +874,9 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                 }
                 filterModel={filterModel}
                 data={paginatedData}
-                tableType={activeLogTab}
+                tableType="BATCH"
+                dateLabel="Print Date"
+                date={new Date().toISOString()}
               />
             )}
           </div>,

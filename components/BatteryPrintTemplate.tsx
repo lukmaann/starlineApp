@@ -18,6 +18,9 @@ interface BatteryPrintTemplateProps {
 
     // Table configuration for dealer reports
     tableType?: 'ACTIVE' | 'EXPIRED' | 'EXCHANGES' | 'RETURNED' | 'BATCH';
+
+    // Data labels
+    dateLabel?: string;
 }
 
 const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
@@ -29,7 +32,8 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
     dateRange,
     filterModel,
     data,
-    tableType = 'ACTIVE'
+    tableType = 'ACTIVE',
+    dateLabel
 }) => {
     const modelText = filterModel || 'All Models';
 
@@ -45,82 +49,38 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
         }
       `}</style>
 
-            {/* Header */}
-            <div className={reportType === 'batch' ? 'border-b border-gray-300 pb-6 mb-6' : 'flex border-b-2 border-black pb-4 mb-4'}>
-                {reportType === 'batch' ? (
-                    <>
-                        {/* Batch Receipt Header */}
-                        <div className="mb-4">
-                            <h1 className="text-4xl font-black uppercase tracking-tight mb-1">{dealerName}</h1>
-                            {dealerId && <div className="text-[9px] font-bold text-gray-600 uppercase tracking-wide mb-2">Dealer ID: {dealerId}</div>}
-                            <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Batch Assignment Receipt</div>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date</div>
-                                <div className="text-sm font-bold">{reportTitle}</div>
-                            </div>
-                            <div className="text-right">
-                                <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total Units</div>
-                                <div className="text-xl font-black text-slate-900">{data.length}</div>
-                            </div>
-                        </div>
-                    </>
-                ) : (
-                    <>
-                        {/* Dealer Report Header */}
-                        <div className="w-2/3 pr-4 border-r border-gray-300">
-                            <h1 className="text-3xl font-black uppercase tracking-tight leading-none mb-2">{dealerName}</h1>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] font-bold text-gray-600 uppercase tracking-wide">
-                                {dealerId && <div>Dealer ID: <span className="text-black">{dealerId}</span></div>}
-                            </div>
-                        </div>
-
-                        <div className="w-1/3 pl-4 flex flex-col justify-between">
-                            <div>
-                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Report Type</div>
-                                <div className="text-sm font-black uppercase leading-tight">{reportTitle}</div>
-                            </div>
-                            <div className="flex justify-between items-end mt-2">
-                                {dateRange && (
-                                    <div>
-                                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Date Range</div>
-                                        <div className="text-[10px] font-bold uppercase">{dateRange}</div>
-                                    </div>
-                                )}
-                                <div className="text-right">
-                                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Printed</div>
-                                    <div className="text-[10px] font-bold uppercase">{formatDate(new Date())}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </>
-                )}
-            </div>
-
-            {/* Summary Metrics for dealer reports */}
-            {reportType === 'dealer' && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 flex justify-between items-center">
-                    <div className="flex gap-6">
-                        <div>
-                            <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest block">Total Batteries</span>
-                            <span className="text-xl font-black leading-none">{data.length}</span>
-                        </div>
-                        {modelText !== 'All Models' && (
-                            <div className="border-l border-gray-300 pl-6">
-                                <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest block">Filter Applied</span>
-                                <span className="text-sm font-bold leading-tight uppercase">{modelText}</span>
-                            </div>
-                        )}
+            {/* Standardized Header */}
+            <div className="border-b border-gray-300 pb-6 mb-6">
+                <div className="mb-4">
+                    <h1 className="text-4xl font-black uppercase tracking-tight mb-1">{dealerName}</h1>
+                    {dealerId && <div className="text-[9px] font-bold text-gray-600 uppercase tracking-wide mb-2">Dealer ID: {dealerId}</div>}
+                    <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                        {(reportType === 'batch' && !dateLabel) ? 'Batch Assignment Receipt' : reportTitle}
                     </div>
                 </div>
-            )}
+                <div className="flex justify-between items-center">
+                    <div>
+                        <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">
+                            {dateLabel || (reportType === 'batch' ? 'Processed Date' : 'Report Date')}
+                        </div>
+                        <div className="text-sm font-bold">{formatDate(date || new Date())}</div>
+                    </div>
+                    {dateRange && (
+                        <div className="text-center">
+                            <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date Range</div>
+                            <div className="text-[10px] font-bold uppercase">{dateRange}</div>
+                        </div>
+                    )}
+                    <div className="text-right">
+                        <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total Units</div>
+                        <div className="text-xl font-black text-slate-900">{data.length}</div>
+                    </div>
+                </div>
+            </div>
+
 
             {/* Table */}
-            <table className={reportType === 'batch'
-                ? "w-full text-left text-[10px] text-black border-collapse border border-gray-300 mb-8"
-                : "w-full text-left text-[9px] text-black border-collapse border border-gray-300"
-            }>
+            <table className="w-full text-left text-[10px] text-black border-collapse border border-gray-300 mb-8">
                 <thead className="bg-gray-100">
                     <tr>
                         {tableType === 'EXCHANGES' ? (
@@ -133,8 +93,9 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
                             </>
                         ) : tableType === 'BATCH' ? (
                             <>
-                                <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-gray-700 w-1/2">Battery Serial Number</th>
-                                <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-gray-700 w-1/2">Battery Model</th>
+                                <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-gray-700 w-[35%]">Battery Serial Number</th>
+                                <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-gray-700 w-[30%]">Battery Model</th>
+                                <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-gray-700 text-right w-[35%]">Sent to Dealer</th>
                             </>
                         ) : (
                             <>
@@ -179,7 +140,10 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
                             ) : tableType === 'BATCH' ? (
                                 <>
                                     <td className="py-1.5 px-3 border border-gray-300 font-mono font-bold text-[9px] text-black">{item.id}</td>
-                                    <td className="py-1.5 px-3 border border-gray-300 font-semibold text-gray-900 text-[9px]">{item.model}</td>
+                                    <td className="py-1.5 px-3 border border-gray-300 font-semibold text-gray-900 text-[9px] uppercase">{item.model}</td>
+                                    <td className="py-1.5 px-3 border border-gray-300 font-black text-black text-[9px] text-right">
+                                        {formatDate(item.manufactureDate || new Date())}
+                                    </td>
                                 </>
                             ) : (
                                 <>
