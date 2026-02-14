@@ -17,6 +17,8 @@ declare global {
       backupCustom: (path: string) => Promise<{ success: boolean; path: string; error?: string }>;
       selectRestoreFile: () => Promise<string | null>;
       restore: (path: string) => Promise<{ success: boolean; error?: string }>;
+      initDatabase: (config?: { type: 'INTERNAL' | 'EXTERNAL', path?: string }) => Promise<{ success: boolean; path?: string; error?: string }>;
+      selectExternalDrive: () => Promise<string | null>;
     };
   }
 }
@@ -405,6 +407,16 @@ export class Database {
   static async restoreDatabase(path: string): Promise<{ success: boolean; error?: string }> {
     if (window.electronAPI?.restore) return await window.electronAPI.restore(path);
     return { success: false, error: 'API missing' };
+  }
+
+  static async switchDatabase(type: 'INTERNAL' | 'EXTERNAL', path?: string): Promise<{ success: boolean; path?: string; error?: string }> {
+    if (window.electronAPI?.initDatabase) return await window.electronAPI.initDatabase({ type, path });
+    return { success: false, error: 'Database API missing' };
+  }
+
+  static async selectExternalDrive(): Promise<string | null> {
+    if (window.electronAPI?.selectExternalDrive) return await window.electronAPI.selectExternalDrive();
+    return null;
   }
 
   static async resetDatabase(): Promise<void> {

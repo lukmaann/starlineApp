@@ -16,5 +16,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectBackupFolder: () => ipcRenderer.invoke('select-backup-folder'),
   backupCustom: (path) => ipcRenderer.invoke('db-backup-custom', path),
   selectRestoreFile: () => ipcRenderer.invoke('select-restore-file'),
-  restore: (path) => ipcRenderer.invoke('db-restore', path)
+  restore: (path) => ipcRenderer.invoke('db-restore', path),
+
+  // Dynamic Database Switching
+  initDatabase: (config) => ipcRenderer.invoke('init-database', config),
+  selectExternalDrive: () => ipcRenderer.invoke('select-external-drive')
 });

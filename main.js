@@ -17,9 +17,24 @@ function ensureDataDirectory() {
   }
 }
 
-function initDatabase() {
-  DATA_DIR = isWin ? 'C:\\starline\\data' : path.join(app.getPath('home'), 'starline', 'data');
+function initDatabase(config) {
+  // Default Internal Path
+  const INTERNAL_DATA_DIR = isWin ? 'C:\\starline\\data' : path.join(app.getPath('home'), 'starline', 'data');
+  DATA_DIR = INTERNAL_DATA_DIR;
   DB_PATH = path.join(DATA_DIR, 'starline_master.db');
+
+  if (config && config.type === 'EXTERNAL') {
+    if (!config.path) throw new Error("External path not provided");
+    // Ensure we are in a 'starline/data' structure or create it
+    // Logic: User selects a drive/folder. We create/expect 'starline/data' inside it.
+    // Actually, user requirement says: "app should create starline/data folder if its not present"
+    // So if user selects "D:/", we use "D:/starline/data".
+
+    DATA_DIR = path.join(config.path, 'starline', 'data');
+    DB_PATH = path.join(DATA_DIR, 'starline_master.db');
+  }
+
+  console.log(`Initializing Database at: ${DB_PATH} (${config ? config.type : 'DEFAULT'})`);
 
   ensureDataDirectory();
   try {
@@ -184,9 +199,25 @@ function initDatabase() {
     });
 
     console.log('Database initialized at:', DB_PATH);
+    return { success: true, path: DB_PATH };
   } catch (err) {
     console.error('Failed to initialize database:', err);
+    return { success: false, error: err.message };
   }
+}
+
+function closeDatabase() {
+  if (db && db.open) {
+    console.log('Closing current database connection...');
+    db.close();
+    db = null;
+  }
+}
+
+// WRAPPER for init to handle closing old connection
+function switchDatabase(config) {
+  closeDatabase();
+  return initDatabase(config);
 }
 
 function createWindow() {
@@ -320,17 +351,23 @@ ipcMain.handle('db-backup', async () => {
 });
 
 ipcMain.handle('select-backup-folder', async () => {
-  const result = await dialog.showOpenDialog(win, {
+  const result = await dialog.showOpenDialog({
     properties: ['openDirectory', 'createDirectory'],
     title: 'Select Backup Destination (SSD/External Drive)'
   });
   if (result.canceled) return null;
-  return result.filePaths[0];
+  return result.filePaths[0]; // Fix: incorrect property access in some versions, but usually filePaths is correct
 });
 
 ipcMain.handle('db-backup-custom', async (event, targetPath) => {
   try {
     if (!targetPath) throw new Error('No target path provided');
+
+    // SECURITY: Enforce 'starline' folder
+    const basename = path.basename(targetPath);
+    if (basename.toLowerCase() !== 'starline') {
+      throw new Error("Security Restriction: Backup can only be saved to a folder named 'starline'");
+    }
 
     // Create Date-Stamped Directory: starlinebackup-DD-MM-YYYY-HH-MM
     const now = new Date();
@@ -398,6 +435,20 @@ ipcMain.handle('db-restore', async (event, sourcePath) => {
   }
 });
 
+// 5. SYSTEM OPS
+ipcMain.handle('init-database', async (event, config) => {
+  return switchDatabase(config);
+});
+
+ipcMain.handle('select-external-drive', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Select External Drive/Folder for Database'
+  });
+  if (result.canceled) return null;
+  return result.filePaths[0];
+});
+
 ipcMain.handle('print-or-pdf', async (event) => {
   const window = BrowserWindow.fromWebContents(event.sender);
   if (!window) return;
@@ -414,7 +465,8 @@ ipcMain.handle('print-or-pdf', async (event) => {
 });
 
 app.whenReady().then(() => {
-  initDatabase();
+  // Database is NOT initialized automatically anymore. 
+  // Frontend will trigger it based on selection.
   createWindow();
 });
 

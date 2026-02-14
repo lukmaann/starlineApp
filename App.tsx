@@ -7,8 +7,13 @@ import Dealers from './pages/Dealers';
 import Settlements from './pages/Settlements';
 import Controls from './pages/Controls';
 import Login from './pages/Login';
+import Backup from './pages/Backup';
+import DatabaseSelector from './pages/DatabaseSelector';
+import DatabaseManagement from './pages/DatabaseManagement';
 import { Database } from './db';
-import { Zap, Download, AlertTriangle, CheckCircle2, X, Settings as SettingsIcon, LogOut, Bell } from 'lucide-react';
+import { Zap, Download, LogOut, Database as DatabaseIcon } from 'lucide-react';
+import { Toaster } from './components/ui/sonner';
+import { toast } from "sonner";
 import { useNavigationHistory } from './hooks/useNavigationHistory';
 import NavigationControls from './components/NavigationControls';
 import { AuthSession } from './utils/AuthSession';
@@ -30,13 +35,16 @@ const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [pendingSearch, setPendingSearch] = useState<string | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isDbReady, setIsDbReady] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+    if (type === 'error') {
+      toast.error(message);
+    } else {
+      toast.success(message);
+    }
   };
 
   const triggerHubSearch = (serial: string) => {
@@ -46,11 +54,29 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const init = async () => {
-      await Database.init();
-      const auth = localStorage.getItem('starline_auth');
-      if (auth === 'true') setIsLoggedIn(true);
-      // Initialize auto-lock timer
-      AuthSession.initialize();
+      // Check for stored DB config
+      const storedConfig = localStorage.getItem('dbConfig');
+      if (storedConfig) {
+        try {
+          const config = JSON.parse(storedConfig);
+          const res = await Database.switchDatabase(config.type, config.path);
+          if (res.success) {
+            setIsDbReady(true);
+            const auth = localStorage.getItem('starline_auth');
+            if (auth === 'true') setIsLoggedIn(true);
+            AuthSession.initialize();
+          } else {
+            // Config invalid or drive missing - show selector
+            setIsDbReady(false);
+          }
+        } catch (e) {
+          console.error("DB Init Failed", e);
+          setIsDbReady(false);
+        }
+      } else {
+        // No config - show selector
+        setIsDbReady(false);
+      }
       setIsLoading(false);
     };
     init();
@@ -71,16 +97,7 @@ const App: React.FC = () => {
     };
     window.addEventListener('app-refresh' as any, handleAppRefresh);
 
-    // Backup Reminder Check
-    const lastBackup = localStorage.getItem('lastBackupDate');
-    if (lastBackup) {
-      const days = (Date.now() - new Date(lastBackup).getTime()) / (1000 * 60 * 60 * 24);
-      if (days > 3) {
-        setTimeout(() => showToast('Backup Reminder: Less than 3 days since last backup. Please backup to SSD.', 'error'), 2000);
-      }
-    } else {
-      setTimeout(() => showToast('Backup Reminder: No backup record found. please backup now.', 'error'), 2000);
-    }
+
 
     return () => window.removeEventListener('app-notify' as any, handleNotify);
   }, []);
@@ -131,6 +148,12 @@ const App: React.FC = () => {
         );
       case 'controls':
         return <Controls active={activeTab === 'controls'} />;
+      case 'backup':
+        return <Backup />;
+      case 'backup':
+        return <Backup />;
+      case 'database-management':
+        return <DatabaseManagement />;
       default:
         return null;
     }
@@ -148,6 +171,14 @@ const App: React.FC = () => {
     </div>
   );
 
+  if (!isDbReady) return <DatabaseSelector onComplete={() => {
+    setIsDbReady(true);
+    // Determine if we need to log in (if we just switched DBs, maybe we stay logged out or check persistence)
+    // For now, let's assume switching DB requires re-login or check
+    const auth = localStorage.getItem('starline_auth');
+    if (auth === 'true') setIsLoggedIn(true);
+  }} />;
+
   if (!isLoggedIn) return <Login onLogin={() => setIsLoggedIn(true)} />;
 
   return (
@@ -155,25 +186,7 @@ const App: React.FC = () => {
       <Navigation activeTab={activeTab} setActiveTab={navigate} />
 
       <div className="flex-1 flex flex-col overflow-hidden relative bg-slate-50/50">
-        {toast && (
-          <div className="fixed top-6 right-6 z-[1000] animate-in slide-in-from-right duration-300">
-            <div className={`px-5 py-4 rounded-xl shadow-2xl flex items-center space-x-4 border ${toast.type === 'success'
-              ? 'bg-white border-emerald-100 text-emerald-800'
-              : 'bg-rose-50 border-rose-100 text-rose-800'
-              }`}>
-              {toast.type === 'success'
-                ? <CheckCircle2 className="text-emerald-500" size={20} />
-                : <AlertTriangle className="text-rose-500" size={20} />
-              }
-              <div className="flex flex-col text-left">
-                <span className="font-bold text-[13px] tracking-tight">{toast.message}</span>
-              </div>
-              <button onClick={() => setToast(null)} className="ml-2 text-slate-300 hover:text-slate-500">
-                <X size={16} />
-              </button>
-            </div>
-          </div>
-        )}
+        <Toaster />
 
         <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 no-print">
           <div className="flex items-center space-x-3 text-slate-400 text-sm font-medium">
@@ -191,21 +204,35 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-2">
+
+            {/* Database Source Indicator & Switch */}
+            <div className="flex items-center mr-2 bg-slate-50 border border-slate-200 rounded-lg p-1">
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${localStorage.getItem('dbConfig') && JSON.parse(localStorage.getItem('dbConfig') || '{}').type === 'EXTERNAL'
+                ? 'bg-purple-100 text-purple-700'
+                : 'bg-blue-100 text-blue-700'
+                }`}>
+                {localStorage.getItem('dbConfig') && JSON.parse(localStorage.getItem('dbConfig') || '{}').type === 'EXTERNAL' ? 'SSD' : 'Internal'}
+              </span>
+              <button
+                title="Manage Database"
+                onClick={() => navigate('database-management')}
+                className={`ml-1 p-1.5 rounded-md transition-all ${activeTab === 'database-management'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-400 hover:text-slate-900 hover:bg-slate-200'
+                  }`}
+              >
+                <DatabaseIcon size={14} />
+              </button>
+            </div>
+
+            <div className="w-px h-6 bg-slate-200 mx-1" />
+
             <button
-              onClick={async () => {
-                const folder = await Database.selectBackupFolder();
-                if (folder) {
-                  showToast('Starting Backup...', 'success');
-                  const res = await Database.backupCustom(folder);
-                  if (res.success) {
-                    showToast(`Backup Saved: ${res.path}`, 'success');
-                    localStorage.setItem('lastBackupDate', new Date().toISOString());
-                  } else {
-                    showToast(`Backup Failed: ${res.error}`, 'error');
-                  }
-                }
-              }}
-              className="flex items-center space-x-2 px-3 py-1.5 text-slate-600 rounded-lg font-bold text-xs hover:bg-slate-100 transition-all border border-slate-200"
+              onClick={() => navigate('backup')}
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg font-bold text-xs transition-all border ${activeTab === 'backup'
+                ? 'bg-slate-900 text-white border-slate-900 shadow-lg shadow-slate-900/20'
+                : 'text-slate-600 hover:bg-slate-100 border-slate-200'
+                }`}
             >
               <Download size={14} />
               <span>Backup to SSD</span>

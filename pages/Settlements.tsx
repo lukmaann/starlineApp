@@ -110,7 +110,7 @@ const Settlements: React.FC<SettlementsProps> = ({ onNavigateToHub }) => {
                     </div>
                     <div>
                         <h1 className="text-xl font-bold text-slate-900 tracking-tight">Settlement Registry</h1>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Dealer Claims & Exchanges</p>
+                        <p className="text-[10px] font-bold text-slate-400  tracking-widest mt-0.5">Dealer Claims & Exchanges</p>
                     </div>
                 </div>
 
@@ -253,7 +253,7 @@ const Settlements: React.FC<SettlementsProps> = ({ onNavigateToHub }) => {
                             ) : (
                                 <tr>
                                     <td colSpan={activeTab === 'SETTLEMENTS' ? 6 : 5} className="py-24 text-center bg-slate-50/50">
-                                        <p className="font-bold text-[10px] uppercase tracking-widest text-slate-400">
+                                        <p className="font-bold text-[10px]  tracking-widest text-slate-400">
                                             No pending {activeTab.toLowerCase()} found
                                         </p>
                                     </td>
