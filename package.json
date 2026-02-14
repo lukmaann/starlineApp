@@ -80,6 +80,10 @@
       ],
       "icon": "icon.png"
     },
+    "mac": {
+      "target": "dmg",
+      "icon": "icon.png"
+    },
     "asar": true,
     "asarUnpack": [
       "**/*.node"

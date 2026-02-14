@@ -150,8 +150,7 @@ const App: React.FC = () => {
         return <Controls active={activeTab === 'controls'} />;
       case 'backup':
         return <Backup />;
-      case 'backup':
-        return <Backup />;
+
       case 'database-management':
         return <DatabaseManagement />;
       default:
@@ -217,8 +216,8 @@ const App: React.FC = () => {
                 title="Manage Database"
                 onClick={() => navigate('database-management')}
                 className={`ml-1 p-1.5 rounded-md transition-all ${activeTab === 'database-management'
-                    ? 'bg-slate-900 text-white'
-                    : 'text-slate-400 hover:text-slate-900 hover:bg-slate-200'
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-400 hover:text-slate-900 hover:bg-slate-200'
                   }`}
               >
                 <DatabaseIcon size={14} />
