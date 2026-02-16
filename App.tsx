@@ -171,13 +171,10 @@ const App: React.FC = () => {
   };
 
   if (isLoading || isRefreshing) return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center space-y-4">
-      <div className="bg-blue-600 p-4 rounded-3xl shadow-2xl shadow-blue-500/40 animate-bounce">
-        <Zap size={40} className="text-white" fill="currentColor" />
-      </div>
-      <div className="text-center">
-        <h2 className="text-slate-900 font-bold text-lg">Starline Batteries</h2>
-        <p className="text-slate-400 font-medium text-sm">{isRefreshing ? 'Refreshing registry...' : 'Synchronizing Registry...'}</p>
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center animate-in fade-in duration-300">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-10 h-10 border-2 border-slate-100 border-t-slate-400 rounded-full animate-spin"></div>
+        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{isRefreshing ? 'Refreshing' : 'Synchronizing'}</span>
       </div>
     </div>
   );
