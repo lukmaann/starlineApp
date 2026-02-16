@@ -65,6 +65,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState, onStateChange, active }) => {
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [totalDealers, setTotalDealers] = useState(0);
+  const DEALERS_PER_PAGE = 12;
   const [page, setPage] = useState(1);
   const [models, setModels] = useState<BatteryModel[]>([]);
 
@@ -162,6 +163,11 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
     }
   }, [selectedDealer, viewMode, searchTerm, activeLogTab]);
 
+  // Reset page when search term changes
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
+
   // --- FILTER & CALCULATIONS ---
   const sortedDealers = useMemo(() => {
     const filtered = dealers.filter(d => {
@@ -173,6 +179,11 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
     });
     return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
   }, [dealers, searchTerm]);
+
+  const paginatedDealers = useMemo(() => {
+    const start = (page - 1) * DEALERS_PER_PAGE;
+    return sortedDealers.slice(start, start + DEALERS_PER_PAGE);
+  }, [sortedDealers, page]);
 
 
   const [paginatedData, setPaginatedData] = useState<any[]>([]);
@@ -918,7 +929,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 relative">
-          {sortedDealers.map(dealer => (
+          {paginatedDealers.map(dealer => (
             <div
               key={dealer.id}
               onClick={() => loadDealerDetail(dealer)}
@@ -956,13 +967,35 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
               </div>
             </div>
           ))}
-          {sortedDealers.length === 0 && (
+          {paginatedDealers.length === 0 && (
             <div className="col-span-full py-20 flex flex-col items-center justify-center opacity-40">
               <Store size={48} className="text-slate-300 mb-4" />
               <p className="text-sm font-bold text-slate-400 uppercase tracking-wide">No dealers found matching criteria</p>
             </div>
           )}
         </div>
+
+        {sortedDealers.length > DEALERS_PER_PAGE && (
+          <div className="flex justify-between items-center bg-white border border-slate-200 rounded-xl p-4 shadow-sm text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            <span>Showing {(page - 1) * DEALERS_PER_PAGE + 1}-{Math.min(page * DEALERS_PER_PAGE, sortedDealers.length)} of {sortedDealers.length} Dealers</span>
+            <div className="flex gap-2">
+              <button
+                disabled={page === 1}
+                onClick={() => setPage(p => p - 1)}
+                className="p-2 bg-white border border-slate-200 rounded-md hover:border-blue-400 disabled:opacity-30 transition-all text-slate-600"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                disabled={page * DEALERS_PER_PAGE >= sortedDealers.length}
+                onClick={() => setPage(p => p + 1)}
+                className="p-2 bg-white border border-slate-200 rounded-md hover:border-blue-400 disabled:opacity-30 transition-all text-slate-600"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
