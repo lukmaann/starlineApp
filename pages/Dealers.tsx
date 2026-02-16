@@ -27,6 +27,7 @@ import {
 import { SettlementModal, SettlementTarget } from '../components/SettlementModal';
 import BatteryPrintTemplate from '../components/BatteryPrintTemplate';
 import { DealerWizard } from '../components/DealerWizard';
+import DealerAnalytics from '../components/DealerAnalytics';
 
 interface DealersProps {
   onNavigateToHub?: (serial: string) => void;
@@ -69,8 +70,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   const [page, setPage] = useState(1);
   const [models, setModels] = useState<BatteryModel[]>([]);
 
-  // VIEW MODES: 'LIST' | 'DETAIL' | 'WIZARD'
-  const [viewMode, setViewMode] = useState<'LIST' | 'DETAIL' | 'WIZARD'>('LIST');
+  // VIEW MODES: 'LIST' | 'DETAIL' | 'WIZARD' | 'ANALYTICS'
+  const [viewMode, setViewMode] = useState<'LIST' | 'DETAIL' | 'WIZARD' | 'ANALYTICS'>('LIST');
   const [wizardStep, setWizardStep] = useState(0);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -93,6 +94,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   const [filterDateStart, setFilterDateStart] = useState('');
   const [filterDateEnd, setFilterDateEnd] = useState('');
   const [filterModel, setFilterModel] = useState('');
+  const [filterYear, setFilterYear] = useState<number | undefined>(undefined);
+  const [filterMonth, setFilterMonth] = useState<number | undefined>(undefined);
   const [isFilterOpen, setIsFilterOpen] = useState<'TABS' | 'FILTERS' | ''>('');
 
   const [unitPage, setUnitPage] = useState(0);
@@ -200,7 +203,9 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
         logSearchQuery || undefined,
         filterDateStart || undefined,
         filterDateEnd || undefined,
-        filterModel || undefined
+        filterModel || undefined,
+        filterYear,
+        filterMonth
       );
       setPaginatedData(result.data);
       setTotalItems(result.total);
@@ -209,20 +214,19 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
       let params: any[] = [selectedDealer.id];
 
       if (activeLogTab === 'ACTIVE') {
-        where += ` AND(status = 'ACTIVE' OR status = 'REPLACEMENT') AND datetime(warrantyExpiry) >= datetime('now')`;
+        where += ` AND (status = 'ACTIVE' OR status = 'REPLACEMENT') AND datetime(warrantyExpiry) >= datetime('now')`;
       } else if (activeLogTab === 'EXPIRED') {
-        where += ` AND(status = 'EXPIRED' OR datetime(warrantyExpiry) < datetime('now'))`;
+        where += ` AND (status = 'EXPIRED' OR datetime(warrantyExpiry) < datetime('now'))`;
       } else if (activeLogTab === 'RETURNED') {
-        where += ` AND(status = 'RETURNED_PENDING' OR status = 'RETURNED')`;
+        where += ` AND (status = 'RETURNED_PENDING' OR status = 'RETURNED')`;
       }
 
       if (logSearchQuery) {
         where += ` AND id LIKE ? `;
-        params.push(`% ${logSearchQuery}% `);
+        params.push(`%${logSearchQuery}%`);
       }
 
       if (filterDateStart) {
-        // Strictly use Dealer Dispatch Date (manufactureDate)
         where += ` AND date(manufactureDate) >= date(?)`;
         params.push(filterDateStart);
       }
@@ -230,6 +234,17 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
       if (filterDateEnd) {
         where += ` AND date(manufactureDate) <= date(?)`;
         params.push(filterDateEnd);
+      }
+
+      if (filterYear) {
+        // manufactureDate is the proxy for year in batteries table for dealers
+        where += ` AND strftime('%Y', manufactureDate) = ?`;
+        params.push(filterYear.toString());
+      }
+
+      if (filterMonth) {
+        where += ` AND strftime('%m', manufactureDate) = ?`;
+        params.push(filterMonth.toString().padStart(2, '0'));
       }
 
       if (filterModel) {
@@ -248,7 +263,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
     if (active) {
       fetchTabData();
     }
-  }, [selectedDealer, activeLogTab, unitPage, logSearchQuery, filterDateStart, filterDateEnd, filterModel, active]);
+  }, [selectedDealer, activeLogTab, unitPage, logSearchQuery, filterDateStart, filterDateEnd, filterModel, filterYear, filterMonth, active]);
 
   // --- ACTIONS ---
 
@@ -528,6 +543,13 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                 <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">Growth Vector</span>
                 <span className="text-lg font-black text-slate-900">+12.4%</span>
               </div>
+              <button
+                onClick={() => setViewMode('ANALYTICS')}
+                className="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-md font-bold text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-md active:scale-95"
+              >
+                <Activity size={16} />
+                Analytics
+              </button>
               <button onClick={() => handleStartWizard(selectedDealer)} className="p-3 bg-white border border-slate-200 rounded-md hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-all shadow-sm active:scale-95">
                 <Settings size={18} />
               </button>
@@ -627,14 +649,50 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                       <div className="absolute right-0 top-12 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-5 z-50 space-y-5 animate-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                           <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.15em] flex items-center gap-2">
-                            <ListFilter size={14} className="text-blue-600" /> Filter Analytics
+                            <ListFilter size={14} className="text-blue-600" /> Filter Registry
                           </h4>
                           <button
-                            onClick={() => { setFilterDateStart(''); setFilterDateEnd(''); setFilterModel(''); }}
+                            onClick={() => { setFilterDateStart(''); setFilterDateEnd(''); setFilterModel(''); setFilterYear(undefined); setFilterMonth(undefined); }}
                             className="text-[10px] font-black text-blue-600 hover:text-blue-700 transition-colors uppercase tracking-wider"
                           >
                             Reset Defaults
                           </button>
+                        </div>
+
+                        {/* Year & Month Selection */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">Year</label>
+                            <div className="relative">
+                              <select
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-bold outline-none focus:border-blue-500 focus:bg-white transition-all appearance-none cursor-pointer"
+                                value={filterYear || ''}
+                                onChange={e => { setFilterYear(e.target.value ? parseInt(e.target.value) : undefined); setUnitPage(0); }}
+                              >
+                                <option value="">ALL YEARS</option>
+                                {analytics?.availableYears?.map((y: number) => (
+                                  <option key={y} value={y}>{y}</option>
+                                ))}
+                              </select>
+                              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">Month</label>
+                            <div className="relative">
+                              <select
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-bold outline-none focus:border-blue-500 focus:bg-white transition-all appearance-none cursor-pointer"
+                                value={filterMonth || ''}
+                                onChange={e => { setFilterMonth(e.target.value ? parseInt(e.target.value) : undefined); setUnitPage(0); }}
+                              >
+                                <option value="">ALL MONTHS</option>
+                                {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((m, i) => (
+                                  <option key={i} value={i + 1}>{m.toUpperCase()}</option>
+                                ))}
+                              </select>
+                              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            </div>
+                          </div>
                         </div>
 
                         {/* Date Range */}
@@ -894,6 +952,13 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
           document.body
         )}
       </>
+    );
+  } else if (viewMode === 'ANALYTICS' && selectedDealer) {
+    return (
+      <DealerAnalytics
+        dealer={selectedDealer}
+        onBack={() => setViewMode('DETAIL')}
+      />
     );
   } else if (viewMode === 'WIZARD') {
     return (

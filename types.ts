@@ -132,3 +132,11 @@ export interface User {
   role: UserRole;
   dealerId?: string;
 }
+
+export interface PriceRecord {
+  id: number;
+  modelId: string;
+  price: number;
+  effectiveDate: string;
+  timestamp: string;
+}

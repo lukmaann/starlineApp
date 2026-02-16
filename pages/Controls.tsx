@@ -5,12 +5,14 @@ import {
   ShieldCheck, ShieldAlert, AlertTriangle, Fingerprint, Layers,
   Box, FileSignature, Settings2, ClipboardCheck, ChevronLeft,
   ChevronRight, CheckCircle2, Plus, Edit2, Trash2, Info, X, RefreshCw, Activity, Sliders,
-  KeyRound
+  KeyRound, Tag
 } from 'lucide-react';
 import { Database } from '../db';
 import { BatteryModel, Dealer } from '../types';
 import { AuthSession } from '../utils/AuthSession';
 import { toast } from 'sonner';
+import { getLocalDate } from '../utils';
+import PriceManager from '../components/PriceManager';
 
 interface ControlsProps {
   active?: boolean;
@@ -33,7 +35,7 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
   }, []);
   // Navigation State
   // "Model Registry" is now the default tab as requested
-  const [currentTab, setCurrentTab] = useState<'models' | 'data' | 'access' | 'history'>('models');
+  const [currentTab, setCurrentTab] = useState<'models' | 'data' | 'access' | 'history' | 'prices'>('models');
   const [isLoading, setIsLoading] = useState(false);
 
   // Access Control State
@@ -107,7 +109,7 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
 
   useEffect(() => {
     // Reload data when becoming active or switching to relevant tabs
-    if (active && (currentTab === 'models' || currentTab === 'data')) {
+    if (active && (currentTab === 'models' || currentTab === 'data' || currentTab === 'prices')) {
       loadModelData();
     }
   }, [active, currentTab]);
@@ -342,6 +344,13 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${currentTab === 'access' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}
           >
             Access Control
+          </button>
+          <button
+            onClick={() => setCurrentTab('prices')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2 ${currentTab === 'prices' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}
+          >
+            <Tag size={16} />
+            Prices
           </button>
           <button
             onClick={() => setCurrentTab('history')}
@@ -1195,6 +1204,11 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* --- PRICE REGISTRY TAB --- */}
+      {currentTab === 'prices' && (
+        <PriceManager models={models} />
       )}
 
       <div className="mt-12 mb-6 text-center">

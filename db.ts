@@ -1,4 +1,4 @@
-import { Battery, Dealer, Replacement, BatteryModel, Sale, WarrantyCardStatus, BatteryStatus } from './types';
+import { Battery, Dealer, Replacement, BatteryModel, Sale, WarrantyCardStatus, BatteryStatus, PriceRecord } from './types';
 import { validateName, validatePhone } from './utils/validation';
 import { getLocalDate } from './utils';
 
@@ -233,8 +233,20 @@ export class Database {
 
   static async getAnalytics(): Promise<any> {
     // 1. Network Stats (Aggregated)
-    const stats = await this.query<{ totalSales: number, totalRevenue: number }>(
-      `SELECT COUNT(*) as totalSales, SUM(salePrice) as totalRevenue FROM sales`
+    const stats = await this.query<{ totalSales: number, totalRevenue: number }>(`
+      SELECT 
+        COUNT(*) as totalSales, 
+        SUM(
+          COALESCE(
+            (SELECT price FROM model_prices mp 
+             JOIN models m ON mp.modelId = m.id 
+             WHERE m.name = s.batteryType AND mp.effectiveDate <= s.saleDate 
+             ORDER BY mp.effectiveDate DESC, mp.timestamp DESC LIMIT 1),
+            s.salePrice,
+            0
+          )
+        ) as totalRevenue 
+      FROM sales s`
     );
 
     const activeCount = await this.query<{ count: number }>(
@@ -242,7 +254,6 @@ export class Database {
     );
 
     // 2. Dealer Leaderboard (Top 50 Only)
-    // Complex aggregation query moved to server-side
     const dealerStats = await this.query<{
       id: string, name: string, location: string,
       sales: number, revenue: number
@@ -250,7 +261,16 @@ export class Database {
       SELECT 
         d.id, d.name, d.location,
         COUNT(s.id) as sales,
-        SUM(s.salePrice) as revenue
+        SUM(
+          COALESCE(
+            (SELECT price FROM model_prices mp 
+             JOIN models m ON mp.modelId = m.id 
+             WHERE m.name = s.batteryType AND mp.effectiveDate <= s.saleDate 
+             ORDER BY mp.effectiveDate DESC, mp.timestamp DESC LIMIT 1),
+            s.salePrice,
+            0
+          )
+        ) as revenue
       FROM dealers d
       LEFT JOIN sales s ON d.id = s.dealerId
       GROUP BY d.id
@@ -312,22 +332,37 @@ export class Database {
     };
   }
 
-  static async getDealerAnalytics(dealerId: string): Promise<any> {
+  static async getDealerAnalytics(dealerId: string, year?: number, month?: number): Promise<any> {
     const today = getLocalDate();
     const thirtyDaysAgo = new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0];
+
+    const filters: string[] = ["dealerId = ?"];
+    const params: any[] = [dealerId];
+
+    if (year) {
+      filters.push("strftime('%Y', saleDate) = ?");
+      params.push(year.toString());
+    }
+    if (month) {
+      filters.push("strftime('%m', saleDate) = ?");
+      params.push(month.toString().padStart(2, '0'));
+    }
+
+    const filterClause = `WHERE ${filters.join(' AND ')}`;
+    const replacementFilterClause = `WHERE ${filters.join(' AND ').replace(/saleDate/g, 'replacementDate')}`;
 
     const [stats, activeCount, trend] = await Promise.all([
       this.query<any>(`
         SELECT 
           COUNT(*) as totalSales,
-          (SELECT COUNT(*) FROM replacements WHERE dealerId = ?) as totalClaims
-        FROM sales WHERE dealerId = ?`, [dealerId, dealerId]
+          (SELECT COUNT(*) FROM replacements ${replacementFilterClause}) as totalClaims
+        FROM sales ${filterClause}`, [...params, ...params]
       ),
-      this.query<any>(`SELECT COUNT(*) as count FROM batteries WHERE dealerId = ? AND (status = 'ACTIVE' OR status = 'REPLACEMENT') AND datetime(warrantyExpiry) >= datetime('now')`, [dealerId]),
+      this.query<any>(`SELECT COUNT(*) as count FROM batteries WHERE dealerId = ? AND(status = 'ACTIVE' OR status = 'REPLACEMENT') AND datetime(warrantyExpiry) >= datetime('now')`, [dealerId]),
       this.query<any>(`
         SELECT 
           strftime('%Y-%m', saleDate) as month,
-          COUNT(*) as count
+      COUNT(*) as count
         FROM sales 
         WHERE dealerId = ? AND saleDate >= date('now', '-6 months')
         GROUP BY month
@@ -340,7 +375,7 @@ export class Database {
     const claimRatio = totalSales > 0 ? (totalClaims / totalSales) * 100 : 0;
 
     // Last 30 days sales
-    const last30 = await this.query<any>(`SELECT COUNT(*) as count FROM sales WHERE dealerId = ? AND saleDate >= ?`, [dealerId, thirtyDaysAgo]);
+    const last30 = await this.query<any>(`SELECT COUNT(*) as count FROM sales WHERE dealerId = ? AND saleDate >= ? `, [dealerId, thirtyDaysAgo]);
 
     return {
       activeUnitCount: activeCount[0]?.count || 0,
@@ -348,7 +383,132 @@ export class Database {
       totalSales,
       totalClaims,
       claimRatio: claimRatio.toFixed(1),
-      salesTrend: trend.map((t: any) => ({ name: t.month, sales: t.count }))
+      salesTrend: trend.map((t: any) => ({ name: t.month, sales: t.count })),
+      availableYears: (await this.query<any>(`SELECT DISTINCT strftime('%Y', saleDate) as year FROM sales WHERE dealerId = ? ORDER BY year DESC`, [dealerId])).map(r => parseInt(r.year))
+    };
+  }
+
+  static async getDetailedDealerAnalytics(dealerId: string, year?: number, month?: number): Promise<any> {
+    const params: any[] = [dealerId];
+    let dateFilter = '';
+
+    if (year) {
+      dateFilter += " AND strftime('%Y', saleDate) = ?";
+      params.push(year.toString());
+      if (month) {
+        dateFilter += " AND strftime('%m', saleDate) = ?";
+        params.push(month.toString().padStart(2, '0'));
+      }
+    }
+
+    const [kpis, trend, models, claimsTrend, detailedSales, detailedClaims] = await Promise.all([
+      // KPIs for the selected period
+      this.query<any>(`
+        SELECT 
+          COUNT(*) as periodSales,
+      SUM(
+        COALESCE(
+          (SELECT price FROM model_prices mp 
+               JOIN models m ON mp.modelId = m.id 
+               WHERE m.name = s.batteryType AND mp.effectiveDate <= s.saleDate 
+               ORDER BY mp.effectiveDate DESC, mp.timestamp DESC LIMIT 1),
+        s.salePrice,
+        0
+      )
+          ) as periodRevenue,
+    (SELECT COUNT(*) FROM replacements WHERE dealerId = ? ${dateFilter.replace(/saleDate/g, 'replacementDate')}) as periodClaims
+        FROM sales s
+        WHERE s.dealerId = ? ${dateFilter} `, [dealerId, ...params.slice(1), dealerId, ...params.slice(1)]),
+
+      // Monthly trend for the selected year
+      this.query<any>(`
+    SELECT
+    strftime('%m', saleDate) as month,
+      COUNT(*) as count
+        FROM sales 
+          WHERE dealerId = ? AND strftime('%Y', saleDate) = ?
+      GROUP BY month
+        ORDER BY month ASC`, [dealerId, year ? year.toString() : new Date().getFullYear().toString()]),
+
+      // Model distribution for the selected period
+      this.query<any>(`
+    SELECT
+    batteryType as name,
+      COUNT(*) as value
+        FROM sales 
+        WHERE dealerId = ? ${dateFilter}
+        GROUP BY batteryType
+        ORDER BY value DESC`, [dealerId, ...params.slice(1)]),
+
+      // Claims vs Sales over time
+      this.query<any>(`
+    SELECT
+    strftime('%m', replacementDate) as month,
+      COUNT(*) as count
+        FROM replacements 
+        WHERE dealerId = ? AND strftime('%Y', replacementDate) = ?
+      GROUP BY month
+        ORDER BY month ASC`, [dealerId, year ? year.toString() : new Date().getFullYear().toString()]),
+
+      // 5. Detailed Sales Audit
+      this.query<any>(`
+    SELECT
+    s.batteryId as id,
+      s.batteryType as model,
+      s.saleDate as date,
+      COALESCE(
+        (SELECT price FROM model_prices mp 
+             JOIN models m ON mp.modelId = m.id 
+             WHERE m.name = s.batteryType AND mp.effectiveDate <= s.saleDate 
+             ORDER BY mp.effectiveDate DESC, mp.timestamp DESC LIMIT 1),
+      s.salePrice,
+      0
+          ) as price
+        FROM sales s
+        WHERE s.dealerId = ? ${dateFilter}
+        ORDER BY s.saleDate DESC`, [dealerId, ...params.slice(1)]),
+
+      // 6. Detailed Claims Audit
+      this.query<any>(`
+    SELECT
+    r.oldBatteryId as id,
+      b.model as model,
+      r.replacementDate as date,
+      COALESCE(
+        (SELECT price FROM model_prices mp 
+             JOIN models m ON mp.modelId = m.id 
+             WHERE m.name = b.model AND mp.effectiveDate <= r.replacementDate 
+             ORDER BY mp.effectiveDate DESC, mp.timestamp DESC LIMIT 1),
+      0
+          ) as price
+        FROM replacements r
+        JOIN batteries b ON r.oldBatteryId = b.id
+        WHERE r.dealerId = ? ${dateFilter.replace(/saleDate/g, 'replacementDate')}
+        ORDER BY r.replacementDate DESC`, [dealerId, ...params.slice(1)])
+    ]);
+
+    const activeCount = await this.query<any>(`
+      SELECT COUNT(*) as count 
+      FROM batteries 
+      WHERE dealerId = ? AND(status = 'ACTIVE' OR status = 'REPLACEMENT') 
+      AND datetime(warrantyExpiry) >= datetime('now')`, [dealerId]
+    );
+
+    return {
+      kpis: {
+        totalSales: kpis[0]?.periodSales || 0,
+        totalRevenue: kpis[0]?.periodRevenue || 0,
+        totalClaims: kpis[0]?.periodClaims || 0,
+        activeUnits: activeCount[0]?.count || 0,
+        claimRatio: kpis[0]?.periodSales > 0 ? ((kpis[0]?.periodClaims / kpis[0]?.periodSales) * 100).toFixed(1) : "0.0"
+      },
+      salesTrend: trend.map((t: any) => ({ name: t.month, sales: t.count })),
+      claimsTrend: claimsTrend.map((t: any) => ({ name: t.month, claims: t.count })),
+      modelDistribution: models,
+      detailedSales: detailedSales,
+      detailedClaims: detailedClaims,
+      // Helper for the UI to know what years have data
+      availableYears: (await this.query<any>(`SELECT DISTINCT strftime('%Y', saleDate) as year FROM sales WHERE dealerId = ? ORDER BY year DESC`, [dealerId])).map(r => parseInt(r.year))
     };
   }
 
@@ -454,7 +614,7 @@ export class Database {
 
   static async updateBatteryStatus(id: string, status: string, dealerId: string | null = null): Promise<void> {
     await this.run(
-      `UPDATE batteries SET status = ?, dealerId = ? WHERE id = ?`,
+      `UPDATE batteries SET status = ?, dealerId = ? WHERE id = ? `,
       [status, dealerId, id]
     );
   }
@@ -477,13 +637,13 @@ export class Database {
     const finalReturnDate = returnDate || getLocalDate();
 
     await this.run(
-      `UPDATE batteries SET 
-        status = ?, 
-        dealerId = ?, 
-        activationDate = ?,
-        warrantyCardStatus = ?,
-        actualSaleDate = ?
-       WHERE id = ?`,
+      `UPDATE batteries SET
+    status = ?,
+      dealerId = ?,
+      activationDate = ?,
+      warrantyCardStatus = ?,
+      actualSaleDate = ?
+        WHERE id = ? `,
       [
         BatteryStatus.RETURNED_PENDING,
         dealerId,
@@ -528,13 +688,13 @@ export class Database {
     expiryDate.setMonth(expiryDate.getMonth() + (battery.warrantyMonths || 0));
 
     await this.run(
-      `UPDATE batteries SET 
-         status = 'ACTIVE', 
-         activationDate = ?, 
-         customerName = ?, 
-         customerPhone = ?, 
-         warrantyExpiry = ? 
-       WHERE id = ?`,
+      `UPDATE batteries SET
+    status = 'ACTIVE',
+      activationDate = ?,
+      customerName = ?,
+      customerPhone = ?,
+      warrantyExpiry = ?
+        WHERE id = ? `,
       [date, customerName, customerPhone, expiryDate.toISOString().split('T')[0], id]
     );
   }
@@ -552,11 +712,11 @@ export class Database {
 
     // 1. Insert Sale Record
     await this.run(
-      `INSERT INTO sales (
-        id, batteryId, batteryType, dealerId, saleDate, salePrice, gstAmount, totalAmount,
-        isBilled, customerName, customerPhone, guaranteeCardReturned, paidInAccount,
-        warrantyStartDate, warrantyExpiry
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO sales(
+          id, batteryId, batteryType, dealerId, saleDate, salePrice, gstAmount, totalAmount,
+          isBilled, customerName, customerPhone, guaranteeCardReturned, paidInAccount,
+          warrantyStartDate, warrantyExpiry
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         sale.id, sale.batteryId, sale.batteryType, sale.dealerId, sale.saleDate,
         sale.salePrice, sale.gstAmount, sale.totalAmount, sale.isBilled ? 1 : 0,
@@ -598,10 +758,10 @@ export class Database {
 
       // 1. Insert Replacement Record
       await this.run(
-        `INSERT INTO replacements (
-        id, oldBatteryId, newBatteryId, dealerId, replacementDate, 
-        reason, problemDescription, warrantyCardStatus, paidInAccount, replenishmentBatteryId, settlementType
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO replacements(
+          id, oldBatteryId, newBatteryId, dealerId, replacementDate,
+          reason, problemDescription, warrantyCardStatus, paidInAccount, replenishmentBatteryId, settlementType
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           rep.id, rep.oldBatteryId, rep.newBatteryId, rep.dealerId,
           rep.replacementDate, rep.reason, rep.problemDescription, rep.warrantyCardStatus,
@@ -623,14 +783,14 @@ export class Database {
           const expiryStr = expiryDate.toISOString().split('T')[0];
 
           await this.run(
-            `UPDATE batteries SET 
-            status = 'ACTIVE', 
-            dealerId = ?, 
-            activationDate = ?, 
-            warrantyExpiry = ?, 
-            customerName = 'DEALER STOCK',
-            replacementCount = 0
-          WHERE id = ?`,
+            `UPDATE batteries SET
+    status = 'ACTIVE',
+      dealerId = ?,
+      activationDate = ?,
+      warrantyExpiry = ?,
+      customerName = 'DEALER STOCK',
+      replacementCount = 0
+          WHERE id = ? `,
             [rep.dealerId, today, expiryStr, rep.replenishmentBatteryId]
           );
         }
@@ -647,12 +807,12 @@ export class Database {
         const newExpiryStr = newExpiry.toISOString().split('T')[0];
 
         await this.run(
-          `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ?, activationDate = ?, warrantyExpiry = ? WHERE id = ?`,
+          `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ?, activationDate = ?, warrantyExpiry = ? WHERE id = ? `,
           [rep.newBatteryId, meta.correctedOriginalSaleDate, newExpiryStr, rep.oldBatteryId]
         );
       } else {
         await this.run(
-          `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ?, activationDate = ? WHERE id = ?`,
+          `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ?, activationDate = ? WHERE id = ? `,
           [rep.newBatteryId, rep.replacementDate, rep.oldBatteryId]
         );
       }
@@ -662,15 +822,15 @@ export class Database {
       const activationDate = meta?.correctedOriginalSaleDate || rep.replacementDate;
 
       await this.run(
-        `UPDATE batteries SET 
-          status = 'REPLACEMENT', 
-          previousBatteryId = ?, 
-          activationDate = ?,
-          dealerId = ?,
-          customerName = ?,
-          customerPhone = ?,
-          warrantyExpiry = ?
-        WHERE id = ?`,
+        `UPDATE batteries SET
+    status = 'REPLACEMENT',
+      previousBatteryId = ?,
+      activationDate = ?,
+      dealerId = ?,
+      customerName = ?,
+      customerPhone = ?,
+      warrantyExpiry = ?
+        WHERE id = ? `,
         [
           rep.oldBatteryId, activationDate, rep.dealerId || 'CENTRAL',
           meta?.customerName || null, meta?.customerPhone || null, meta?.warrantyExpiry || null,
@@ -688,14 +848,14 @@ export class Database {
 
   static async addDealer(dealer: Dealer): Promise<void> {
     await this.run(
-      `INSERT INTO dealers (id, name, ownerName, address, contact, location) VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO dealers(id, name, ownerName, address, contact, location) VALUES(?, ?, ?, ?, ?, ?)`,
       [dealer.id, dealer.name, dealer.ownerName, dealer.address, dealer.contact, dealer.location]
     );
   }
 
   static async updateDealer(dealer: Dealer): Promise<void> {
     await this.run(
-      `UPDATE dealers SET name = ?, ownerName = ?, address = ?, contact = ?, location = ? WHERE id = ?`,
+      `UPDATE dealers SET name = ?, ownerName = ?, address = ?, contact = ?, location = ? WHERE id = ? `,
       [dealer.name, dealer.ownerName, dealer.address, dealer.contact, dealer.location, dealer.id]
     );
   }
@@ -706,7 +866,7 @@ export class Database {
 
   static async updateReplacementPaidStatus(replacementId: string, paidInAccount: boolean): Promise<void> {
     await this.run(
-      `UPDATE replacements SET paidInAccount = ? WHERE id = ?`,
+      `UPDATE replacements SET paidInAccount = ? WHERE id = ? `,
       [paidInAccount ? 1 : 0, replacementId]
     );
     window.dispatchEvent(new CustomEvent('db-synced'));
@@ -748,14 +908,14 @@ export class Database {
           expiryDate.setMonth(expiryDate.getMonth() + (stockUnit.warrantyMonths || 24));
 
           await this.run(
-            `UPDATE batteries SET 
-              status = 'ACTIVE', 
-              dealerId = ?, 
-              activationDate = ?, 
-              warrantyExpiry = ?, 
-              customerName = 'DEALER STOCK',
-              replacementCount = 0
-            WHERE id = ?`,
+            `UPDATE batteries SET
+    status = 'ACTIVE',
+      dealerId = ?,
+      activationDate = ?,
+      warrantyExpiry = ?,
+      customerName = 'DEALER STOCK',
+      replacementCount = 0
+            WHERE id = ? `,
             [replacement.dealerId, date, expiryDate.toISOString().split('T')[0], replId]
           );
         } else {
@@ -789,12 +949,12 @@ export class Database {
 
         // 3. Update Replacement Record
         await this.run(
-          `UPDATE replacements SET 
-             settlementType = 'STOCK', 
-             replenishmentBatteryId = ?, 
-             paidInAccount = 0,
-             settlementDate = ?
-           WHERE id = ?`,
+          `UPDATE replacements SET
+    settlementType = 'STOCK',
+      replenishmentBatteryId = ?,
+      paidInAccount = 0,
+      settlementDate = ?
+        WHERE id = ? `,
           [replId, date, replacementId]
         );
 
@@ -803,12 +963,12 @@ export class Database {
       } else {
         // CREDIT Settlement
         await this.run(
-          `UPDATE replacements SET 
-             settlementType = 'CREDIT', 
-             paidInAccount = 1,
-             replenishmentBatteryId = NULL,
-             settlementDate = ?
-           WHERE id = ?`,
+          `UPDATE replacements SET
+    settlementType = 'CREDIT',
+      paidInAccount = 1,
+      replenishmentBatteryId = NULL,
+      settlementDate = ?
+        WHERE id = ? `,
           [date, replacementId]
         );
       }
@@ -822,65 +982,65 @@ export class Database {
 
   static async getSettlementLedger(): Promise<any[]> {
     const sql = `
-      -- 1. Finalized Replacements awaiting settlement
-      SELECT 
-        r.id,
-        r.dealerId,
-        r.oldBatteryId,
-        r.newBatteryId,
-        r.replacementDate,
-        'EXCHANGED' as type,
-        d.name as dealerName,
-        d.location as dealerLocation,
-        ob.model as oldModel,
-        nb.model as newModel,
-        s.salePrice as originalPrice
+      --1. Finalized Replacements awaiting settlement
+    SELECT
+    r.id,
+      r.dealerId,
+      r.oldBatteryId,
+      r.newBatteryId,
+      r.replacementDate,
+      'EXCHANGED' as type,
+      d.name as dealerName,
+      d.location as dealerLocation,
+      ob.model as oldModel,
+      nb.model as newModel,
+      s.salePrice as originalPrice
       FROM replacements r
       JOIN dealers d ON r.dealerId = d.id
       JOIN batteries ob ON r.oldBatteryId = ob.id
       LEFT JOIN batteries nb ON r.newBatteryId = nb.id
       LEFT JOIN sales s ON r.oldBatteryId = s.batteryId
-      WHERE r.settlementType IS NULL OR (r.settlementType = 'CREDIT' AND r.paidInAccount = 0)
+      WHERE r.settlementType IS NULL OR(r.settlementType = 'CREDIT' AND r.paidInAccount = 0)
 
       UNION ALL
 
-      -- 2. Pending Returns awaiting swap
-      SELECT
-        b.id as id,
-        b.dealerId,
-        b.id as oldBatteryId,
-        NULL as newBatteryId,
-        b.activationDate as replacementDate,
-        'PENDING_SWAP' as type,
-        d.name as dealerName,
-        d.location as dealerLocation,
-        b.model as oldModel,
-        NULL as newModel,
-        s.salePrice as originalPrice
+    --2. Pending Returns awaiting swap
+    SELECT
+    b.id as id,
+      b.dealerId,
+      b.id as oldBatteryId,
+      NULL as newBatteryId,
+      b.activationDate as replacementDate,
+      'PENDING_SWAP' as type,
+      d.name as dealerName,
+      d.location as dealerLocation,
+      b.model as oldModel,
+      NULL as newModel,
+      s.salePrice as originalPrice
       FROM batteries b
       JOIN dealers d ON b.dealerId = d.id
       LEFT JOIN sales s ON b.id = s.batteryId
       WHERE b.status = 'RETURNED_PENDING'
 
       ORDER BY replacementDate DESC
-    `;
+      `;
     return await this.query<any>(sql);
   }
 
   static async getSettlementSummary(): Promise<any[]> {
     const sql = `
-        SELECT
-        d.id as dealerId,
-          d.name as dealerName,
-          d.location as dealerLocation,
-          COUNT(r.id) as pendingClaims,
-          SUM(CASE WHEN (r.settlementType = 'STOCK' AND r.replenishmentBatteryId IS NULL) OR r.settlementType IS NULL OR (r.settlementType = 'CREDIT' AND r.paidInAccount = 0) THEN 1 ELSE 0 END) as pendingStock,
-          SUM(CASE WHEN r.paidInAccount = 0 THEN 1 ELSE 0 END) as totalOwedItems,
-          SUM(COALESCE(s.salePrice, 4200)) as totalEstimatedCredit
+    SELECT
+    d.id as dealerId,
+      d.name as dealerName,
+      d.location as dealerLocation,
+      COUNT(r.id) as pendingClaims,
+      SUM(CASE WHEN(r.settlementType = 'STOCK' AND r.replenishmentBatteryId IS NULL) OR r.settlementType IS NULL OR(r.settlementType = 'CREDIT' AND r.paidInAccount = 0) THEN 1 ELSE 0 END) as pendingStock,
+      SUM(CASE WHEN r.paidInAccount = 0 THEN 1 ELSE 0 END) as totalOwedItems,
+      SUM(COALESCE(s.salePrice, 4200)) as totalEstimatedCredit
       FROM dealers d
       JOIN replacements r ON d.id = r.dealerId
       LEFT JOIN sales s ON r.oldBatteryId = s.batteryId
-      WHERE r.settlementType IS NULL OR (r.settlementType = 'CREDIT' AND r.paidInAccount = 0)
+      WHERE r.settlementType IS NULL OR(r.settlementType = 'CREDIT' AND r.paidInAccount = 0)
       GROUP BY d.id
       ORDER BY pendingClaims DESC
     `;
@@ -914,10 +1074,10 @@ export class Database {
         // Reset the successor battery to be a standalone unit
         await this.run(
           `UPDATE batteries SET
-        originalBatteryId = id,
-          previousBatteryId = NULL,
-          replacementCount = 0,
-          status = 'ACTIVE' 
+    originalBatteryId = id,
+      previousBatteryId = NULL,
+      replacementCount = 0,
+      status = 'ACTIVE' 
            WHERE id = ? `,
           [successorId]
         );
@@ -984,13 +1144,13 @@ export class Database {
       // We strip it of all assignment data
       await this.run(
         `UPDATE batteries SET
-        status = 'MANUFACTURED',
-          previousBatteryId = NULL,
-          activationDate = NULL,
-          dealerId = NULL,
-          customerName = NULL,
-          customerPhone = NULL,
-          warrantyExpiry = NULL
+    status = 'MANUFACTURED',
+      previousBatteryId = NULL,
+      activationDate = NULL,
+      dealerId = NULL,
+      customerName = NULL,
+      customerPhone = NULL,
+      warrantyExpiry = NULL
          WHERE id = ? `,
         [replacement.newBatteryId]
       );
@@ -1000,11 +1160,11 @@ export class Database {
       if (replacement.replenishmentBatteryId) {
         await this.run(
           `UPDATE batteries SET
-        status = 'MANUFACTURED',
-          dealerId = NULL,
-          activationDate = NULL,
-          customerName = NULL,
-          warrantyExpiry = NULL 
+    status = 'MANUFACTURED',
+      dealerId = NULL,
+      activationDate = NULL,
+      customerName = NULL,
+      warrantyExpiry = NULL 
            WHERE id = ? `,
           [replacement.replenishmentBatteryId]
         );
@@ -1030,7 +1190,9 @@ export class Database {
     searchQuery?: string,
     startDate?: string,
     endDate?: string,
-    modelFilter?: string
+    modelFilter?: string,
+    year?: number,
+    month?: number
   ): Promise<{ data: any[], total: number }> {
     const offset = (page - 1) * limit;
     let where = 'WHERE r.dealerId = ?';
@@ -1038,7 +1200,7 @@ export class Database {
 
     if (searchQuery) {
       where += ' AND (r.oldBatteryId LIKE ? OR r.newBatteryId LIKE ?)';
-      params.push(`% ${searchQuery}% `, ` % ${searchQuery}% `);
+      params.push(`%${searchQuery}%`, `%${searchQuery}%`);
     }
 
     if (startDate) {
@@ -1051,6 +1213,16 @@ export class Database {
       params.push(endDate);
     }
 
+    if (year) {
+      where += " AND strftime('%Y', r.replacementDate) = ?";
+      params.push(year.toString());
+    }
+
+    if (month) {
+      where += " AND strftime('%m', r.replacementDate) = ?";
+      params.push(month.toString().padStart(2, '0'));
+    }
+
     if (modelFilter) {
       where += ' AND b.model = ?';
       params.push(modelFilter);
@@ -1058,23 +1230,23 @@ export class Database {
 
     const [data, countResult] = await Promise.all([
       this.query<any>(`
-        SELECT
-        r.*,
-          COALESCE(s.warrantyStartDate, b.actualSaleDate, b.activationDate) as soldDate,
-          b.manufactureDate as sentDate,
-          b.model as batteryModel
+    SELECT
+    r.*,
+      COALESCE(s.warrantyStartDate, b.actualSaleDate, b.activationDate) as soldDate,
+      b.manufactureDate as sentDate,
+      b.model as batteryModel
         FROM replacements r
         LEFT JOIN sales s ON s.batteryId = r.oldBatteryId
         LEFT JOIN batteries b ON b.id = r.oldBatteryId
         ${where}
         ORDER BY r.rowid DESC
-        LIMIT ? OFFSET ?
-          `, [...params, limit, offset]),
+    LIMIT ? OFFSET ?
+      `, [...params, limit, offset]),
       this.query<{ count: number }>(`
         SELECT COUNT(*) as count 
         FROM replacements r 
         ${where}
-        `, params)
+    `, params)
     ]);
 
     return {
@@ -1132,12 +1304,12 @@ export class Database {
         // Update existing unit to new dealer and ACTIVATE
         await this.run(
           `UPDATE batteries SET
-        dealerId = ?,
-          status = ?,
-          activationDate = ?,
-          warrantyExpiry = ?,
-          customerName = ?
-            WHERE id = ? `,
+    dealerId = ?,
+      status = ?,
+      activationDate = ?,
+      warrantyExpiry = ?,
+      customerName = ?
+        WHERE id = ? `,
           [item.dealerId, BatteryStatus.ACTIVE, today, expiryStr, customerName, item.id]
         );
       } else {
@@ -1160,10 +1332,10 @@ export class Database {
       // Create Sales record for analytics and reporting
       await this.run(
         `INSERT INTO sales(
-              id, batteryId, batteryType, dealerId, saleDate, salePrice, gstAmount, totalAmount,
-              isBilled, customerName, customerPhone, guaranteeCardReturned, paidInAccount,
-              warrantyStartDate, warrantyExpiry
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, batteryId, batteryType, dealerId, saleDate, salePrice, gstAmount, totalAmount,
+          isBilled, customerName, customerPhone, guaranteeCardReturned, paidInAccount,
+          warrantyStartDate, warrantyExpiry
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           `AUTO - ${item.id} -${Date.now()} `,
           item.id, item.model, item.dealerId, today, 0, 0, 0,
@@ -1180,14 +1352,14 @@ export class Database {
     // This maps to registerSale but with explicit dealer assignment if provided
     await this.run(
       `UPDATE batteries SET
-        status = 'ACTIVE',
-          activationDate = ?,
-          customerName = ?,
-          customerPhone = ?,
-          warrantyExpiry = ?,
-          dealerId = COALESCE(?, dealerId),
-          warrantyCardStatus = ?
-            WHERE id = ? `,
+    status = 'ACTIVE',
+      activationDate = ?,
+      customerName = ?,
+      customerPhone = ?,
+      warrantyExpiry = ?,
+      dealerId = COALESCE(?, dealerId),
+      warrantyCardStatus = ?
+        WHERE id = ? `,
       [date, customerName, customerPhone, expiryDate, dealerId, warrantyCardStatus, id]
     );
   }
@@ -1225,14 +1397,14 @@ export class Database {
     // Update current battery
     await this.run(
       `UPDATE batteries SET
-        actualSaleDate = ?,
-          actualSaleDateSource = ?,
-          actualSaleDateProof = ?,
-          warrantyCalculationBase = 'ACTUAL_SALE',
-          warrantyExpiry = ?,
-          activationDate = ?,
-          gracePeriodUsed = ?
-            WHERE id = ? `,
+    actualSaleDate = ?,
+      actualSaleDateSource = ?,
+      actualSaleDateProof = ?,
+      warrantyCalculationBase = 'ACTUAL_SALE',
+      warrantyExpiry = ?,
+      activationDate = ?,
+      gracePeriodUsed = ?
+        WHERE id = ? `,
       [actualSaleDate, source, proofPath || null, newExpiryStr, actualSaleDate,
         isInGracePeriod ? 1 : 0, batteryId]
     );
@@ -1267,11 +1439,11 @@ export class Database {
 
         await this.run(
           `UPDATE batteries SET
-        warrantyExpiry = ?,
-          actualSaleDate = ?,
-          warrantyCalculationBase = 'ACTUAL_SALE',
-          activationDate = ?
-            WHERE id = ? `,
+    warrantyExpiry = ?,
+      actualSaleDate = ?,
+      warrantyCalculationBase = 'ACTUAL_SALE',
+      activationDate = ?
+        WHERE id = ? `,
           [newReplacementExpiry.toISOString().split('T')[0], actualSaleDate,
           replacementRecord[0].replacementDate, currentBatteryId]
         );
@@ -1306,5 +1478,307 @@ export class Database {
     };
   }
 
-  // End of Database class
+  /**
+   * Price Management System Methods
+   */
+  static async getModelPriceHistory(modelId: string): Promise<PriceRecord[]> {
+    return this.query<PriceRecord>(
+      `SELECT * FROM model_prices WHERE modelId = ? ORDER BY effectiveDate DESC, timestamp DESC`,
+      [modelId]
+    );
+  }
+
+  static async updateModelPrice(modelId: string, price: number, effectiveDate: string): Promise<void> {
+    await this.run(
+      `INSERT INTO model_prices(modelId, price, effectiveDate) VALUES(?, ?, ?)`,
+      [modelId, price, effectiveDate]
+    );
+    await this.logActivity('PRICE_UPDATE', `Updated price for model ${modelId} to ₹${price} `, { modelId, price, effectiveDate });
+  }
+
+  static async getCurrentPrices(): Promise<Record<string, number>> {
+    const rows = await this.query<any>(`
+      SELECT modelId, price 
+      FROM model_prices mp1
+      WHERE effectiveDate = (
+      SELECT MAX(effectiveDate) 
+        FROM model_prices mp2 
+        WHERE mp2.modelId = mp1.modelId AND mp2.effectiveDate <= date('now')
+      )
+      AND timestamp = (
+      SELECT MAX(timestamp)
+        FROM model_prices mp3
+        WHERE mp3.modelId = mp1.modelId AND mp3.effectiveDate = mp1.effectiveDate
+      )
+    `);
+
+    const priceMap: Record<string, number> = {};
+    rows.forEach(row => {
+      priceMap[row.modelId] = row.price;
+    });
+    return priceMap;
+  }
+
+  static async getAdvancedDealerAnalytics(dealerId: string, year?: number, month?: number): Promise<any> {
+    const today = getLocalDate();
+    const ninetyDaysAgo = new Date(new Date().setDate(new Date().getDate() - 90)).toISOString().split('T')[0];
+
+    // Revenue logic subquery (shared across multiple KPIs)
+    const revenueCalc = `
+    COALESCE(
+      (SELECT price FROM model_prices mp 
+         JOIN models m ON mp.modelId = m.id 
+         WHERE m.name = s.batteryType AND mp.effectiveDate <= s.saleDate 
+         ORDER BY mp.effectiveDate DESC, mp.timestamp DESC LIMIT 1),
+      s.salePrice,
+      0
+      )
+    `;
+
+    const [networkAvg, stockCount, rollingRevenue, reliabilityData] = await Promise.all([
+      // 1. Network Benchmarking: Average Revenue per Dealer
+      this.query<any>(`
+        SELECT AVG(dealer_revenue) as avg_revenue FROM(
+      SELECT SUM(${revenueCalc}) as dealer_revenue 
+          FROM sales s 
+          GROUP BY dealerId
+    )
+      `),
+
+      // 2. Inventory Health: Current Stock at Dealer
+      this.query<any>(`
+        SELECT COUNT(*) as count 
+        FROM batteries 
+        WHERE dealerId = ? AND status = 'Manufactured'
+      `, [dealerId]),
+
+      // 3. Rolling Revenue (Last 3 Months) for Projection
+      this.query<any>(`
+    SELECT
+    strftime('%Y-%m', saleDate) as month,
+      SUM(${revenueCalc}) as revenue
+        FROM sales s
+        WHERE dealerId = ? AND saleDate >= ?
+      GROUP BY month
+        ORDER BY month ASC
+      `, [dealerId, ninetyDaysAgo]),
+
+      // 4. Reliability Curve: Claims by Age (Months since sale)
+      this.query<any>(`
+    SELECT
+    CAST((julianday(replacementDate) - julianday(COALESCE(s.saleDate, b.activationDate))) / 30 AS INT) as month_of_failure,
+      COUNT(*) as count
+        FROM replacements r
+        JOIN batteries b ON r.oldBatteryId = b.id
+        LEFT JOIN sales s ON b.id = s.batteryId
+        WHERE r.dealerId = ?
+      GROUP BY month_of_failure
+        HAVING month_of_failure >= 0 AND month_of_failure <= 36
+        ORDER BY month_of_failure ASC
+      `, [dealerId])
+    ]);
+
+    // Derived Metrics
+    const dealerCurrentStock = stockCount[0]?.count || 0;
+    const avgMonthlyRev = rollingRevenue.length > 0
+      ? rollingRevenue.reduce((acc: number, r: any) => acc + r.revenue, 0) / rollingRevenue.length
+      : 0;
+
+    const projectedNextMonth = avgMonthlyRev * 1.05; // 5% growth factor (mock factor)
+
+    // Unified Efficiency Score (60% Volume / 40% Quality)
+    const stats = await this.getDealerAnalytics(dealerId, year, month);
+    const totalSales = stats.totalSales || 0;
+    const volumeScore = Math.min(100, totalSales * 2); // 50 sales = 100 score
+    const qualityScore = Math.max(0, 100 - (parseFloat(stats.claimRatio) * 5)); // 20% claim rate = 0 score
+    const efficiencyScore = totalSales > 0 ? Math.round((volumeScore * 0.6) + (qualityScore * 0.4)) : 0;
+
+    return {
+      benchmark: {
+        dealerRevenue: avgMonthlyRev * 3, // Total for the window
+        networkAvg: networkAvg[0]?.avg_revenue || 0,
+      },
+      inventory: {
+        currentStock: dealerCurrentStock,
+        turnoverRatio: dealerCurrentStock > 0 ? (stats.last30Sales / dealerCurrentStock).toFixed(2) : "0.00"
+      },
+      projections: {
+        nextMonthRevenue: projectedNextMonth,
+        confidence: avgMonthlyRev > 0 ? 85 : 0
+      },
+      reliabilityCurve: reliabilityData.map((d: any) => ({
+        month: d.month_of_failure,
+        claims: d.count
+      })),
+      efficiencyScore
+    };
+  }
+
+  static async getGlobalAnalytics(year?: number, month?: number, location?: string): Promise<any> {
+    const filters: string[] = [];
+    const params: any[] = [];
+
+    if (year) {
+      filters.push("strftime('%Y', s.saleDate) = ?");
+      params.push(year.toString());
+    }
+    if (month) {
+      filters.push("strftime('%m', s.saleDate) = ?");
+      params.push(month.toString().padStart(2, '0'));
+    }
+    if (location && location !== 'All') {
+      filters.push("d.location = ?");
+      params.push(location);
+    }
+
+    const filterClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+    const replacementFilterClause = filters.length > 0
+      ? `WHERE ${filters.join(' AND ').replace(/s\.saleDate/g, 'r.replacementDate')}`
+      : '';
+
+    // Shared Revenue Logic
+    const revenueCalc = `
+    COALESCE(
+      (SELECT price FROM model_prices mp 
+         JOIN models m ON mp.modelId = m.id 
+         WHERE m.name = s.batteryType AND mp.effectiveDate <= s.saleDate 
+         ORDER BY mp.effectiveDate DESC, mp.timestamp DESC LIMIT 1),
+      s.salePrice,
+      0
+      )
+    `;
+
+    const [kpis, salesTrend, claimsTrend, modelDistribution, locationDistribution, availableYears] = await Promise.all([
+      // 1. Core KPIs
+      this.query<any>(`
+        SELECT 
+          COUNT(*) as totalSales,
+          SUM(${revenueCalc}) as totalRevenue,
+          (SELECT COUNT(*) FROM replacements r JOIN dealers d ON r.dealerId = d.id ${replacementFilterClause}) as totalClaims,
+          (SELECT COUNT(*) FROM dealers d ${location && location !== 'All' ? 'WHERE d.location = ?' : ''}) as totalDealers,
+          (SELECT COUNT(*) FROM batteries) as totalInventory
+        FROM sales s
+        JOIN dealers d ON s.dealerId = d.id
+        ${filterClause}
+    `, location && location !== 'All' ? [...params, ...params, location] : [...params, ...params]),
+
+      // 2. 12 Month Sales Trend
+      this.query<any>(`
+        SELECT strftime('%m', s.saleDate) as name, COUNT(*) as sales
+        FROM sales s
+        JOIN dealers d ON s.dealerId = d.id
+        ${year
+          ? `WHERE strftime('%Y', s.saleDate) = ? ${location && location !== 'All' ? ' AND d.location = ?' : ''}`
+          : location && location !== 'All' ? 'WHERE d.location = ?' : `WHERE s.saleDate >= date('now', '-12 months')`}
+        GROUP BY name
+        ORDER BY name ASC
+      `, year ? (location && location !== 'All' ? [year.toString(), location] : [year.toString()]) : (location && location !== 'All' ? [location] : [])),
+
+      // 3. 12 Month Claims Trend
+      this.query<any>(`
+        SELECT strftime('%m', r.replacementDate) as name, COUNT(*) as claims
+        FROM replacements r
+        JOIN dealers d ON r.dealerId = d.id
+        ${year
+          ? `WHERE strftime('%Y', r.replacementDate) = ? ${location && location !== 'All' ? ' AND d.location = ?' : ''}`
+          : location && location !== 'All' ? 'WHERE d.location = ?' : `WHERE r.replacementDate >= date('now', '-12 months')`}
+        GROUP BY name
+        ORDER BY name ASC
+      `, year ? (location && location !== 'All' ? [year.toString(), location] : [year.toString()]) : (location && location !== 'All' ? [location] : [])),
+
+      // 4. Model Distribution
+      this.query<any>(`
+        SELECT s.batteryType as name, COUNT(*) as value
+        FROM sales s
+        JOIN dealers d ON s.dealerId = d.id
+        ${filterClause}
+        GROUP BY batteryType
+        ORDER BY value DESC
+        LIMIT 10
+      `, params),
+
+      // 5. Location Distribution
+      this.query<any>(`
+        SELECT d.location as name, COUNT(*) as value
+        FROM sales s
+        JOIN dealers d ON s.dealerId = d.id
+        ${filterClause}
+        GROUP BY d.location
+        ORDER BY value DESC
+        LIMIT 10
+      `, params),
+
+      // 6. Available Years
+      this.query<any>(`
+        SELECT DISTINCT strftime('%Y', saleDate) as year FROM sales
+        UNION
+        SELECT DISTINCT strftime('%Y', replacementDate) as year FROM replacements
+        ORDER BY year DESC
+      `)
+    ]);
+
+    const totalSales = kpis[0]?.totalSales || 0;
+    const totalClaims = kpis[0]?.totalClaims || 0;
+    const claimRatio = totalSales > 0 ? ((totalClaims / totalSales) * 100).toFixed(1) : 0;
+
+    return {
+      kpis: {
+        totalSales,
+        totalRevenue: kpis[0]?.totalRevenue || 0,
+        totalClaims,
+        totalDealers: kpis[0]?.totalDealers || 0,
+        totalInventory: kpis[0]?.totalInventory || 0,
+        claimRatio
+      },
+      salesTrend,
+      claimsTrend,
+      modelDistribution,
+      locationDistribution,
+      availableYears: availableYears.map((y: any) => parseInt(y.year)).filter((y: any) => !isNaN(y))
+    };
+  }
+
+  static async getDealerLeaderboard(year?: number, month?: number, location?: string): Promise<any[]> {
+    const filters: string[] = [];
+    const params: any[] = [];
+    if (location && location !== 'All') {
+      filters.push("location = ?");
+      params.push(location);
+    }
+    const filterClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+
+    const dealers = await this.query<any>(`SELECT id, name, location FROM dealers ${filterClause}`, params);
+
+    // Performance metrics for each dealer
+    const leaderboard = await Promise.all(dealers.map(async (dealer: any) => {
+      // Get filtered stats
+      const stats = await this.getDealerAnalytics(dealer.id, year, month);
+
+      const totalSales = stats.totalSales || 0;
+      let score = 0;
+
+      if (totalSales > 0) {
+        // Unified Intelligence Rating (60% Vol / 40% Qual)
+        const volumeScore = Math.min(100, totalSales * 2);
+        const qualityScore = Math.max(0, 100 - (parseFloat(stats.claimRatio) * 5));
+        score = Math.round((volumeScore * 0.6) + (qualityScore * 0.4));
+      }
+
+      return {
+        ...dealer,
+        totalSales,
+        totalExchanges: stats.totalClaims || 0,
+        claimRatio: stats.claimRatio,
+        score
+      };
+    }));
+
+    // Sort by score descending
+    return leaderboard.sort((a, b) => b.score - a.score);
+  }
+
+  static async getAvailableLocations(): Promise<string[]> {
+    const locations = await this.query<any>(`SELECT DISTINCT location FROM dealers WHERE location IS NOT NULL AND location != '' ORDER BY location ASC`);
+    return locations.map(l => l.location);
+  }
 }

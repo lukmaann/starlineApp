@@ -10,6 +10,7 @@ import Login from './pages/Login';
 import Backup from './pages/Backup';
 import DatabaseSelector from './pages/DatabaseSelector';
 import DatabaseManagement from './pages/DatabaseManagement';
+import GlobalAnalytics from './components/GlobalAnalytics';
 import { Database } from './db';
 import { Zap, Download, LogOut, Database as DatabaseIcon } from 'lucide-react';
 import UnlockPage from './pages/UnlockPage';
@@ -152,6 +153,8 @@ const App: React.FC = () => {
         return <Controls active={activeTab === 'controls'} />;
       case 'backup':
         return <Backup />;
+      case 'analytics':
+        return <GlobalAnalytics />;
 
       case 'database-management':
         return <DatabaseManagement />;

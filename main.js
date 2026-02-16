@@ -114,6 +114,15 @@ function initDatabase(config) {
         value TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS model_prices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        modelId TEXT,
+        price REAL,
+        effectiveDate TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(modelId) REFERENCES models(id)
+      );
+
       CREATE TABLE IF NOT EXISTS activity_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         type TEXT NOT NULL,
@@ -143,6 +152,23 @@ function initDatabase(config) {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_batteries_id_unique ON batteries(id);
     `;
     db.exec(schema);
+
+    // Migration: Create model_prices table if it doesn't exist
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS model_prices (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          modelId TEXT,
+          price REAL,
+          effectiveDate TEXT,
+          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(modelId) REFERENCES models(id)
+        )
+      `);
+      console.log('Migration: Ensured model_prices table exists');
+    } catch (err) {
+      console.error('Migration warning for model_prices:', err.message);
+    }
 
     // Migration: Add paidInAccount column if it doesn't exist
     try {

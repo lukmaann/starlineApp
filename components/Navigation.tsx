@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Battery, Users, Zap, ChevronRight, Barcode, ShieldCheck, Sliders, Search, History, UserCircle, Scale } from 'lucide-react';
+import { Battery, Users, Zap, ChevronRight, Barcode, ShieldCheck, Sliders, Search, History, UserCircle, Scale, BarChart3 } from 'lucide-react';
 
 interface NavItemProps {
   icon: React.ReactNode; // Changed from React.ElementType to React.ReactNode
@@ -35,6 +35,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
     { id: 'scanner', label: 'Hub Trace', icon: <Barcode size={18} strokeWidth={activeTab === 'scanner' ? 2.5 : 2} /> },
     { id: 'dealers', label: 'Dealers', icon: <Users size={18} strokeWidth={activeTab === 'dealers' ? 2.5 : 2} /> },
     { id: 'settlements', label: 'Settlements', icon: <Scale size={18} strokeWidth={activeTab === 'settlements' ? 2.5 : 2} /> },
+    { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={18} strokeWidth={activeTab === 'analytics' ? 2.5 : 2} /> },
   ];
 
   return (
