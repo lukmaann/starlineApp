@@ -2,8 +2,8 @@ import { User } from '../types';
 
 const SESSION_KEY = 'starline_auth_session';
 const USER_KEY = 'starline_auth_user';
-const SESSION_DURATION_MS = 45 * 60 * 1000; // 45 minutes
-const WARNING_THRESHOLD_MS = 2 * 60 * 1000; // Show warning at 2 minutes remaining
+const SESSION_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const WARNING_THRESHOLD_MS = 5 * 60 * 1000; // Show warning immediately (at 5 minutes remaining)
 const CHECK_INTERVAL_MS = 10 * 1000; // Check every 10 seconds for smoother countdown
 
 let autoLockTimer: NodeJS.Timeout | null = null;

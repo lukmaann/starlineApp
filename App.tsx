@@ -323,7 +323,7 @@ const App: React.FC = () => {
               </>
             )}
             {/* Notification bell */}
-            <NotificationBell onNavigate={navigate} />
+            {isAdmin && <NotificationBell onNavigate={navigate} />}
 
             {/* Logged-in user badge */}
             {user && (
