@@ -336,7 +336,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
       setLockPassword('');
       setLockError('');
       setPendingDealer(null);
-      AuthSession.saveSession();
+      AuthSession.refreshSession();
       if (dealerToLoad) {
         executeLoadDealerDetail(dealerToLoad);
       }

@@ -1,4 +1,4 @@
-import { Battery, Dealer, Replacement, BatteryModel, Sale, WarrantyCardStatus, BatteryStatus, PriceRecord } from './types';
+import { Battery, Dealer, Replacement, BatteryModel, Sale, WarrantyCardStatus, BatteryStatus, PriceRecord, User, UserRole, StagedBatch } from './types';
 import { validateName, validatePhone } from './utils/validation';
 import { getLocalDate } from './utils';
 
@@ -35,7 +35,9 @@ export class Database {
 
   private static async query<T>(sql: string, params: any[] = []): Promise<T[]> {
     if (window.electronAPI?.db) {
-      return await window.electronAPI.db.query(sql, params);
+      // Map undefined to null for sqlite compatibility
+      const safeParams = params.map(p => p === undefined ? null : p);
+      return await window.electronAPI.db.query(sql, safeParams);
     }
     console.error('IPC Bridge not available');
     return [];
@@ -43,7 +45,9 @@ export class Database {
 
   public static async run(sql: string, params: any[] = []): Promise<{ changes: number; lastInsertRowid: number }> {
     if (window.electronAPI?.db) {
-      return await window.electronAPI.db.run(sql, params);
+      // Map undefined to null for sqlite compatibility
+      const safeParams = params.map(p => p === undefined ? null : p);
+      return await window.electronAPI.db.run(sql, safeParams);
     }
     throw new Error('Database disconnected');
   }
@@ -628,6 +632,161 @@ export class Database {
   static async clearActivityLogs(): Promise<void> {
     await this.run('DELETE FROM activity_logs');
   }
+
+  // --- USER MANAGEMENT ---
+
+  static async getUsers(): Promise<User[]> {
+    return await this.query<User>('SELECT id, username, role FROM users ORDER BY username ASC');
+  }
+
+  static async addUser(user: Partial<User> & { password?: string }): Promise<void> {
+    await this.run(
+      'INSERT INTO users (id, username, password, role) VALUES (?, ?, ?, ?)',
+      [user.id || Math.random().toString(36).substr(2, 9), user.username, user.password, user.role]
+    );
+  }
+
+  static async updateUser(user: Partial<User> & { password?: string }): Promise<void> {
+    if (user.password) {
+      await this.run(
+        'UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?',
+        [user.username, user.password, user.role, user.id]
+      );
+    } else {
+      await this.run(
+        'UPDATE users SET username = ?, role = ? WHERE id = ?',
+        [user.username, user.role, user.id]
+      );
+    }
+  }
+
+  static async deleteUser(id: string): Promise<void> {
+    await this.run('DELETE FROM users WHERE id = ?', [id]);
+  }
+
+  // --- STAGED BATCHES ---
+
+  static async createStagedBatch(batch: Partial<StagedBatch>, itemSerials: string[]): Promise<string> {
+    const batchId = `BATCH-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`.toUpperCase();
+    await this.run(
+      `INSERT INTO staged_batches (id, createdBy, dealerId, modelId, date, status) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [batchId, batch.createdBy, batch.dealerId, batch.modelId, batch.date || getLocalDate(), 'PENDING']
+    );
+
+    for (const serial of itemSerials) {
+      await this.run(
+        'INSERT INTO staged_batch_items (batchId, serialNumber) VALUES (?, ?)',
+        [batchId, serial]
+      );
+    }
+
+    return batchId;
+  }
+
+  static async getStagedBatch(id: string): Promise<StagedBatch | undefined> {
+    const results = await this.query<StagedBatch>(`
+      SELECT sb.*, u.username as creatorName, d.name as dealerName, m.name as modelName,
+             (SELECT COUNT(*) FROM staged_batch_items WHERE batchId = sb.id) as itemCount
+      FROM staged_batches sb
+      LEFT JOIN users u ON sb.createdBy = u.id
+      LEFT JOIN dealers d ON sb.dealerId = d.id
+      LEFT JOIN models m ON sb.modelId = m.id
+      WHERE sb.id = ?
+    `, [id]);
+    return results[0];
+  }
+
+  static async getStagedBatches(userId?: string): Promise<StagedBatch[]> {
+    let sql = `
+      SELECT sb.*, u.username as creatorName, d.name as dealerName, m.name as modelName,
+             (SELECT COUNT(*) FROM staged_batch_items WHERE batchId = sb.id) as itemCount
+      FROM staged_batches sb
+      LEFT JOIN users u ON sb.createdBy = u.id
+      LEFT JOIN dealers d ON sb.dealerId = d.id
+      LEFT JOIN models m ON sb.modelId = m.id
+    `;
+    const params: any[] = [];
+    if (userId) {
+      sql += ' WHERE sb.createdBy = ?';
+      params.push(userId);
+    }
+    sql += ' ORDER BY sb.createdAt DESC';
+    return await this.query<StagedBatch>(sql, params);
+  }
+
+  static async getNotificationCounts(): Promise<{ batches: number, settlements: number }> {
+    const batchesRes = await this.query<{ count: number }>('SELECT COUNT(*) as count FROM staged_batches WHERE status = ?', ['PENDING']);
+    const inspectionsRes = await this.query<{ count: number }>("SELECT COUNT(*) as count FROM batteries WHERE (status = 'RETURNED_PENDING' AND inspectionStatus = 'PENDING') OR inspectionStatus = 'IN_PROGRESS'");
+    const settlementsRes = await this.query<{ count: number }>("SELECT COUNT(*) as count FROM replacements WHERE settlementType IS NULL OR (settlementType = 'CREDIT' AND paidInAccount = 0)");
+    const returnsRes = await this.query<{ count: number }>("SELECT COUNT(*) as count FROM batteries WHERE status = 'RETURNED_PENDING'");
+    return {
+      batches: (batchesRes[0]?.count || 0) + (inspectionsRes[0]?.count || 0),
+      settlements: (settlementsRes[0]?.count || 0) + (returnsRes[0]?.count || 0)
+    };
+  }
+
+  static async getStagedBatchItems(batchId: string): Promise<string[]> {
+    const items = await this.query<{ serialNumber: string }>('SELECT serialNumber FROM staged_batch_items WHERE batchId = ?', [batchId]);
+    return items.map(i => i.serialNumber);
+  }
+
+  static async approveStagedBatch(id: string): Promise<void> {
+    const batch = await this.getStagedBatch(id);
+    if (!batch) throw new Error('Batch not found');
+    if (batch.status !== 'PENDING') throw new Error('Batch is already processed');
+
+    const items = await this.query<{ serialNumber: string }>('SELECT serialNumber FROM staged_batch_items WHERE batchId = ?', [id]);
+
+    // Get model details for warrantyMonths
+    const model = (await this.query<BatteryModel>('SELECT * FROM models WHERE id = ?', [batch.modelId]))[0];
+    if (!model) throw new Error('Model configuration missing');
+
+    const dealer = (await this.query<Dealer>('SELECT * FROM dealers WHERE id = ?', [batch.dealerId]))[0];
+
+    const formattedItems = items.map(item => ({
+      id: item.serialNumber,
+      model: model.name,
+      capacity: model.defaultCapacity,
+      warrantyMonths: model.defaultWarrantyMonths,
+      dealerId: batch.dealerId,
+      dealerName: dealer?.name || 'Unknown',
+      exists: false // We assume batching is for new/unregistered units primarily
+    }));
+
+    // Check if any of these already exist - if so, we should handle them as "exists: true"
+    for (const item of formattedItems) {
+      const existing = await this.getBattery(item.id);
+      if (existing) {
+        item.exists = true;
+      }
+    }
+
+    // Reuse existing batchAssign logic
+    await this.batchAssign(formattedItems, batch.date);
+
+    // Update batch status
+    await this.run('UPDATE staged_batches SET status = ? WHERE id = ?', ['APPROVED', id]);
+
+    await this.logActivity('BATCH_APPROVED', `Batch ${id} approved and processed`, { batchId: id, itemCount: items.length });
+  }
+
+  static async denyStagedBatch(id: string): Promise<void> {
+    const batch = await this.getStagedBatch(id);
+    if (!batch) throw new Error('Batch not found');
+    if (batch.status !== 'PENDING') throw new Error('Batch is already processed');
+
+    await this.run('UPDATE staged_batches SET status = ? WHERE id = ?', ['DENIED', id]);
+    await this.logActivity('BATCH_DENIED', `Batch ${id} was denied`, { batchId: id });
+  }
+
+  static async authenticateUser(username: string, password: string): Promise<User | null> {
+    const results = await this.query<User>(
+      'SELECT id, username, role FROM users WHERE username = ? AND password = ?',
+      [username, password]
+    );
+    return results[0] || null;
+  }
   // --- OPERATIONS ---
 
   static async updateBatteryStatus(id: string, status: string, dealerId: string | null = null): Promise<void> {
@@ -677,6 +836,16 @@ export class Database {
       [id]
     );
     await this.logActivity('BATTERY_INSPECTION_RESET', `Reset inspection for battery ${id}`, { id, reason });
+  }
+
+  static async getPendingInspections(): Promise<Battery[]> {
+    return this.query<Battery>(
+      `SELECT b.*, COALESCE(m.name, b.model) as modelName
+       FROM batteries b
+       LEFT JOIN models m ON b.model = m.id OR b.model = m.name
+       WHERE (b.status = 'RETURNED_PENDING' AND b.inspectionStatus = 'PENDING') OR b.inspectionStatus = 'IN_PROGRESS'
+       ORDER BY b.inspectionStartDate DESC, b.id ASC`
+    );
   }
 
   static async markAsPendingExchange(

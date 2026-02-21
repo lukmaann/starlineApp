@@ -28,6 +28,7 @@ interface BatteryDetailsCardProps {
     setReplacementStep: (step: number) => void;
     showDateCorrection: boolean;
     setShowDateCorrection: (show: boolean) => void;
+    userRole?: string;
 }
 
 export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
@@ -46,9 +47,11 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
     setIsReplacing,
     setReplacementStep,
     showDateCorrection,
-    setShowDateCorrection
+    setShowDateCorrection,
+    userRole
 }) => {
     const isExp = isExpired;
+    const isAdmin = userRole === 'ADMIN';
 
     const getCardColor = () => {
         if (isExp && activeAsset.battery.status !== BatteryStatus.MANUFACTURED) return 'border-rose-200 bg-rose-50';
@@ -106,7 +109,7 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                 </div>
             )}
 
-            {isExp && !showDateCorrection && isSessionValid && (
+            {isExp && !showDateCorrection && isSessionValid && isAdmin && (
                 <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-6 animate-in slide-in-from-top-2">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -149,7 +152,7 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                         <p className="text-slate-500 font-bold text-lg uppercase">{activeAsset.battery.model} • {activeAsset.battery.capacity}</p>
                     </div>
                     <div className="flex gap-2">
-                        {!isLocked && (
+                        {!isLocked && isAdmin && (
                             <button
                                 onClick={() => {
                                     if (AuthSession.isValid()) {
@@ -206,7 +209,7 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                             <div className="flex justify-between">
                                 <span className="text-slate-400">Dealer</span>
                                 <span className="text-blue-600 truncate max-w-[120px] uppercase">
-                                    {dealers.find(d => d.id === activeAsset.battery.dealerId)?.name || 'Central'}
+                                    {isAdmin ? (dealers.find(d => d.id === activeAsset.battery.dealerId)?.name || 'Central') : 'HIDDEN'}
                                 </span>
                             </div>
                             <div className="flex justify-between">

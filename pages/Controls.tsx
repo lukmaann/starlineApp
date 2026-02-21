@@ -13,6 +13,7 @@ import { AuthSession } from '../utils/AuthSession';
 import { toast } from 'sonner';
 import { getLocalDate } from '../utils';
 import PriceManager from '../components/PriceManager';
+import UserManagement from '../components/UserManagement';
 
 interface ControlsProps {
   active?: boolean;
@@ -38,7 +39,7 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
   const [currentTab, setCurrentTab] = useState<'models' | 'data' | 'access' | 'history' | 'prices'>('models');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Access Control State
+  // Access Control State (Legacy - kept for backward compatibility if needed by other components, but mostly replaced by UserManagement)
   const [formData, setFormData] = useState({
     username: 'ADMIN',
     currentPassword: '',
@@ -126,58 +127,7 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
       if (user) setFormData(prev => ({ ...prev, username: user }));
     };
     loadConfig();
-  }, []);
-
-  const handleUpdateCredentials = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // 1. Verify Current Password
-    // Check skipped as user is already authenticated for this session
-    // const storedPass = localStorage.getItem('starline_admin_pass') || 'starline@2025';
-    // if (formData.currentPassword !== storedPass) { ... }
-
-    // 2. Validate Username
-    if (!formData.username.trim()) {
-      notify('Username cannot be empty', 'error');
-      return;
-    }
-
-    // 3. Validate New Password (if provided)
-    if (formData.newPassword) {
-      if (formData.newPassword.length < 4) {
-        notify('New password must be at least 4 characters', 'error');
-        return;
-      }
-      if (formData.newPassword !== formData.confirmPassword) {
-        notify('New passwords do not match', 'error');
-        return;
-      }
-      if (formData.newPassword === formData.currentPassword) {
-        notify('New password cannot be the same as old password', 'error');
-        return;
-      }
-    } else {
-      // If no new password, check if username changed
-      if (formData.username === localStorage.getItem('starline_admin_user')) {
-        notify('No changes detected', 'error');
-        return;
-      }
-    }
-
-    setIsLoading(true);
-    await new Promise(r => setTimeout(r, 1200)); // Simulate network request
-
-    // Commit changes
-    await Database.setConfig('starline_admin_user', formData.username);
-    if (formData.newPassword) {
-      await Database.setConfig('starline_admin_pass', formData.newPassword);
-    }
-
-    notify('Security controls updated successfully');
-    setIsLoading(false);
-    // Reset sensitive fields
-    setFormData(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
-  };
+  }, [active]);
 
   const handleOpenModelWizard = (m?: BatteryModel) => {
     if (m) {
@@ -256,7 +206,14 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
     try {
       const adminPass = await Database.getConfig('starline_admin_pass') || 'starline@2025';
       if (lockPassword === adminPass) {
-        AuthSession.saveSession();
+        const currentUser = AuthSession.getCurrentUser();
+        if (currentUser) {
+          AuthSession.saveSession(currentUser);
+        } else {
+          // Fallback for when we don't have a user context yet (e.g. legacy system)
+          const adminUser = await Database.authenticateUser('admin', adminPass);
+          if (adminUser) AuthSession.saveSession(adminUser);
+        }
         setIsLocked(false);
         setLockPassword('');
         toast.success('Controls Registry Unlocked');
@@ -871,335 +828,236 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
 
       {/* --- ACCESS CONTROL TAB --- */}
       {currentTab === 'access' && (
-        <div className="max-w-4xl mx-auto animate-in slide-in-from-right-4 duration-300">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden animate-in zoom-in-95 duration-300">
+        <div className="max-w-4xl mx-auto animate-in slide-in-from-right-4 duration-300 space-y-8">
+          <UserManagement />
 
-            {/* Header */}
-            <div className="p-5 bg-white border-b border-slate-100 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-                  <ShieldCheck size={20} strokeWidth={2} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base text-slate-900 leading-none">Admin Controller</h3>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">Secure Configuration Access</p>
-                </div>
-              </div>
-              <button
-                className="px-4 py-2 bg-slate-100 text-slate-400 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-default"
-              >
-                <Lock size={14} /> Global Admin Active
-              </button>
-            </div>
+          {/* DANGER ZONE */}
+          <div className="p-8 bg-slate-50 border-t border-slate-200">
+            <h4 className="text-sm font-bold text-rose-700 mb-6 flex items-center gap-2">
+              <AlertTriangle size={16} />
+              Danger Zone
+            </h4>
 
-            {/* Security Config */}
-            <div className="p-8 border-b border-slate-100">
-              <div className="flex justify-between items-start mb-8">
-                <div>
-                  <h4 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    Admin Credentials
-                  </h4>
-                  <p className="text-xs text-slate-500 mt-1">Update the authentication protocol for the master account.</p>
-                </div>
-                <div className="bg-slate-50 text-slate-400 p-2 rounded-lg border border-slate-100">
-                  <Key size={18} />
-                </div>
-              </div>
-
-              <form onSubmit={handleUpdateCredentials} className="space-y-8 max-w-3xl">
-
-                {/* Identity Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Identity</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-700">Username</label>
-                      <div className="relative group">
-                        <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
-                        <input
-                          className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none font-bold text-slate-900 placeholder:text-slate-400"
-                          value={formData.username}
-                          onChange={e => setFormData({ ...formData, username: e.target.value.toUpperCase() })}
-                          placeholder="ADMIN"
-                        />
-                      </div>
-                    </div>
-                  </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Delete Battery Record */}
+              <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm col-span-1 lg:col-span-2">
+                <div className="mb-4">
+                  <h5 className="font-bold text-slate-900 text-sm">Delete Battery Record</h5>
+                  <p className="text-xs text-slate-500 mt-1">Permanently remove a battery and all its history (Sales, Replacements) from the database.</p>
                 </div>
 
-                {/* Security Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Security Key</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-700">New Password</label>
-                      <div className="relative group">
-                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
-                        <input
-                          type="password"
-                          className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none font-bold text-slate-900 placeholder:text-slate-400"
-                          value={formData.newPassword}
-                          onChange={e => setFormData({ ...formData, newPassword: e.target.value })}
-                          placeholder="••••••"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-700">Confirm Password</label>
-                      <div className="relative group">
-                        <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
-                        <input
-                          type="password"
-                          className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none font-bold text-slate-900 placeholder:text-slate-400"
-                          value={formData.confirmPassword}
-                          onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
-                          placeholder="••••••"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-start pt-4">
-                  <button type="submit" className="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl text-sm hover:bg-black transition-all shadow-xl shadow-slate-900/10 active:scale-95 flex items-center gap-2">
-                    <Save size={16} /> Update Credentials
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* DANGER ZONE */}
-            <div className="p-8 bg-slate-50 border-t border-slate-200">
-              <h4 className="text-sm font-bold text-rose-700 mb-6 flex items-center gap-2">
-                <AlertTriangle size={16} />
-                Danger Zone
-              </h4>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Delete Battery Record */}
-                <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm col-span-1 lg:col-span-2">
-                  <div className="mb-4">
-                    <h5 className="font-bold text-slate-900 text-sm">Delete Battery Record</h5>
-                    <p className="text-xs text-slate-500 mt-1">Permanently remove a battery and all its history (Sales, Replacements) from the database.</p>
-                  </div>
-
-                  <div className="flex gap-3 mb-4">
-                    <input
-                      placeholder="Scan Battery Serial Number..."
-                      className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold uppercase outline-none focus:border-rose-500"
-                      value={replacementSearchId}
-                      onChange={e => setReplacementSearchId(e.target.value.toUpperCase())}
-                      onKeyDown={async e => {
-                        if (e.key === 'Enter' && replacementSearchId) {
-                          setIsSearchingReplacement(true);
-                          setFoundReplacement(null);
-                          // Search for battery full details
-                          const res = await Database.searchBattery(replacementSearchId);
-                          setFoundReplacement(res);
-                          if (!res) notify('No battery record found for this ID', 'error');
-                          setIsSearchingReplacement(false);
-                        }
-                      }}
-                    />
-                    <button
-                      onClick={async () => {
-                        if (!replacementSearchId) return;
+                <div className="flex gap-3 mb-4">
+                  <input
+                    placeholder="Scan Battery Serial Number..."
+                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold uppercase outline-none focus:border-rose-500"
+                    value={replacementSearchId}
+                    onChange={e => setReplacementSearchId(e.target.value.toUpperCase())}
+                    onKeyDown={async e => {
+                      if (e.key === 'Enter' && replacementSearchId) {
                         setIsSearchingReplacement(true);
                         setFoundReplacement(null);
+                        // Search for battery full details
                         const res = await Database.searchBattery(replacementSearchId);
                         setFoundReplacement(res);
                         if (!res) notify('No battery record found for this ID', 'error');
                         setIsSearchingReplacement(false);
-                      }}
-                      disabled={isSearchingReplacement}
-                      className="px-4 py-2 bg-slate-900 text-white font-bold rounded-lg text-xs hover:bg-black transition-all shadow-sm flex items-center gap-2"
-                    >
-                      {isSearchingReplacement ? <Loader2 size={14} className="animate-spin" /> : 'Find'}
-                    </button>
-                  </div>
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!replacementSearchId) return;
+                      setIsSearchingReplacement(true);
+                      setFoundReplacement(null);
+                      const res = await Database.searchBattery(replacementSearchId);
+                      setFoundReplacement(res);
+                      if (!res) notify('No battery record found for this ID', 'error');
+                      setIsSearchingReplacement(false);
+                    }}
+                    disabled={isSearchingReplacement}
+                    className="px-4 py-2 bg-slate-900 text-white font-bold rounded-lg text-xs hover:bg-black transition-all shadow-sm flex items-center gap-2"
+                  >
+                    {isSearchingReplacement ? <Loader2 size={14} className="animate-spin" /> : 'Find'}
+                  </button>
+                </div>
 
-                  {foundReplacement && foundReplacement.battery && (
-                    <div className="bg-rose-50 border border-rose-100 rounded-lg p-4 mb-4">
-                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 text-xs mb-4">
-                        <div><p className="font-bold text-slate-400 uppercase">Battery ID</p><p className="font-mono font-bold text-slate-900">{foundReplacement.battery.id}</p></div>
-                        <div><p className="font-bold text-slate-400 uppercase">Model</p><p className="font-mono font-bold text-slate-900">{foundReplacement.battery.model}</p></div>
-                        <div>
-                          <p className="font-bold text-slate-400 uppercase">Status</p>
-                          <p className={`font-mono font-bold ${(foundReplacement.battery.warrantyExpiry && new Date() > new Date(foundReplacement.battery.warrantyExpiry))
-                            ? 'text-rose-600'
-                            : 'text-slate-900'
-                            }`}>
-                            {(foundReplacement.battery.warrantyExpiry && new Date() > new Date(foundReplacement.battery.warrantyExpiry))
-                              ? 'EXPIRED'
-                              : foundReplacement.battery.status}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="font-bold text-slate-400 uppercase">Assigned Dealer</p>
-                          <p className="font-bold text-slate-900">
-                            {dealers.find(d => d.id === foundReplacement.battery.dealerId)?.name || foundReplacement.battery.dealerId || 'N/A'}
-                          </p>
-                        </div>
-                        {/* <div>
+                {foundReplacement && foundReplacement.battery && (
+                  <div className="bg-rose-50 border border-rose-100 rounded-lg p-4 mb-4">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 text-xs mb-4">
+                      <div><p className="font-bold text-slate-400 uppercase">Battery ID</p><p className="font-mono font-bold text-slate-900">{foundReplacement.battery.id}</p></div>
+                      <div><p className="font-bold text-slate-400 uppercase">Model</p><p className="font-mono font-bold text-slate-900">{foundReplacement.battery.model}</p></div>
+                      <div>
+                        <p className="font-bold text-slate-400 uppercase">Status</p>
+                        <p className={`font-mono font-bold ${(foundReplacement.battery.warrantyExpiry && new Date() > new Date(foundReplacement.battery.warrantyExpiry))
+                          ? 'text-rose-600'
+                          : 'text-slate-900'
+                          }`}>
+                          {(foundReplacement.battery.warrantyExpiry && new Date() > new Date(foundReplacement.battery.warrantyExpiry))
+                            ? 'EXPIRED'
+                            : foundReplacement.battery.status}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-400 uppercase">Assigned Dealer</p>
+                        <p className="font-bold text-slate-900">
+                          {dealers.find(d => d.id === foundReplacement.battery.dealerId)?.name || foundReplacement.battery.dealerId || 'N/A'}
+                        </p>
+                      </div>
+                      {/* <div>
                             <p className="font-bold text-slate-400 uppercase">Manufacture Date</p>
                             <p className="font-mono font-bold text-slate-900">{foundReplacement.battery.manufactureDate ? foundReplacement.battery.manufactureDate.split('-').reverse().join('/') : 'N/A'}</p>
                           </div> */}
-                        <div>
-                          <p className="font-bold text-slate-400 uppercase">Sent to Dealer</p>
-                          <p className="font-mono font-bold text-slate-900">
-                            {/* Sent date is typically manufacture date or explicitly tracked if we had a dispatch log. Using manuf date as proxy or activation if available */}
-                            {foundReplacement.battery.manufactureDate ? foundReplacement.battery.manufactureDate.split('-').reverse().join('/') : 'N/A'}
-                          </p>
+                      <div>
+                        <p className="font-bold text-slate-400 uppercase">Sent to Dealer</p>
+                        <p className="font-mono font-bold text-slate-900">
+                          {/* Sent date is typically manufacture date or explicitly tracked if we had a dispatch log. Using manuf date as proxy or activation if available */}
+                          {foundReplacement.battery.manufactureDate ? foundReplacement.battery.manufactureDate.split('-').reverse().join('/') : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {foundReplacement.sale && (
+                      <div className="mb-4 p-3 bg-white/50 rounded-lg border border-rose-100">
+                        <p className="font-bold text-slate-400 uppercase text-[10px] mb-2">Sale Record Detected</p>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div><span className="text-slate-500">To:</span> <span className="font-bold">{foundReplacement.sale.customerName}</span></div>
+                          <div><span className="text-slate-500">Date:</span> <span className="font-bold font-mono">{foundReplacement.sale.saleDate ? foundReplacement.sale.saleDate.split('-').reverse().join('/') : 'N/A'}</span></div>
                         </div>
                       </div>
+                    )}
 
-                      {foundReplacement.sale && (
-                        <div className="mb-4 p-3 bg-white/50 rounded-lg border border-rose-100">
-                          <p className="font-bold text-slate-400 uppercase text-[10px] mb-2">Sale Record Detected</p>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div><span className="text-slate-500">To:</span> <span className="font-bold">{foundReplacement.sale.customerName}</span></div>
-                            <div><span className="text-slate-500">Date:</span> <span className="font-bold font-mono">{foundReplacement.sale.saleDate ? foundReplacement.sale.saleDate.split('-').reverse().join('/') : 'N/A'}</span></div>
-                          </div>
-                        </div>
-                      )}
+                    {/* Lineage Warning */}
+                    {foundReplacement.replacements && foundReplacement.replacements.some(r => r.oldBatteryId === foundReplacement.battery.id) && (
+                      <div className="mb-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                        <p className="font-bold text-amber-800 uppercase text-[10px] mb-2 flex items-center gap-1"><AlertTriangle size={12} /> Lineage Warning</p>
+                        <p className="text-xs text-amber-900">
+                          This battery was replaced by <span className="font-bold font-mono">{foundReplacement.replacements.find(r => r.oldBatteryId === foundReplacement.battery.id)?.newBatteryId}</span>.
+                          Deleting this record will break the link and reset the replacement unit to a standalone <b>ACTIVE</b> status.
+                        </p>
+                      </div>
+                    )}
 
-                      {/* Lineage Warning */}
-                      {foundReplacement.replacements && foundReplacement.replacements.some(r => r.oldBatteryId === foundReplacement.battery.id) && (
-                        <div className="mb-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                          <p className="font-bold text-amber-800 uppercase text-[10px] mb-2 flex items-center gap-1"><AlertTriangle size={12} /> Lineage Warning</p>
-                          <p className="text-xs text-amber-900">
-                            This battery was replaced by <span className="font-bold font-mono">{foundReplacement.replacements.find(r => r.oldBatteryId === foundReplacement.battery.id)?.newBatteryId}</span>.
-                            Deleting this record will break the link and reset the replacement unit to a standalone <b>ACTIVE</b> status.
-                          </p>
-                        </div>
-                      )}
+                    <button
+                      onClick={async () => {
+                        if (window.confirm(`CRITICAL: Are you sure you want to PERMANENTLY DELETE battery ${foundReplacement.battery.id}?\n\nThis will remove:\n- The Battery Record\n- Associated Sales\n- Associated Replacements\n\nThis action cannot be undone.`)) {
+                          setIsActionLoading(true);
+                          try {
+                            await Database.deleteBatteryRecord(foundReplacement.battery.id);
+                            await Database.logActivity('BATTERY_DELETE', `Deleted battery record ${foundReplacement.battery.id}`, { batteryId: foundReplacement.battery.id, reason: 'Manual deletion from Danger Zone' });
+                            notify('Battery record permanently deleted', 'success');
+                            setFoundReplacement(null);
+                            setReplacementSearchId('');
+                          } catch (e: any) {
+                            notify(`Deletion Failed: ${e.message}`, 'error');
+                          } finally {
+                            setIsActionLoading(false);
+                          }
+                        }
+                      }}
+                      disabled={isActionLoading}
+                      className="w-full py-2 bg-rose-600 text-white font-bold rounded-lg text-xs hover:bg-rose-700 transition-all shadow-sm flex items-center justify-center gap-2"
+                    >
+                      {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                      Permanently Delete Battery
+                    </button>
+                  </div>
+                )}
+              </div>
 
+              {/* Dealer Deletion */}
+              <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm">
+                <div className="mb-4">
+                  <h5 className="font-bold text-slate-900 text-sm">Remove Dealer</h5>
+                  <p className="text-xs text-slate-500 mt-1">Permanently delete a dealer and their records.</p>
+                </div>
+
+                <div className="space-y-3">
+                  <select className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-rose-500" value={deletingDealer?.id || ''} onChange={e => { setDeletingDealer(dealers.find(d => d.id === e.target.value) as any); setModelDeleteConfirmName(''); }}>
+                    <option value="">Select Dealer...</option>
+                    {dealers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+
+                  {deletingDealer && (
+                    <input
+                      placeholder={`Type "${deletingDealer.name}"`}
+                      className="w-full px-3 py-2 bg-white border border-rose-200 text-rose-600 rounded-lg text-sm font-bold focus:border-rose-500 outline-none placeholder:text-rose-200 placeholder:font-normal"
+                      value={modelDeleteConfirmName}
+                      onChange={e => setModelDeleteConfirmName(e.target.value)}
+                    />
+                  )}
+
+                  <button
+                    disabled={!deletingDealer || modelDeleteConfirmName !== deletingDealer.name || isActionLoading}
+                    onClick={async () => {
+                      if (deletingDealer) {
+                        setIsActionLoading(true);
+                        await Database.deleteDealer(deletingDealer.id);
+                        await Database.logActivity('PARTNER_DELETE', `Deleted dealer ${deletingDealer.name}`, { dealerId: deletingDealer.id, name: deletingDealer.name });
+                        setDeletingDealer(null);
+                        setModelDeleteConfirmName('');
+                        loadModelData();
+                        notify('Dealer removed successfully', 'success');
+                        setIsActionLoading(false);
+                      }
+                    }}
+                    className="w-full py-2 bg-white border border-rose-200 text-rose-600 font-bold rounded-lg text-xs hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {isActionLoading ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Delete Dealer'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Factory Reset */}
+              <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm flex flex-col justify-between">
+                <div className="mb-4">
+                  <h5 className="font-bold text-slate-900 text-sm">Factory Reset</h5>
+                  <p className="text-xs text-slate-500 mt-1">Wipe all data and restore system defaults.</p>
+
+                  {!hasBackedUp && (
+                    <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-[10px] font-bold text-amber-800 uppercase mb-2 flex items-center gap-1">
+                        <AlertTriangle size={12} /> Backup Required
+                      </p>
                       <button
                         onClick={async () => {
-                          if (window.confirm(`CRITICAL: Are you sure you want to PERMANENTLY DELETE battery ${foundReplacement.battery.id}?\n\nThis will remove:\n- The Battery Record\n- Associated Sales\n- Associated Replacements\n\nThis action cannot be undone.`)) {
-                            setIsActionLoading(true);
-                            try {
-                              await Database.deleteBatteryRecord(foundReplacement.battery.id);
-                              await Database.logActivity('BATTERY_DELETE', `Deleted battery record ${foundReplacement.battery.id}`, { batteryId: foundReplacement.battery.id, reason: 'Manual deletion from Danger Zone' });
-                              notify('Battery record permanently deleted', 'success');
-                              setFoundReplacement(null);
-                              setReplacementSearchId('');
-                            } catch (e: any) {
-                              notify(`Deletion Failed: ${e.message}`, 'error');
-                            } finally {
-                              setIsActionLoading(false);
+                          setIsActionLoading(true);
+                          try {
+                            const result = await window.electronAPI?.backup();
+                            if (result?.success) {
+                              setHasBackedUp(true);
+                              notify(`Backup saved to: ${result.path}`, 'success');
+                            } else {
+                              throw new Error(result?.error || 'Backup failed');
                             }
+                          } catch (e: any) {
+                            notify(`Backup Failed: ${e.message}`, 'error');
+                          } finally {
+                            setIsActionLoading(false);
                           }
                         }}
-                        disabled={isActionLoading}
-                        className="w-full py-2 bg-rose-600 text-white font-bold rounded-lg text-xs hover:bg-rose-700 transition-all shadow-sm flex items-center justify-center gap-2"
+                        className="w-full py-2 bg-amber-100 text-amber-800 font-bold rounded-md text-[10px] hover:bg-amber-200 transition-colors uppercase tracking-wide"
                       >
-                        {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                        Permanently Delete Battery
+                        Save Database Backup
                       </button>
                     </div>
                   )}
                 </div>
 
-                {/* Dealer Deletion */}
-                <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm">
-                  <div className="mb-4">
-                    <h5 className="font-bold text-slate-900 text-sm">Remove Dealer</h5>
-                    <p className="text-xs text-slate-500 mt-1">Permanently delete a dealer and their records.</p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <select className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-rose-500" value={deletingDealer?.id || ''} onChange={e => { setDeletingDealer(dealers.find(d => d.id === e.target.value) as any); setModelDeleteConfirmName(''); }}>
-                      <option value="">Select Dealer...</option>
-                      {dealers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
-
-                    {deletingDealer && (
-                      <input
-                        placeholder={`Type "${deletingDealer.name}"`}
-                        className="w-full px-3 py-2 bg-white border border-rose-200 text-rose-600 rounded-lg text-sm font-bold focus:border-rose-500 outline-none placeholder:text-rose-200 placeholder:font-normal"
-                        value={modelDeleteConfirmName}
-                        onChange={e => setModelDeleteConfirmName(e.target.value)}
-                      />
-                    )}
-
-                    <button
-                      disabled={!deletingDealer || modelDeleteConfirmName !== deletingDealer.name || isActionLoading}
-                      onClick={async () => {
-                        if (deletingDealer) {
-                          setIsActionLoading(true);
-                          await Database.deleteDealer(deletingDealer.id);
-                          await Database.logActivity('PARTNER_DELETE', `Deleted dealer ${deletingDealer.name}`, { dealerId: deletingDealer.id, name: deletingDealer.name });
-                          setDeletingDealer(null);
-                          setModelDeleteConfirmName('');
-                          loadModelData();
-                          notify('Dealer removed successfully', 'success');
-                          setIsActionLoading(false);
-                        }
-                      }}
-                      className="w-full py-2 bg-white border border-rose-200 text-rose-600 font-bold rounded-lg text-xs hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                    >
-                      {isActionLoading ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Delete Dealer'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Factory Reset */}
-                <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm flex flex-col justify-between">
-                  <div className="mb-4">
-                    <h5 className="font-bold text-slate-900 text-sm">Factory Reset</h5>
-                    <p className="text-xs text-slate-500 mt-1">Wipe all data and restore system defaults.</p>
-
-                    {!hasBackedUp && (
-                      <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <p className="text-[10px] font-bold text-amber-800 uppercase mb-2 flex items-center gap-1">
-                          <AlertTriangle size={12} /> Backup Required
-                        </p>
-                        <button
-                          onClick={async () => {
-                            setIsActionLoading(true);
-                            try {
-                              const result = await window.electronAPI?.backup();
-                              if (result?.success) {
-                                setHasBackedUp(true);
-                                notify(`Backup saved to: ${result.path}`, 'success');
-                              } else {
-                                throw new Error(result?.error || 'Backup failed');
-                              }
-                            } catch (e: any) {
-                              notify(`Backup Failed: ${e.message}`, 'error');
-                            } finally {
-                              setIsActionLoading(false);
-                            }
-                          }}
-                          className="w-full py-2 bg-amber-100 text-amber-800 font-bold rounded-md text-[10px] hover:bg-amber-200 transition-colors uppercase tracking-wide"
-                        >
-                          Save Database Backup
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    disabled={!hasBackedUp}
-                    onClick={async () => {
-                      if (window.confirm('CRITICAL WARNING: You are about to wipe ALL application data.\n\nAre you absolutely sure?')) {
-                        if (window.confirm('Final Confirmation: This action is irreversible. All records will be lost.\n\nProceed with Factory Reset?')) {
-                          await Database.resetDatabase();
-                          notify('System reset complete. Reloading...', 'success');
-                          setTimeout(() => window.location.reload(), 1500);
-                        }
+                <button
+                  disabled={!hasBackedUp}
+                  onClick={async () => {
+                    if (window.confirm('CRITICAL WARNING: You are about to wipe ALL application data.\n\nAre you absolutely sure?')) {
+                      if (window.confirm('Final Confirmation: This action is irreversible. All records will be lost.\n\nProceed with Factory Reset?')) {
+                        await Database.resetDatabase();
+                        notify('System reset complete. Reloading...', 'success');
+                        setTimeout(() => window.location.reload(), 1500);
                       }
-                    }}
-                    className="w-full py-2 bg-rose-600 text-white font-bold rounded-lg text-xs hover:bg-rose-700 transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Trash2 size={14} /> Reset Application
-                  </button>
-                </div>
+                    }
+                  }}
+                  className="w-full py-2 bg-rose-600 text-white font-bold rounded-lg text-xs hover:bg-rose-700 transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Trash2 size={14} /> Reset Application
+                </button>
               </div>
             </div>
           </div>

@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { Zap, Lock, User, ArrowRight, ShieldAlert, ShieldCheck, Fingerprint, Loader2, Cpu, Globe, Server, Activity } from 'lucide-react';
+import { Zap, Lock, User as UserIcon, ArrowRight, ShieldAlert, ShieldCheck, Fingerprint, Loader2, Cpu, Globe, Server, Activity } from 'lucide-react';
 import { Database } from '../db';
+import { AuthSession } from '../utils/AuthSession';
 
 interface LoginProps {
   onLogin: () => void;
@@ -50,14 +51,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     // Authentication Protocol Logic
     setTimeout(async () => {
-      const storedUser = await Database.getConfig('starline_admin_user') || 'admin';
-      const storedPass = await Database.getConfig('starline_admin_pass') || 'starline@2025';
+      try {
+        const user = await Database.authenticateUser(username.trim(), password);
 
-      if (username.trim().toLowerCase() === storedUser.toLowerCase() && password === storedPass) {
-        localStorage.setItem('starline_auth', 'true');
-        onLogin();
-      } else {
-        setError('Verification failed: The credentials provided do not match our records.');
+        if (user) {
+          AuthSession.saveSession(user);
+          onLogin();
+        } else {
+          setError('Verification failed: The credentials provided do not match our records.');
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error('Login error:', err);
+        setError('System Error: Could not connect to the authentication service.');
         setIsLoading(false);
       }
     }, 1500);
@@ -133,7 +139,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Identity UID</label>
                     <div className="relative group">
-                      <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+                      <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
                       <input
                         required
                         autoFocus

@@ -1,5 +1,7 @@
+import { User } from '../types';
 
 const SESSION_KEY = 'starline_auth_session';
+const USER_KEY = 'starline_auth_user';
 const SESSION_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 const CHECK_INTERVAL_MS = 60 * 1000; // Check every 1 minute
 
@@ -38,12 +40,18 @@ const checkAndAutoLock = () => {
 
 export const AuthSession = {
     /**
-     * Saves the current timestamp as the last successful unlock.
+     * Saves the current timestamp and user data.
      */
-    saveSession: () => {
+    saveSession: (user: User) => {
         localStorage.setItem(SESSION_KEY, Date.now().toString());
-        window.dispatchEvent(new CustomEvent('session-changed', { detail: { isAuthenticated: true } }));
+        localStorage.setItem(USER_KEY, JSON.stringify(user));
+        window.dispatchEvent(new CustomEvent('session-changed', { detail: { isAuthenticated: true, user } }));
         // Start the auto-lock timer
+        startAutoLockTimer();
+    },
+
+    refreshSession: () => {
+        localStorage.setItem(SESSION_KEY, Date.now().toString());
         startAutoLockTimer();
     },
 
@@ -66,11 +74,25 @@ export const AuthSession = {
      */
     clearSession: () => {
         localStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem(USER_KEY);
         window.dispatchEvent(new CustomEvent('session-changed', { detail: { isAuthenticated: false } }));
         // Stop the auto-lock timer
         if (autoLockTimer) {
             clearInterval(autoLockTimer);
             autoLockTimer = null;
+        }
+    },
+
+    /**
+     * Retrieves the current user from session.
+     */
+    getCurrentUser: (): User | null => {
+        const userJson = localStorage.getItem(USER_KEY);
+        if (!userJson) return null;
+        try {
+            return JSON.parse(userJson);
+        } catch (e) {
+            return null;
         }
     },
 

@@ -23,7 +23,7 @@ const UnlockPage: React.FC<UnlockPageProps> = ({ onUnlock, onBack }) => {
             const adminPass = await Database.getConfig('starline_admin_pass') || 'starline@2025';
 
             if (password === adminPass) {
-                AuthSession.saveSession();
+                AuthSession.refreshSession();
                 setPassword('');
                 toast.success('Unlocked');
                 if (onUnlock) onUnlock();

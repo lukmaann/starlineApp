@@ -121,6 +121,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   const [adminPassword, setAdminPassword] = useState('');
   const [lockError, setLockError] = useState('');
   const [isSessionValid, setIsSessionValid] = useState(AuthSession.isValid());
+  const userRole = AuthSession.getCurrentUser()?.role;
+  const isAdmin = userRole === 'ADMIN';
 
   useEffect(() => {
     if (isInspecting && inspectionRef.current) {
@@ -175,6 +177,27 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     return () => window.removeEventListener('session-changed' as any, handleSessionChange);
   }, []);
 
+  // Handle deep link requests to inspect batteries (from Batches screen)
+  useEffect(() => {
+    const checkDeepLink = () => {
+      const id = localStorage.getItem('deep_link_inspection_id');
+      if (id && active) {
+        localStorage.removeItem('deep_link_inspection_id');
+        setScanBuffer(id);
+        handleSearch(id);
+      }
+    };
+
+    // Check on mount and when active state changes
+    if (active) {
+      checkDeepLink();
+    }
+
+    // Listen to cross-component storage triggers
+    window.addEventListener('storage', checkDeepLink);
+    return () => window.removeEventListener('storage', checkDeepLink);
+  }, [active]);
+
   const handleCancelBatch = () => {
     if (batchIntervalRef.current) {
       clearInterval(batchIntervalRef.current);
@@ -206,6 +229,16 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       if (onSearchHandled) onSearchHandled();
     }
   }, [initialSearch]);
+
+  useEffect(() => {
+    if (activeAsset?.battery && active) {
+      const autoInspect = localStorage.getItem('auto_inspect');
+      if (autoInspect === activeAsset.battery.id) {
+        setIsInspecting(true);
+        localStorage.removeItem('auto_inspect');
+      }
+    }
+  }, [activeAsset, active]);
 
   // Global Session Sync
   useEffect(() => {
@@ -443,7 +476,10 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       setLockPassword('');
       setLockError('');
 
-      AuthSession.saveSession();
+      const currentUser = AuthSession.getCurrentUser();
+      if (currentUser) {
+        AuthSession.saveSession(currentUser);
+      }
       notify('Security Clearance Approved', 'success');
 
       if (pendingAction === 'EDIT') {
@@ -798,8 +834,25 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         }, 100);
       });
 
-      await Database.batchAssign(stagedItems, batchConfig.date);
-      await Database.logActivity('BATCH_ASSIGN', `Batch assigned ${stagedItems.length} items to ${dealerName}`, { count: stagedItems.length, dealerId: batchConfig.dealerId, dealerName: dealerName, batteryIds: stagedItems.map(i => i.id) });
+
+      const currentUser = AuthSession.getCurrentUser();
+
+      if (userRole === 'ADMIN') {
+        // Admins bypass staging and assign directly
+        await Database.batchAssign(stagedItems, batchConfig.date);
+        await Database.logActivity('BATCH_ASSIGN', `Batch assigned ${stagedItems.length} items to ${dealerName}`, { count: stagedItems.length, dealerId: batchConfig.dealerId, dealerName: dealerName, batteryIds: stagedItems.map(i => i.id) });
+        notify(`Directly assigned ${stagedItems.length} units to ${dealerName}`, 'success');
+      } else {
+        // Workers STAGE
+        await Database.createStagedBatch({
+          createdBy: currentUser?.id || 'unknown',
+          dealerId: batchConfig.dealerId,
+          modelId: batchConfig.modelId,
+          date: batchConfig.date
+        }, stagedItems.map(i => i.id));
+        await Database.logActivity('BATCH_STAGED', `Batch staged by ${currentUser?.username || 'Worker'}: ${stagedItems.length} units`, { count: stagedItems.length, dealerId: batchConfig.dealerId });
+        notify('Batch processed and staged successfully', 'success');
+      }
 
       isBatchProcessingRef.current = false;
       setIsBatchProcessing(false);
@@ -812,7 +865,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         console.log('Batch assignment cancelled by user');
       } else {
         console.error('Batch assignment failed:', err);
-        notify('Error: Batch processing failed. Please try again.', 'error');
+        notify(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       }
     }
   };
@@ -857,6 +910,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         isProcessing={isProcessing}
         activeAsset={activeAsset}
         inputRef={inputRef}
+        userRole={userRole}
       />
 
       {batchMode && (
@@ -875,7 +929,6 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         <UnregisteredUnitFound
           missingSerial={missingSerial}
           setBatchMode={setBatchMode}
-          setShowAddStock={setShowAddStock}
           setScanBuffer={setScanBuffer}
           setMissingSerial={setMissingSerial}
         />
@@ -918,6 +971,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
             setReplacementStep={setReplacementStep}
             showDateCorrection={showDateCorrection}
             setShowDateCorrection={setShowDateCorrection}
+            userRole={userRole}
           />
 
           {isInspecting && (
@@ -935,6 +989,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
                   setReplacementStep(1);
                   setReplacementData(prev => ({ ...prev, reason }));
                 }}
+                userRole={userRole}
               />
             </div>
           )}

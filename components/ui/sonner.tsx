@@ -19,7 +19,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       closeButton
       position="top-right"
       theme={theme as ToasterProps["theme"]}
-      className="toaster group"
+      className="toaster group print:hidden"
       icons={{
         success: <CircleCheck className="h-4 w-4" />,
         info: <Info className="h-4 w-4" />,

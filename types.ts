@@ -27,8 +27,8 @@ export interface Analytics {
 }
 
 export enum UserRole {
-  ADMIN = 'Admin',
-  DEALER = 'Dealer'
+  ADMIN = 'ADMIN',
+  FACTORY_WORKER = 'FACTORY_WORKER'
 }
 
 export interface BatteryModel {
@@ -149,4 +149,25 @@ export interface PriceRecord {
   price: number;
   effectiveDate: string;
   timestamp: string;
+}
+
+export interface StagedBatch {
+  id: string;
+  createdBy: string;
+  dealerId: string;
+  modelId: string;
+  date: string;
+  status: 'PENDING' | 'APPROVED' | 'DENIED';
+  createdAt: string;
+  // UI helper fields
+  creatorName?: string;
+  dealerName?: string;
+  modelName?: string;
+  itemCount?: number;
+}
+
+export interface StagedBatchItem {
+  id: number;
+  batchId: string;
+  serialNumber: string;
 }

@@ -81,7 +81,7 @@ const GlobalAnalytics: React.FC = () => {
         try {
             const adminPass = await Database.getConfig('starline_admin_pass') || 'starline@2025';
             if (lockPassword === adminPass) {
-                AuthSession.saveSession();
+                AuthSession.refreshSession();
                 setIsLocked(false);
                 setLockPassword('');
             } else {

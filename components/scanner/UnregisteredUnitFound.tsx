@@ -4,7 +4,6 @@ import { ShieldQuestion, Layers } from 'lucide-react';
 interface UnregisteredUnitFoundProps {
     missingSerial: string;
     setBatchMode: (mode: boolean) => void;
-    setShowAddStock: (show: boolean) => void;
     setScanBuffer: (buffer: string) => void;
     setMissingSerial: (serial: string) => void;
 }
@@ -12,7 +11,6 @@ interface UnregisteredUnitFoundProps {
 export const UnregisteredUnitFound: React.FC<UnregisteredUnitFoundProps> = ({
     missingSerial,
     setBatchMode,
-    setShowAddStock,
     setScanBuffer,
     setMissingSerial
 }) => {
@@ -30,7 +28,6 @@ export const UnregisteredUnitFound: React.FC<UnregisteredUnitFoundProps> = ({
             <button
                 onClick={() => {
                     setBatchMode(true);
-                    setShowAddStock(false);
                     setScanBuffer('');
                     setMissingSerial('');
                 }}

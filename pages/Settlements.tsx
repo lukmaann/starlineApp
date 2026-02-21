@@ -102,7 +102,7 @@ const Settlements: React.FC<SettlementsProps> = ({ onNavigateToHub }) => {
         try {
             const adminPass = await Database.getConfig('starline_admin_pass') || 'starline@2025';
             if (lockPassword === adminPass) {
-                AuthSession.saveSession();
+                AuthSession.refreshSession();
                 setIsLocked(false);
                 setLockPassword('');
                 toast.success('Registry Unlocked');

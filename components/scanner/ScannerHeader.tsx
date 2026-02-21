@@ -1,5 +1,5 @@
 import React from 'react';
-import { Barcode, Search, CheckCircle2, Loader2, X } from 'lucide-react';
+import { Barcode, Search, CheckCircle2, Loader2, X, LayoutGrid, PackagePlus } from 'lucide-react';
 import { Dealer, BatteryModel } from '../../types';
 
 interface ScannerHeaderProps {
@@ -21,6 +21,7 @@ interface ScannerHeaderProps {
     isProcessing: boolean;
     activeAsset: any;
     inputRef: React.RefObject<HTMLInputElement>;
+    userRole?: string;
 }
 
 export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
@@ -37,8 +38,11 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
     handleClear,
     isProcessing,
     activeAsset,
-    inputRef
+    inputRef,
+    userRole
 }) => {
+    const isAdmin = userRole === 'ADMIN';
+
     return (
         <div className={`transition-all duration-300 ${batchMode ? 'bg-indigo-900 border-indigo-700' : 'bg-white border-slate-200'} border rounded-2xl p-8 shadow-sm no-print`}>
             <div className="flex flex-col gap-6">
@@ -50,7 +54,7 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
                         >
                             {batchMode ? 'Batch Mode Active' : 'Normal Trace'}
                         </button>
-                        {batchMode && <span className="text-indigo-200 text-xs font-bold uppercase animate-pulse">Ready for rapid assignment</span>}
+                        {batchMode && <span className="text-indigo-200 text-xs font-bold uppercase animate-pulse">{isAdmin ? 'Ready for rapid assignment' : 'Ready for staging'}</span>}
                     </div>
                     {batchMode && lastScanned && (
                         <div className="text-white font-mono text-sm">
@@ -87,7 +91,7 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
                 )}
 
                 <div className="flex flex-col md:flex-row items-center gap-6">
-                    <div className="shrink-0">
+                    <div className="shrink-0 flex gap-2">
                         <div className={`${batchMode ? 'bg-white/10 text-white' : 'bg-blue-600/10 text-blue-600'} p-4 rounded-2xl`}>
                             <Barcode size={32} />
                         </div>

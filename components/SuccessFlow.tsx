@@ -23,7 +23,7 @@ export const SuccessFlow: React.FC<SuccessFlowProps> = ({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[200] bg-slate-900/10 backdrop-blur-[2px] flex items-center justify-center p-6 animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[200] bg-slate-900/10 backdrop-blur-[2px] flex items-center justify-center p-6 animate-in fade-in duration-300 print:hidden">
             <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-500">
                 {/* Success Header Strip */}
                 <div className="h-1.5 w-full bg-emerald-500" />

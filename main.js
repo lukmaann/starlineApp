@@ -136,6 +136,36 @@ function initDatabase(config) {
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        username TEXT UNIQUE,
+        password TEXT,
+        role TEXT,
+        status TEXT DEFAULT 'ACTIVE',
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS staged_batches (
+        id TEXT PRIMARY KEY,
+        createdBy TEXT,
+        dealerId TEXT,
+        modelId TEXT,
+        date TEXT,
+        status TEXT DEFAULT 'PENDING',
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS staged_batch_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batchId TEXT,
+        serialNumber TEXT,
+        FOREIGN KEY(batchId) REFERENCES staged_batches(id)
+      );
+
+      /* Seed Default Admin if no users exist */
+      INSERT OR IGNORE INTO users (id, username, password, role) 
+      VALUES ('admin-001', 'admin', 'starline@2025', 'ADMIN');
+
       /* Seed Default Credentials */
       INSERT OR IGNORE INTO app_config (key, value) VALUES ('starline_admin_user', 'admin');
       INSERT OR IGNORE INTO app_config (key, value) VALUES ('starline_admin_pass', 'starline@2025');

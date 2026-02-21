@@ -10,9 +10,11 @@ interface BatteryInspectionProps {
     onClose: () => void;
     onComplete: () => void;
     onStartExchange?: (reason: string) => void;
+    userRole?: string;
 }
 
-export const BatteryInspection: React.FC<BatteryInspectionProps> = ({ battery, onClose, onComplete, onStartExchange }) => {
+export const BatteryInspection: React.FC<BatteryInspectionProps> = ({ battery, onClose, onComplete, onStartExchange, userRole }) => {
+    const isAdmin = userRole === 'ADMIN';
     const [result, setResult] = useState<'GOOD' | 'FAULTY' | null>(battery.inspectionStatus === 'GOOD' ? 'GOOD' : battery.inspectionStatus === 'FAULTY' ? 'FAULTY' : null);
     const [failureReason, setFailureReason] = useState<string>('DEAD CELL');
     const [returnDate, setReturnDate] = useState(battery.inspectionReturnDate || getLocalDate());
@@ -164,29 +166,37 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({ battery, o
             ) : (
                 <>
                     <div className="grid grid-cols-2 gap-4">
-                        <button
-                            onClick={() => setResult('FAULTY')}
-                            className={`group p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-4 relative overflow-hidden ${result === 'FAULTY'
-                                ? 'bg-rose-50 border-rose-500 shadow-lg shadow-rose-200/50'
-                                : 'bg-white border-slate-100 hover:border-rose-200 text-slate-400'
-                                }`}
-                        >
-                            {result === 'FAULTY' && <div className="absolute top-0 right-0 p-2 text-rose-500"><CheckCircle2 size={18} /></div>}
-                            <div className={`p-4 rounded-2xl transition-all duration-300 ${result === 'FAULTY' ? 'bg-rose-500 text-white scale-105' : 'bg-slate-50 text-slate-300 group-hover:bg-rose-100 group-hover:text-rose-400'}`}>
-                                <ShieldAlert size={32} />
-                            </div>
-                            <div className="text-center">
-                                <span className={`block font-bold text-base ${result === 'FAULTY' ? 'text-rose-700' : 'text-slate-500'}`}>Faulty</span>
-                                <p className="text-[10px] font-medium opacity-60 tracking-wide mt-0.5">Defective Unit</p>
-                            </div>
-                        </button>
+                        {isAdmin && (
+                            <button
+                                onClick={() => setResult('FAULTY')}
+                                className={`group p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-4 relative overflow-hidden ${result === 'FAULTY'
+                                    ? 'bg-rose-50 border-rose-500 shadow-lg shadow-rose-200/50'
+                                    : 'bg-white border-slate-100 hover:border-rose-200 text-slate-400'
+                                    }`}
+                            >
+                                {result === 'FAULTY' && <div className="absolute top-0 right-0 p-2 text-rose-500"><CheckCircle2 size={18} /></div>}
+                                <div className={`p-4 rounded-2xl transition-all duration-300 ${result === 'FAULTY' ? 'bg-rose-500 text-white scale-105' : 'bg-slate-50 text-slate-300 group-hover:bg-rose-100 group-hover:text-rose-400'}`}>
+                                    <ShieldAlert size={32} />
+                                </div>
+                                <div className="text-center">
+                                    <span className={`block font-bold text-base ${result === 'FAULTY' ? 'text-rose-700' : 'text-slate-500'}`}>Faulty</span>
+                                    <p className="text-[10px] font-medium opacity-60 tracking-wide mt-0.5">Defective Unit</p>
+                                </div>
+                            </button>
+                        )}
 
                         <button
-                            onClick={() => setResult('GOOD')}
+                            onClick={() => {
+                                if (!isAdmin) {
+                                    notify('Only Admin can finalize assessment', 'error');
+                                    return;
+                                }
+                                setResult('GOOD');
+                            }}
                             className={`group p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-4 relative overflow-hidden ${result === 'GOOD'
                                 ? 'bg-emerald-50 border-emerald-500 shadow-lg shadow-emerald-200/50'
                                 : 'bg-white border-slate-100 hover:border-emerald-200 text-slate-400'
-                                }`}
+                                } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             {result === 'GOOD' && <div className="absolute top-0 right-0 p-2 text-emerald-500"><CheckCircle2 size={18} /></div>}
                             <div className={`p-4 rounded-2xl transition-all duration-300 ${result === 'GOOD' ? 'bg-emerald-500 text-white scale-105' : 'bg-slate-50 text-slate-300 group-hover:bg-emerald-100 group-hover:text-emerald-400'}`}>
@@ -265,31 +275,35 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({ battery, o
                             Dismiss
                         </button>
                         {result === 'FAULTY' ? (
-                            <button
-                                onClick={handleSaveAndStartExchange}
-                                disabled={isSaving}
-                                className="flex-1 font-black py-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg transform active:scale-[0.98] disabled:opacity-50"
-                            >
-                                {isSaving ? <Loader2 className="animate-spin" size={18} /> : (
-                                    <>
-                                        Start Warranty Exchange
-                                        <RefreshCw size={18} />
-                                    </>
-                                )}
-                            </button>
+                            isAdmin && (
+                                <button
+                                    onClick={handleSaveAndStartExchange}
+                                    disabled={isSaving}
+                                    className="flex-1 font-black py-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg transform active:scale-[0.98] disabled:opacity-50"
+                                >
+                                    {isSaving ? <Loader2 className="animate-spin" size={18} /> : (
+                                        <>
+                                            Start Warranty Exchange
+                                            <RefreshCw size={18} />
+                                        </>
+                                    )}
+                                </button>
+                            )
                         ) : (
-                            <button
-                                onClick={handleSave}
-                                disabled={!result || isSaving}
-                                className="flex-1 font-black py-4 rounded-xl transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg transform active:scale-[0.98] disabled:opacity-30 disabled:grayscale bg-indigo-600 text-white hover:bg-indigo-700"
-                            >
-                                {isSaving ? <Loader2 className="animate-spin" size={18} /> : (
-                                    <>
-                                        {isCompleted ? 'Update Verdict' : 'Send Back to Dealer'}
-                                        <ArrowRight size={18} />
-                                    </>
-                                )}
-                            </button>
+                            isAdmin && (
+                                <button
+                                    onClick={handleSave}
+                                    disabled={!result || isSaving}
+                                    className="flex-1 font-black py-4 rounded-xl transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg transform active:scale-[0.98] disabled:opacity-30 disabled:grayscale bg-indigo-600 text-white hover:bg-indigo-700"
+                                >
+                                    {isSaving ? <Loader2 className="animate-spin" size={18} /> : (
+                                        <>
+                                            {isCompleted ? 'Update Verdict' : 'Send Back to Dealer'}
+                                            <ArrowRight size={18} />
+                                        </>
+                                    )}
+                                </button>
+                            )
                         )}
                     </div>
                 </>
