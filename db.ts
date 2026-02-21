@@ -731,6 +731,18 @@ export class Database {
     return items.map(i => i.serialNumber);
   }
 
+  static async removeBatchItem(batchId: string, serialNumber: string): Promise<void> {
+    await this.run(
+      'DELETE FROM staged_batch_items WHERE batchId = ? AND serialNumber = ?',
+      [batchId, serialNumber]
+    );
+    await this.logActivity(
+      'BATCH_ITEM_REMOVED',
+      `Unit ${serialNumber} removed from batch ${batchId}`,
+      { batchId, serialNumber }
+    );
+  }
+
   static async approveStagedBatch(id: string): Promise<void> {
     const batch = await this.getStagedBatch(id);
     if (!batch) throw new Error('Batch not found');

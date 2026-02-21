@@ -36,9 +36,8 @@ const SessionLock: React.FC<{
 
     const handleToggle = () => {
         if (!isLocked) {
-            // If unlocked, lock it
-            AuthSession.clearSession();
-            window.location.reload();
+            // Dispatch event so App.tsx can show the 3-second countdown before locking
+            window.dispatchEvent(new CustomEvent('request-manual-lock'));
         } else {
             // If locked, request unlock (navigate to page)
             if (onUnlockRequest) {

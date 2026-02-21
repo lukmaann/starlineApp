@@ -2,8 +2,9 @@ import { User } from '../types';
 
 const SESSION_KEY = 'starline_auth_session';
 const USER_KEY = 'starline_auth_user';
-const SESSION_DURATION_MS = 30 * 60 * 1000; // 30 minutes
-const CHECK_INTERVAL_MS = 60 * 1000; // Check every 1 minute
+const SESSION_DURATION_MS = 45 * 60 * 1000; // 45 minutes
+const WARNING_THRESHOLD_MS = 2 * 60 * 1000; // Show warning at 2 minutes remaining
+const CHECK_INTERVAL_MS = 10 * 1000; // Check every 10 seconds for smoother countdown
 
 let autoLockTimer: NodeJS.Timeout | null = null;
 
@@ -56,7 +57,7 @@ export const AuthSession = {
     },
 
     /**
-     * Checks if the current session is still valid (less than 30 minutes old).
+     * Checks if the current session is still valid (less than 45 minutes old).
      * @returns true if session is valid, false otherwise.
      */
     isValid: (): boolean => {
@@ -67,6 +68,25 @@ export const AuthSession = {
         const now = Date.now();
 
         return now - lastTime < SESSION_DURATION_MS;
+    },
+
+    /**
+     * Returns seconds remaining until the session expires.
+     * Returns 0 if already expired.
+     */
+    getSecondsUntilExpiry: (): number => {
+        const lastSession = localStorage.getItem(SESSION_KEY);
+        if (!lastSession) return 0;
+        const lastTime = parseInt(lastSession, 10);
+        const remaining = SESSION_DURATION_MS - (Date.now() - lastTime);
+        return Math.max(0, Math.floor(remaining / 1000));
+    },
+
+    /**
+     * Returns the warning threshold in seconds (show warning below this value).
+     */
+    getWarningThresholdSeconds: (): number => {
+        return Math.floor(WARNING_THRESHOLD_MS / 1000);
     },
 
     /**

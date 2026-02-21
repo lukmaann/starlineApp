@@ -13,13 +13,16 @@ import DatabaseManagement from './pages/DatabaseManagement';
 import Batches from './pages/Batches';
 import GlobalAnalytics from './components/GlobalAnalytics';
 import { Database } from './db';
-import { Zap, Download, LogOut, Database as DatabaseIcon } from 'lucide-react';
+import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi } from 'lucide-react';
 import UnlockPage from './pages/UnlockPage';
 import { Toaster } from './components/ui/sonner';
 import { toast } from "sonner";
 import { useNavigationHistory } from './hooks/useNavigationHistory';
 import NavigationControls from './components/NavigationControls';
 import { AuthSession } from './utils/AuthSession';
+import NotificationBell from './components/NotificationBell';
+import ShortcutsModal from './components/ShortcutsModal';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 const App: React.FC = () => {
   const {
@@ -42,6 +45,8 @@ const App: React.FC = () => {
   const [pendingSearch, setPendingSearch] = useState<string | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isDbReady, setIsDbReady] = useState(false);
+  const [sessionCountdown, setSessionCountdown] = useState<number | null>(null);
+  const [manualLockCountdown, setManualLockCountdown] = useState<number | null>(null);
   const isAdmin = user?.role === 'ADMIN';
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -106,20 +111,44 @@ const App: React.FC = () => {
     };
     window.addEventListener('app-refresh' as any, handleAppRefresh);
 
+    // Countdown ticker — updates every second when session is near expiry
+    const countdownTick = setInterval(() => {
+      if (AuthSession.isValid()) {
+        const secs = AuthSession.getSecondsUntilExpiry();
+        const threshold = AuthSession.getWarningThresholdSeconds();
+        setSessionCountdown(secs <= threshold ? secs : null);
+      } else {
+        setSessionCountdown(null);
+      }
+    }, 1000);
 
+    // Manual lock: 3-second countdown then lock
+    let manualLockInterval: ReturnType<typeof setInterval> | null = null;
+    const handleManualLockRequest = () => {
+      setManualLockCountdown(3);
+      let remaining = 3;
+      manualLockInterval = setInterval(() => {
+        remaining -= 1;
+        setManualLockCountdown(remaining);
+        if (remaining <= 0) {
+          clearInterval(manualLockInterval!);
+          AuthSession.clearSession();
+          window.location.reload();
+        }
+      }, 1000);
+    };
+    window.addEventListener('request-manual-lock' as any, handleManualLockRequest);
 
-    return () => window.removeEventListener('app-notify' as any, handleNotify);
+    return () => {
+      window.removeEventListener('app-notify' as any, handleNotify);
+      window.removeEventListener('request-manual-lock' as any, handleManualLockRequest);
+      clearInterval(countdownTick);
+      if (manualLockInterval) clearInterval(manualLockInterval);
+    };
   }, []);
 
   const handleLogoutClick = () => {
-    setShowLogoutConfirm(true);
-  };
-
-  const confirmLogout = () => {
-    localStorage.clear();
-    setIsLoggedIn(false);
-    resetNavigation();
-    setShowLogoutConfirm(false);
+    // logout is now done via session lock only
   };
 
   const renderContent = () => {
@@ -181,10 +210,17 @@ const App: React.FC = () => {
             onBack={goBack}
           />
         );
+
+      case 'backup':
+        return isAdmin ? <Backup /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
+
       default:
         return null;
     }
   };
+
+  // Keyboard shortcuts — must be before any early returns (Rules of Hooks)
+  const { showHelp, setShowHelp } = useKeyboardShortcuts(navigate, isLoggedIn);
 
   if (isLoading || isRefreshing) return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center animate-in fade-in duration-300">
@@ -213,7 +249,24 @@ const App: React.FC = () => {
     <div className="flex h-screen bg-white text-slate-900 antialiased overflow-hidden">
       <Navigation activeTab={activeTab} setActiveTab={navigate} userRole={user?.role} />
 
-      <div className="flex-1 flex flex-col overflow-hidden relative bg-slate-50/50">
+      <div className="flex-1 flex flex-col overflow-hidden relative bg-slate-50/30">
+        {/* Scattered background icons */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+          <Zap size={200} className="absolute text-blue-400 opacity-[0.04]" style={{ top: '-5%', left: '-2%', transform: 'rotate(-15deg)' }} />
+          <Zap size={110} className="absolute text-slate-400 opacity-[0.04]" style={{ top: '20%', right: '4%', transform: 'rotate(20deg)' }} />
+          <Zap size={75} className="absolute text-blue-500 opacity-[0.05]" style={{ bottom: '20%', left: '6%', transform: 'rotate(-8deg)' }} />
+          <Zap size={55} className="absolute text-slate-500 opacity-[0.03]" style={{ top: '55%', right: '20%', transform: 'rotate(30deg)' }} />
+          <BatteryCharging size={160} className="absolute text-blue-300 opacity-[0.04]" style={{ bottom: '-2%', right: '-2%', transform: 'rotate(12deg)' }} />
+          <BatteryCharging size={90} className="absolute text-slate-400 opacity-[0.03]" style={{ top: '38%', left: '2%', transform: 'rotate(-20deg)' }} />
+          <Battery size={100} className="absolute text-blue-400 opacity-[0.03]" style={{ top: '68%', right: '4%', transform: 'rotate(-10deg)' }} />
+          <Battery size={60} className="absolute text-slate-400 opacity-[0.03]" style={{ top: '10%', left: '22%', transform: 'rotate(15deg)' }} />
+          <Activity size={130} className="absolute text-blue-500 opacity-[0.03]" style={{ bottom: '10%', left: '-1%', transform: 'rotate(0deg)' }} />
+          <Activity size={70} className="absolute text-slate-400 opacity-[0.03]" style={{ top: '28%', right: '2%', transform: 'rotate(-12deg)' }} />
+          <Cpu size={120} className="absolute text-slate-400 opacity-[0.03]" style={{ top: '4%', right: '14%', transform: 'rotate(10deg)' }} />
+          <Cpu size={65} className="absolute text-blue-400 opacity-[0.03]" style={{ bottom: '36%', right: '12%', transform: 'rotate(-25deg)' }} />
+          <Wifi size={90} className="absolute text-blue-300 opacity-[0.04]" style={{ bottom: '4%', left: '28%', transform: 'rotate(0deg)' }} />
+          <Wifi size={55} className="absolute text-slate-400 opacity-[0.03]" style={{ top: '46%', left: '16%', transform: 'rotate(8deg)' }} />
+        </div>
         <Toaster />
 
         <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 no-print">
@@ -232,96 +285,104 @@ const App: React.FC = () => {
 
           <div className="flex items-center space-x-2">
 
-            {/* Database Source Indicator & Switch */}
             {isAdmin && (
-              <div className="flex items-center mr-2 bg-slate-50 border border-slate-200 rounded-full p-1 h-9">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${localStorage.getItem('dbConfig') && JSON.parse(localStorage.getItem('dbConfig') || '{}').type === 'EXTERNAL'
-                  ? 'bg-purple-100 text-purple-700'
-                  : 'bg-blue-100 text-blue-700'
-                  }`}>
-                  {localStorage.getItem('dbConfig') && JSON.parse(localStorage.getItem('dbConfig') || '{}').type === 'EXTERNAL' ? 'SSD' : 'Internal'}
-                </span>
+              <>
+                <div className="flex items-center mr-2 bg-slate-50 border border-slate-200 rounded-full p-1 h-9">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${localStorage.getItem('dbConfig') && JSON.parse(localStorage.getItem('dbConfig') || '{}').type === 'EXTERNAL'
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-blue-100 text-blue-700'
+                    }`}>
+                    {localStorage.getItem('dbConfig') && JSON.parse(localStorage.getItem('dbConfig') || '{}').type === 'EXTERNAL' ? 'SSD' : 'Internal'}
+                  </span>
+                  <button
+                    title="Manage Database"
+                    onClick={() => navigate('database-management')}
+                    className={`ml-1 p-1.5 rounded-full transition-all ${activeTab === 'database-management'
+                      ? 'bg-slate-900 text-white shadow-md'
+                      : 'text-slate-400 hover:text-slate-900 hover:bg-slate-200'
+                      }`}
+                  >
+                    <DatabaseIcon size={16} />
+                  </button>
+                </div>
+
+                <div className="w-px h-6 bg-slate-200 mx-1" />
+
                 <button
-                  title="Manage Database"
-                  onClick={() => navigate('database-management')}
-                  className={`ml-1 p-1.5 rounded-full transition-all ${activeTab === 'database-management'
+                  onClick={() => navigate('backup')}
+                  className={`p-2 rounded-full transition-all flex items-center justify-center ${activeTab === 'backup'
                     ? 'bg-slate-900 text-white shadow-md'
-                    : 'text-slate-400 hover:text-slate-900 hover:bg-slate-200'
+                    : 'text-slate-600 hover:bg-slate-100'
                     }`}
+                  title="Backup to SSD"
                 >
-                  <DatabaseIcon size={16} />
+                  <Download size={18} />
                 </button>
-              </div>
+
+                <div className="w-px h-6 bg-slate-200 mx-1" />
+              </>
             )}
+            {/* Notification bell */}
+            <NotificationBell onNavigate={navigate} />
 
-            <div className="w-px h-6 bg-slate-200 mx-1" />
-
-            {isAdmin && (
-              <button
-                onClick={() => navigate('backup')}
-                className={`p-2 rounded-full transition-all flex items-center justify-center ${activeTab === 'backup'
-                  ? 'bg-slate-900 text-white shadow-md'
-                  : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                title="Backup to SSD"
-              >
-                <Download size={18} />
-              </button>
+            {/* Logged-in user badge */}
+            {user && (
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full pl-1 pr-3 h-9">
+                <div className="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center shrink-0">
+                  <span className="text-[10px] font-black text-white uppercase">
+                    {user.username?.slice(0, 2)}
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-slate-800 capitalize">{user.username}</span>
+              </div>
             )}
             <div className="w-px h-6 bg-slate-200 mx-1" />
             <SessionLock onUnlockRequest={() => navigate('session-lock')} />
-            <div className="w-px h-6 bg-slate-200 mx-1" />
-            <div className="flex items-center space-x-3">
-              {/* <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 overflow-hidden">
-                <div className="bg-blue-600 w-full h-full flex items-center justify-center text-white text-[10px] font-bold">AD</div>
-              </div> */}
-              <button onClick={handleLogoutClick} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-all active:bg-rose-100">
-                <LogOut size={20} strokeWidth={2} />
-              </button>
-            </div>
           </div>
         </header>
 
         <main className="flex-1 overflow-y-auto custom-scrollbar">
+          {/* Session expiry countdown banner */}
+          {(sessionCountdown !== null || manualLockCountdown !== null) && (
+            <div className="sticky top-0 z-50 flex items-center justify-between gap-3 bg-amber-50 border-b border-amber-200 px-8 py-2 animate-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center gap-2 text-amber-700">
+                <Clock size={14} className="shrink-0 animate-pulse" />
+                {manualLockCountdown !== null ? (
+                  <span className="text-xs font-bold uppercase tracking-wider">
+                    Locking session in{' '}
+                    <span className="font-black tabular-nums">{manualLockCountdown}s</span>
+                    {' '}— screen will lock
+                  </span>
+                ) : (
+                  <span className="text-xs font-bold uppercase tracking-wider">
+                    Session locking in{' '}
+                    <span className="font-black tabular-nums">
+                      {String(Math.floor(sessionCountdown! / 60)).padStart(2, '0')}:{String(sessionCountdown! % 60).padStart(2, '0')}
+                    </span>
+                    {' '}— activity will require re-login
+                  </span>
+                )}
+              </div>
+              {manualLockCountdown === null && (
+                <button
+                  onClick={() => navigate('session-lock')}
+                  className="px-3 py-1 bg-amber-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-colors active:scale-95 shrink-0"
+                >
+                  Lock Now
+                </button>
+              )}
+            </div>
+          )}
           <div className="p-8 max-w-[1600px] mx-auto">
             {renderContent()}
           </div>
         </main>
-      </div>
+      </div >
 
-      {showLogoutConfirm && (
-        <>
-          <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[2000] animate-in fade-in duration-200" onClick={() => setShowLogoutConfirm(false)} />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 z-[2100] animate-in zoom-in-95 slide-in-from-bottom-4 duration-200 border border-slate-200">
-            <div className="flex flex-col items-center text-center space-y-4">
-              <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mb-2">
-                <LogOut size={24} />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">End Session?</h3>
-                <p className="text-xs text-slate-500 font-medium px-4">Return to the login screen.</p>
-              </div>
-
-              <div className="flex gap-3 w-full pt-2">
-                <button
-                  onClick={() => setShowLogoutConfirm(false)}
-                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs uppercase tracking-widest transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmLogout}
-                  className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-rose-200 active:scale-95"
-                >
-                  Confirm Exit
-                </button>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
+      {showHelp && <ShortcutsModal onClose={() => setShowHelp(false)} />}
+    </div >
   );
 };
 
 export default App;
+

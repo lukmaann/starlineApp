@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-    Tag, IndianRupee, Box, Edit2, History, Info, X, Loader2,
+    Tag, IndianRupee, Box, Edit2, History, X, Loader2,
     Calendar as CalendarIcon, ArrowLeft, Search, Filter, ChevronRight,
     Plus, CheckCircle2, TrendingUp, Clock
 } from 'lucide-react';
@@ -81,122 +81,121 @@ const PriceManager: React.FC<PriceManagerProps> = ({ models }) => {
     }, [models, searchTerm]);
 
     if (viewMode === 'DETAIL' && selectedModel) {
+        const currentPrice = prices[selectedModel.id];
+
         return (
-            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                {/* Detail Header */}
-                <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div className="flex items-center gap-3 w-full md:w-auto">
-                        <button
-                            onClick={() => setViewMode('LIST')}
-                            className="p-2.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all text-slate-500 hover:text-slate-900 shadow-sm active:scale-95"
-                        >
-                            <ArrowLeft size={16} />
-                        </button>
-                        <div>
-                            <h1 className="text-lg font-bold tracking-tight text-slate-900 uppercase leading-none mb-1">{selectedModel.name}</h1>
-                            <div className="flex items-center gap-2">
-                                <div className="bg-slate-900 text-white px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide">UID: {selectedModel.id}</div>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">• Configuration</span>
-                            </div>
+            <div className="animate-in fade-in slide-in-from-right-4 duration-300 max-w-2xl mx-auto space-y-3">
+                {/* Back bar */}
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setViewMode('LIST')}
+                        className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-all active:scale-95 shadow-sm"
+                    >
+                        <ArrowLeft size={15} />
+                    </button>
+                    <div className="min-w-0">
+                        <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight leading-none truncate">{selectedModel.name}</h2>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Configure Pricing</p>
+                    </div>
+                    {currentPrice && (
+                        <div className="ml-auto flex items-center gap-1.5 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-1.5 shrink-0">
+                            <CheckCircle2 size={11} className="text-emerald-500" />
+                            <span className="text-[10px] font-black text-emerald-700">₹{currentPrice.toLocaleString()} active</span>
                         </div>
-                    </div>
-                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 self-start md:self-center">
-                        <Info size={12} className="text-slate-400" />
-                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Historical Audit trail</p>
-                    </div>
+                    )}
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Price Form Card */}
-                    <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 bg-slate-900 text-white rounded-lg flex items-center justify-center shadow-md">
-                                <IndianRupee size={20} />
-                            </div>
-                            <div>
-                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Update Value</h3>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Set current unit price</p>
-                            </div>
+                {/* Main card */}
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                    {/* Form section */}
+                    <div className="p-5 space-y-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <IndianRupee size={14} className="text-slate-400" />
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Set New Price</span>
                         </div>
 
-                        <div className="space-y-4">
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Unit Price (₹)</label>
-                                <div className="relative group">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 font-bold transition-colors">₹</div>
-                                    <input
-                                        type="number"
-                                        placeholder="0.00"
-                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg font-bold text-base outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all text-slate-900"
-                                        value={priceForm.price}
-                                        onChange={e => setPriceForm({ ...priceForm, price: e.target.value })}
-                                    />
-                                </div>
+                        {/* Inline form row */}
+                        <div className="flex gap-3">
+                            {/* Price input */}
+                            <div className="flex-1 relative group">
+                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 text-sm font-bold transition-colors select-none">₹</span>
+                                <input
+                                    type="number"
+                                    placeholder="0"
+                                    className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 transition-all text-slate-900 tabular-nums"
+                                    value={priceForm.price}
+                                    onChange={e => setPriceForm({ ...priceForm, price: e.target.value })}
+                                />
                             </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Effective Date</label>
-                                <div className="relative group">
-                                    <CalendarIcon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                                    <input
-                                        type="date"
-                                        className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all text-slate-700"
-                                        value={priceForm.effectiveDate}
-                                        onChange={e => setPriceForm({ ...priceForm, effectiveDate: e.target.value })}
-                                    />
-                                </div>
+                            {/* Date input */}
+                            <div className="relative group w-44">
+                                <CalendarIcon size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors pointer-events-none" />
+                                <input
+                                    type="date"
+                                    className="w-full pl-8 pr-2 py-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-xs outline-none focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 transition-all text-slate-700"
+                                    value={priceForm.effectiveDate}
+                                    onChange={e => setPriceForm({ ...priceForm, effectiveDate: e.target.value })}
+                                />
                             </div>
 
+                            {/* Publish button */}
                             <button
                                 onClick={handleUpdatePrice}
                                 disabled={isActionLoading || !priceForm.price}
-                                className="w-full py-3 bg-slate-900 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-slate-900/10 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
+                                className="px-5 py-2.5 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-40 flex items-center gap-1.5 shrink-0 shadow-sm"
                             >
-                                {isActionLoading ? <Loader2 size={14} className="animate-spin text-white/50" /> : <Plus size={14} />}
-                                Publish Price
+                                {isActionLoading
+                                    ? <Loader2 size={13} className="animate-spin" />
+                                    : <Plus size={13} />}
+                                Publish
                             </button>
                         </div>
+
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                            Price will apply to all sales on or after the effective date.
+                        </p>
                     </div>
 
-                    {/* Evolution Timeline Card */}
-                    <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center border border-blue-100 shadow-sm">
-                                <History size={20} />
-                            </div>
-                            <div>
-                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Audit Trail</h3>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Price evolution history</p>
-                            </div>
+                    {/* Divider + history */}
+                    <div className="border-t border-slate-100">
+                        <div className="flex items-center gap-2 px-5 py-3 bg-slate-50/60">
+                            <History size={13} className="text-slate-400" />
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Price History</span>
+                            {priceHistory.length > 0 && (
+                                <span className="ml-auto text-[9px] font-black text-slate-400 bg-slate-200 px-2 py-0.5 rounded-full">{priceHistory.length} entries</span>
+                            )}
                         </div>
 
-                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 max-h-[300px]">
+                        <div className="max-h-56 overflow-y-auto">
                             {isHistoryLoading ? (
-                                <div className="h-full flex items-center justify-center py-10">
-                                    <Loader2 size={20} className="animate-spin text-slate-200" />
+                                <div className="flex items-center justify-center gap-2 py-8 text-slate-400">
+                                    <Loader2 size={16} className="animate-spin" />
+                                    <span className="text-[10px] font-bold uppercase tracking-widest">Loading...</span>
                                 </div>
                             ) : priceHistory.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-center space-y-3 py-10">
-                                    <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-200">
-                                        <History size={24} />
-                                    </div>
-                                    <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest leading-relaxed">No history found</p>
+                                <div className="flex flex-col items-center justify-center py-10 gap-2 text-slate-300">
+                                    <History size={22} />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider">No price history yet</span>
                                 </div>
                             ) : (
-                                <div className="space-y-3 relative before:absolute before:left-5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
+                                <div className="divide-y divide-slate-50">
                                     {priceHistory.map((record, i) => (
-                                        <div key={record.id} className="relative pl-10 group">
-                                            <div className={`absolute left-[17px] w-2 h-2 rounded-full border-2 border-white shadow-sm ring-1 ${i === 0 ? 'bg-emerald-500 ring-emerald-100' : 'bg-slate-300 ring-slate-100'}`} />
-                                            <div className="bg-slate-50/50 border border-slate-100 rounded-lg p-3 flex items-center justify-between group-hover:bg-white group-hover:border-slate-200 transition-all">
+                                        <div key={record.id} className="flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-2 h-2 rounded-full shrink-0 ${i === 0 ? 'bg-emerald-400' : 'bg-slate-200'}`} />
                                                 <div>
-                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Date</p>
-                                                    <p className="text-[11px] font-bold text-slate-700 font-mono">{record.effectiveDate.split('-').reverse().join('/')}</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Price</p>
-                                                    <p className="text-sm font-black text-slate-900">₹{record.price.toLocaleString()}</p>
+                                                    <p className="text-xs font-bold text-slate-700 font-mono tabular-nums">
+                                                        {record.effectiveDate.split('-').reverse().join('/')}
+                                                    </p>
+                                                    {i === 0 && (
+                                                        <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Current</p>
+                                                    )}
                                                 </div>
                                             </div>
+                                            <span className={`text-sm font-black tabular-nums ${i === 0 ? 'text-slate-900' : 'text-slate-400'}`}>
+                                                ₹{record.price.toLocaleString()}
+                                            </span>
                                         </div>
                                     ))}
                                 </div>

@@ -439,12 +439,6 @@ ipcMain.handle('db-backup-custom', async (event, targetPath) => {
   try {
     if (!targetPath) throw new Error('No target path provided');
 
-    // SECURITY: Enforce 'starline' folder
-    const basename = path.basename(targetPath);
-    if (basename.toLowerCase() !== 'starline') {
-      throw new Error("Security Restriction: Backup can only be saved to a folder named 'starline'");
-    }
-
     // Create Date-Stamped Directory: starlinebackup-DD-MM-YYYY-HH-MM
     const now = new Date();
     const folderName = `starlinebackup-${now.getDate().toString().padStart(2, '0')}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getFullYear()}-${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}`;
@@ -454,7 +448,7 @@ ipcMain.handle('db-backup-custom', async (event, targetPath) => {
       fs.mkdirSync(fullFolderPath, { recursive: true });
     }
 
-    const backupPath = path.join(fullFolderPath, 'starline_master.db'); // Keep original name for easy restore logic or new machine transfer
+    const backupPath = path.join(fullFolderPath, 'starline_master.db');
 
     console.log(`Starting backup to: ${backupPath}`);
     await db.backup(backupPath);

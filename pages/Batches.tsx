@@ -4,7 +4,7 @@ import { Database } from '../db';
 import { StagedBatch, UserRole } from '../types';
 import { AuthSession } from '../utils/AuthSession';
 import {
-    Layers, RefreshCw, Loader2, CheckCircle2, Search, XCircle, Clock, Calendar, User, Eye, ShieldCheck, ClipboardCheck
+    Layers, RefreshCw, Loader2, CheckCircle2, Search, XCircle, Clock, Calendar, User, Eye, ShieldCheck, ClipboardCheck, Trash2, PackageX
 } from 'lucide-react';
 import { formatDate } from '../utils';
 import { ProgressFlow } from '../components/ProgressFlow';
@@ -33,6 +33,9 @@ const Batches: React.FC<{ onNavigateToHub?: (id: string) => void }> = ({ onNavig
     const [batchItems, setBatchItems] = useState<string[]>([]);
     const [isLoadingItems, setIsLoadingItems] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [itemSearch, setItemSearch] = useState('');
+    const [removingSerial, setRemovingSerial] = useState<string | null>(null);
+    const [confirmRemoveSerial, setConfirmRemoveSerial] = useState<string | null>(null);
 
     const isAdmin = userRole === 'ADMIN';
 
@@ -110,9 +113,13 @@ const Batches: React.FC<{ onNavigateToHub?: (id: string) => void }> = ({ onNavig
     const handleToggleViewItems = async (batch: StagedBatch) => {
         if (expandedBatch === batch.id) {
             setExpandedBatch(null);
+            setItemSearch('');
+            setConfirmRemoveSerial(null);
             return;
         }
         setExpandedBatch(batch.id);
+        setItemSearch('');
+        setConfirmRemoveSerial(null);
         setIsLoadingItems(true);
         try {
             const items = await Database.getStagedBatchItems(batch.id);
@@ -121,6 +128,20 @@ const Batches: React.FC<{ onNavigateToHub?: (id: string) => void }> = ({ onNavig
             console.error(e);
         } finally {
             setIsLoadingItems(false);
+        }
+    };
+
+    const handleRemoveItem = async (batchId: string, serial: string) => {
+        setRemovingSerial(serial);
+        try {
+            await Database.removeBatchItem(batchId, serial);
+            setBatchItems(prev => prev.filter(s => s !== serial));
+            setConfirmRemoveSerial(null);
+            window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: `Unit ${serial} removed from batch` } }));
+        } catch (e: any) {
+            alert(e.message || 'Failed to remove unit');
+        } finally {
+            setRemovingSerial(null);
         }
     };
 
@@ -199,7 +220,7 @@ const Batches: React.FC<{ onNavigateToHub?: (id: string) => void }> = ({ onNavig
                             <ClipboardCheck size={14} />
                             Pending Inspections
                             {inspections.length > 0 && (
-                                <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[8px] leading-none ${activeTab === 'INSPECTIONS' ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-500'}`}>
+                                <span className={`ml-1 px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[8px] leading-none ${activeTab === 'INSPECTIONS' ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-500'}`}>
                                     {inspections.length}
                                 </span>
                             )}
@@ -300,38 +321,116 @@ const Batches: React.FC<{ onNavigateToHub?: (id: string) => void }> = ({ onNavig
                                             </td>
                                         </tr>
                                         {expandedBatch === batch.id && (
-                                            <tr className="bg-slate-50/50 border-b border-slate-100 animate-in fade-in slide-in-from-top-2 duration-300">
-                                                <td colSpan={5} className="px-8 py-6">
-                                                    <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-                                                        <div className="flex justify-between items-center mb-4">
-                                                            <div>
-                                                                <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Batch Inventory List</h4>
-                                                                <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">
-                                                                    {batch.modelName} - Total: {batch.itemCount} Batteries
-                                                                </p>
+                                            <tr className="border-b border-slate-100 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                <td colSpan={5} className="px-6 py-4 bg-slate-50/60">
+                                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                                                        {/* Panel Header */}
+                                                        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+                                                            <div className="flex items-center gap-3">
+                                                                <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Inventory List</h4>
+                                                                <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                                    {batch.modelName}
+                                                                </span>
+                                                                <span className="text-[9px] font-black text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
+                                                                    {batchItems.length} units
+                                                                </span>
                                                             </div>
-                                                            <button
-                                                                onClick={() => setExpandedBatch(null)}
-                                                                className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"
-                                                            >
-                                                                <XCircle size={16} />
-                                                            </button>
+                                                            <div className="flex items-center gap-2">
+                                                                {/* Inline search */}
+                                                                <div className="relative">
+                                                                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                                    <input
+                                                                        value={itemSearch}
+                                                                        onChange={e => setItemSearch(e.target.value)}
+                                                                        placeholder="Filter serial..."
+                                                                        className="pl-7 pr-3 py-1.5 text-[10px] font-mono bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-400 focus:bg-white transition-all w-44 uppercase tracking-wide"
+                                                                    />
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => { setExpandedBatch(null); setItemSearch(''); setConfirmRemoveSerial(null); }}
+                                                                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                                                                >
+                                                                    <XCircle size={15} />
+                                                                </button>
+                                                            </div>
                                                         </div>
+
+                                                        {/* Items List */}
                                                         {isLoadingItems ? (
-                                                            <div className="flex justify-center p-8">
-                                                                <Loader2 className="animate-spin text-blue-600" size={24} />
+                                                            <div className="flex items-center justify-center gap-2 py-8 text-slate-400">
+                                                                <Loader2 size={18} className="animate-spin" />
+                                                                <span className="text-[10px] font-bold uppercase tracking-widest">Loading...</span>
+                                                            </div>
+                                                        ) : batchItems.length === 0 ? (
+                                                            <div className="flex flex-col items-center justify-center py-10 gap-2 text-slate-400">
+                                                                <PackageX size={24} />
+                                                                <span className="text-[10px] font-bold uppercase tracking-wider">No units in batch</span>
                                                             </div>
                                                         ) : (
-                                                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                                                {batchItems.map((serial, idx) => (
-                                                                    <div key={idx} className="bg-slate-50 border border-slate-100 px-3 py-2 rounded-lg flex items-center justify-between group-hover:border-blue-100 transition-colors">
-                                                                        <div>
-                                                                            <div className="font-mono text-xs font-bold text-slate-900">{serial}</div>
-                                                                            <div className="text-[9px] font-bold text-blue-600 uppercase tracking-widest">{batch.modelName}</div>
+                                                            <div className="max-h-64 overflow-y-auto divide-y divide-slate-50">
+                                                                {batchItems
+                                                                    .filter(s => !itemSearch || s.toLowerCase().includes(itemSearch.toLowerCase()))
+                                                                    .map((serial, idx) => (
+                                                                        <div
+                                                                            key={serial}
+                                                                            className="flex items-center justify-between px-5 py-2.5 hover:bg-slate-50 transition-colors group"
+                                                                        >
+                                                                            {/* Index + serial */}
+                                                                            <div className="flex items-center gap-3 min-w-0">
+                                                                                <span className="text-[9px] font-black text-slate-300 w-5 tabular-nums shrink-0">{idx + 1}</span>
+                                                                                <span className="font-mono text-xs font-bold text-slate-800 tracking-wider truncate">{serial}</span>
+                                                                            </div>
+
+                                                                            {/* Model badge + admin remove */}
+                                                                            <div className="flex items-center gap-2 shrink-0">
+                                                                                <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 hidden sm:inline-block">
+                                                                                    {batch.modelName}
+                                                                                </span>
+                                                                                {isAdmin && (
+                                                                                    confirmRemoveSerial === serial ? (
+                                                                                        <div className="flex items-center gap-1.5">
+                                                                                            <span className="text-[9px] font-bold text-rose-600 uppercase">Remove?</span>
+                                                                                            <button
+                                                                                                onClick={() => handleRemoveItem(batch.id, serial)}
+                                                                                                disabled={removingSerial === serial}
+                                                                                                className="px-2 py-1 bg-rose-600 text-white text-[9px] font-black uppercase rounded-md hover:bg-rose-700 transition-colors disabled:opacity-50 active:scale-95"
+                                                                                            >
+                                                                                                {removingSerial === serial ? <Loader2 size={10} className="animate-spin" /> : 'Yes'}
+                                                                                            </button>
+                                                                                            <button
+                                                                                                onClick={() => setConfirmRemoveSerial(null)}
+                                                                                                className="px-2 py-1 bg-slate-100 text-slate-600 text-[9px] font-black uppercase rounded-md hover:bg-slate-200 transition-colors active:scale-95"
+                                                                                            >
+                                                                                                No
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <button
+                                                                                            onClick={() => setConfirmRemoveSerial(serial)}
+                                                                                            className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                                                                            title="Remove unit from batch"
+                                                                                        >
+                                                                                            <Trash2 size={13} />
+                                                                                        </button>
+                                                                                    )
+                                                                                )}
+                                                                            </div>
                                                                         </div>
-                                                                        <span className="text-[9px] font-black text-slate-300 w-5 text-right">{idx + 1}</span>
-                                                                    </div>
-                                                                ))}
+                                                                    ))}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Footer summary */}
+                                                        {!isLoadingItems && batchItems.length > 0 && (
+                                                            <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between">
+                                                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                                                                    {itemSearch
+                                                                        ? `Showing ${batchItems.filter(s => s.toLowerCase().includes(itemSearch.toLowerCase())).length} of ${batchItems.length} units`
+                                                                        : `${batchItems.length} units in this batch`}
+                                                                </span>
+                                                                {isAdmin && (
+                                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Hover a row to remove</span>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
