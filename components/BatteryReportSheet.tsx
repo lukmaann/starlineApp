@@ -11,6 +11,7 @@ interface BatteryReportSheetProps {
     battery: Battery;
     lineage: Battery[];
     replacements: Replacement[];
+    activityLogs?: any[];
     dealers: Dealer[];
     saleDate?: string;
     onPrint?: () => void;
@@ -21,13 +22,14 @@ const BatteryReportTemplate: React.FC<{
     battery: Battery;
     lineage: Battery[];
     replacements: Replacement[];
+    activityLogs?: any[];
     dealers: Dealer[];
     reportDate: string;
     isExpired: boolean;
     originalBattery: Battery;
     effectiveSaleDate?: string;
     mode: 'view' | 'print';
-}> = ({ battery, lineage, replacements, dealers, reportDate, isExpired, originalBattery, effectiveSaleDate, mode }) => {
+}> = ({ battery, lineage, replacements, activityLogs, dealers, reportDate, isExpired, originalBattery, effectiveSaleDate, mode }) => {
 
     // Conditional classes based on mode
     const containerClasses = mode === 'print'
@@ -144,7 +146,132 @@ const BatteryReportTemplate: React.FC<{
                         </div>
                     </div>
 
-                    {/* Step 3: Replacements (if any) */}
+                    {/* Technical Inspections (Multiple Sessions) */}
+                    {(() => {
+                        // Group activity logs into assessment sessions
+                        const sessions: any[] = [];
+
+                        if (activityLogs && activityLogs.length > 0) {
+                            const sortedLogs = [...activityLogs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+                            let currentSession: any = null;
+
+                            sortedLogs.forEach(log => {
+                                let meta: any = {};
+                                try {
+                                    meta = log.metadata ? JSON.parse(log.metadata) : {};
+                                } catch (e) {
+                                    console.error('Failed to parse log metadata:', e);
+                                }
+
+                                if (log.type === 'BATTERY_INSPECTION_START') {
+                                    if (currentSession) sessions.push(currentSession);
+                                    currentSession = {
+                                        batteryId: meta.id,
+                                        startDate: meta.startDate,
+                                        status: 'IN_PROGRESS',
+                                        notes: meta.notes,
+                                        timestamp: log.timestamp
+                                    };
+                                } else if (log.type === 'BATTERY_INSPECTION_COMPLETE') {
+                                    if (currentSession && currentSession.batteryId === meta.id) {
+                                        currentSession.completionDate = meta.completionDate;
+                                        currentSession.status = meta.status;
+                                        currentSession.returnDate = meta.returnDate;
+                                        currentSession.notes = meta.notes;
+                                        sessions.push(currentSession);
+                                        currentSession = null;
+                                    } else {
+                                        // Orphaned completion log
+                                        sessions.push({
+                                            batteryId: meta.id,
+                                            completionDate: meta.completionDate,
+                                            status: meta.status,
+                                            returnDate: meta.returnDate,
+                                            notes: meta.notes,
+                                            timestamp: log.timestamp
+                                        });
+                                    }
+                                }
+                            });
+                            if (currentSession) sessions.push(currentSession);
+                        }
+
+                        // Fallback: If no logs but battery has status, add the current one
+                        if (sessions.length === 0 && battery.inspectionStatus && battery.inspectionStatus !== 'PENDING') {
+                            sessions.push({
+                                batteryId: battery.id,
+                                startDate: battery.inspectionStartDate,
+                                completionDate: battery.inspectionDate,
+                                status: battery.inspectionStatus,
+                                returnDate: battery.inspectionReturnDate,
+                                notes: battery.inspectionNotes
+                            });
+                        }
+
+                        return sessions.map((session, sidx) => (
+                            <div key={sidx} className="relative print-break-avoid break-inside-avoid">
+                                <div className={`absolute -left-[41px] top-1 p-1 bg-white border-4 rounded-full ${session.status === 'FAULTY' ? 'border-rose-100 text-rose-500' :
+                                    session.status === 'GOOD' ? 'border-emerald-100 text-emerald-500' :
+                                        'border-amber-100 text-amber-500 animate-pulse'
+                                    }`}>
+                                    <ShieldCheck size={14} />
+                                </div>
+                                <div className="mb-1 flex justify-between items-center pr-4">
+                                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                                        Technical Assessment {sessions.length > 1 ? `#${sidx + 1}` : ''}
+                                    </h4>
+                                </div>
+
+                                <div className={`p-3 rounded-lg border space-y-3 ${session.status === 'FAULTY' ? 'bg-rose-50/30 border-rose-100' :
+                                    session.status === 'GOOD' ? 'bg-emerald-50/30 border-emerald-100' :
+                                        'bg-amber-50/30 border-amber-100'
+                                    }`}>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase">Unit Serial</p>
+                                            <p className="font-mono font-bold text-slate-800 text-xs">{session.batteryId}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase">Outcome</p>
+                                            <p className={`font-black uppercase text-[10px] tracking-wider ${session.status === 'FAULTY' ? 'text-rose-600' :
+                                                session.status === 'GOOD' ? 'text-emerald-600' :
+                                                    'text-amber-600'
+                                                }`}>
+                                                {session.status === 'IN_PROGRESS' ? 'Assessing Unit...' : session.status}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase">Started On</p>
+                                            <p className="font-bold text-slate-800 text-xs">{formatDate(session.startDate) || 'N/A'}</p>
+                                        </div>
+                                    </div>
+
+                                    {(session.completionDate || session.returnDate) && (
+                                        <div className={`mt-2 pt-2 border-t flex justify-between items-center ${session.status === 'FAULTY' ? 'border-rose-100' : 'border-emerald-100'}`}>
+                                            <p className="text-[9px] font-bold uppercase text-slate-400">
+                                                {session.status === 'GOOD' ? 'Returned to Shop' : 'Verification Date'}
+                                            </p>
+                                            <p className="font-bold text-slate-800 text-xs">
+                                                {formatDate(session.status === 'GOOD' ? session.returnDate : session.completionDate)}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {session.notes && (
+                                        <div className="mt-2 p-2 bg-white/50 rounded border border-slate-100/50">
+                                            <p className="text-[8px] font-black text-slate-400 uppercase mb-1 tracking-widest">Technician Notes</p>
+                                            <p className="text-[10px] text-slate-600 font-medium italic leading-relaxed">
+                                                "{session.notes}"
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ));
+                    })()}
+
+                    {/* Step 4: Replacements (if any) */}
                     {replacements.map((rep, idx) => (
                         <div key={rep.id} className="relative print-break-avoid break-inside-avoid">
                             <div className="absolute -left-[41px] top-1 p-1 bg-white border-4 border-amber-100 rounded-full text-amber-500">

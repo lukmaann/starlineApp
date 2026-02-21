@@ -4,7 +4,9 @@ export enum BatteryStatus {
   RETURNED = 'RETURNED',
   RETURNED_PENDING = 'RETURNED_PENDING',
   REPLACEMENT = 'REPLACEMENT',
-  EXPIRED = 'EXPIRED'
+  EXPIRED = 'EXPIRED',
+  FAULTY = 'FAULTY',
+  GOOD = 'GOOD'
 }
 
 export interface Analytics {
@@ -81,6 +83,14 @@ export interface Battery {
   warrantyCalculationBase?: 'ACTIVATION' | 'ACTUAL_SALE';
   gracePeriodUsed?: boolean; // Track if grace period was utilized
   dateCorrections?: DateCorrection[]; // Audit trail for date corrections
+
+  // Inspection Fields
+  inspectionStatus?: 'PENDING' | 'IN_PROGRESS' | 'GOOD' | 'FAULTY';
+  inspectionDate?: string;
+  inspectionStartDate?: string;
+  inspectionReturnDate?: string; // Date sent back to dealer if GOOD
+  inspectionNotes?: string;
+  inspectionReason?: string;
 }
 
 export interface Dealer {

@@ -132,6 +132,7 @@ export class Database {
     lineage: Battery[];
     lineageSales: Sale[];
     replacements: Replacement[];
+    activityLogs?: any[];
   } | null> {
     const battery = await this.getBattery(term);
     if (!battery) return null;
@@ -165,7 +166,7 @@ export class Database {
     const lineageIds = lineage.map(b => b.id);
     const placeholders = lineageIds.map(() => '?').join(',');
 
-    const [allSales, allReplacements] = await Promise.all([
+    const [allSales, allReplacements, allLogs] = await Promise.all([
       lineageIds.length > 0
         ? this.query<Sale>(
           `SELECT * FROM sales WHERE batteryId IN (${placeholders})`,
@@ -177,8 +178,24 @@ export class Database {
           `SELECT * FROM replacements WHERE oldBatteryId IN (${placeholders}) OR newBatteryId IN (${placeholders}) ORDER BY replacementDate ASC`,
           [...lineageIds, ...lineageIds]
         )
+        : Promise.resolve([]),
+      lineageIds.length > 0
+        ? this.query<any>(
+          `SELECT * FROM activity_logs 
+           WHERE (type = 'BATTERY_INSPECTION_START' OR type = 'BATTERY_INSPECTION_COMPLETE')
+           AND (${lineageIds.map(() => 'metadata LIKE ?').join(' OR ')})`,
+          lineageIds.map(id => `%${id}%`)
+        )
         : Promise.resolve([])
     ]);
+
+    // Better log filtering: ensure the log belongs to one of our lineage batteries
+    const filteredLogs = allLogs.filter((log: any) => {
+      try {
+        const meta = JSON.parse(log.metadata);
+        return lineageIds.includes(meta.id);
+      } catch (e) { return false; }
+    });
 
     // Find the original sale (first sale in chain)
     const originalSale = allSales.find(s => s.batteryId === original.id);
@@ -190,7 +207,8 @@ export class Database {
       originalSale,
       lineage,
       lineageSales: allSales,
-      replacements: allReplacements
+      replacements: allReplacements,
+      activityLogs: filteredLogs
     };
   }
 
@@ -617,6 +635,48 @@ export class Database {
       `UPDATE batteries SET status = ?, dealerId = ? WHERE id = ? `,
       [status, dealerId, id]
     );
+  }
+
+  static async startInspection(id: string, notes?: string): Promise<void> {
+    const today = getLocalDate();
+    await this.run(
+      `UPDATE batteries SET 
+        inspectionStatus = 'IN_PROGRESS', 
+        inspectionStartDate = ?,
+        inspectionNotes = ?
+      WHERE id = ?`,
+      [today, notes || null, id]
+    );
+    await this.logActivity('BATTERY_INSPECTION_START', `Started technical inspection for battery ${id}`, { id, startDate: today, notes });
+  }
+
+  static async updateInspection(id: string, status: 'GOOD' | 'FAULTY', returnDate?: string, notes?: string, reason?: string): Promise<void> {
+    const today = getLocalDate();
+    await this.run(
+      `UPDATE batteries SET 
+        inspectionStatus = ?, 
+        inspectionDate = ?, 
+        inspectionReturnDate = ?,
+        inspectionNotes = ?,
+        inspectionReason = ?
+      WHERE id = ?`,
+      [status, today, returnDate || null, notes || null, reason || null, id]
+    );
+    await this.logActivity('BATTERY_INSPECTION_COMPLETE', `Completed inspection for battery ${id}: Result is ${status}${reason ? ' (' + reason + ')' : ''}`, { id, status, completionDate: today, returnDate, notes, reason });
+  }
+
+  static async resetInspection(id: string, reason?: string): Promise<void> {
+    await this.run(
+      `UPDATE batteries SET 
+        inspectionStatus = 'PENDING', 
+        inspectionDate = NULL, 
+        inspectionStartDate = NULL,
+        inspectionReturnDate = NULL,
+        inspectionNotes = NULL
+      WHERE id = ?`,
+      [id]
+    );
+    await this.logActivity('BATTERY_INSPECTION_RESET', `Reset inspection for battery ${id}`, { id, reason });
   }
 
   static async markAsPendingExchange(

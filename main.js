@@ -75,7 +75,12 @@ function initDatabase(config) {
         originalBatteryId TEXT,
         previousBatteryId TEXT,
         nextBatteryId TEXT,
-        warrantyCardStatus TEXT
+        warrantyCardStatus TEXT,
+        inspectionStatus TEXT DEFAULT 'PENDING',
+        inspectionDate TEXT,
+        inspectionReturnDate TEXT,
+        inspectionNotes TEXT,
+        inspectionReason TEXT
       );
 
       CREATE TABLE IF NOT EXISTS replacements (
@@ -217,7 +222,13 @@ function initDatabase(config) {
       { name: 'actualSaleDateSource', type: 'TEXT' },
       { name: 'actualSaleDateProof', type: 'TEXT' },
       { name: 'warrantyCalculationBase', type: 'TEXT' },
-      { name: 'gracePeriodUsed', type: 'INTEGER DEFAULT 0' }
+      { name: 'gracePeriodUsed', type: 'INTEGER DEFAULT 0' },
+      { name: 'inspectionStatus', type: "TEXT DEFAULT 'PENDING'" },
+      { name: 'inspectionDate', type: 'TEXT' },
+      { name: 'inspectionStartDate', type: 'TEXT' },
+      { name: 'inspectionReturnDate', type: 'TEXT' },
+      { name: 'inspectionNotes', type: 'TEXT' },
+      { name: 'inspectionReason', type: 'TEXT' }
     ];
 
     warrantyDateColumns.forEach(col => {
