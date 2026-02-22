@@ -442,7 +442,7 @@ ipcMain.handle('db-optimize', async () => {
 });
 
 ipcMain.handle('select-backup-folder', async () => {
-  const result = await dialog.showOpenDialog({
+  const result = await dialog.showOpenDialog(win, {
     properties: ['openDirectory', 'createDirectory'],
     title: 'Select Backup Destination (SSD/External Drive)'
   });
@@ -526,7 +526,7 @@ ipcMain.handle('init-database', async (event, config) => {
 });
 
 ipcMain.handle('select-external-drive', async () => {
-  const result = await dialog.showOpenDialog({
+  const result = await dialog.showOpenDialog(win, {
     properties: ['openDirectory', 'createDirectory'],
     title: 'Select External Drive/Folder for Database'
   });

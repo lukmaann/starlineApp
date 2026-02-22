@@ -43,6 +43,10 @@ const DealerAnalytics: React.FC<DealerAnalyticsProps> = ({ dealer, onBack }) => 
             ]);
             setData(detailed);
             setAdvancedData(advanced);
+
+            if (detailed?.availableYears?.length > 0 && !detailed.availableYears.includes(selectedYear)) {
+                setSelectedYear(detailed.availableYears[0]);
+            }
         } catch (error) {
             console.error('Failed to load dealer analytics:', error);
         }

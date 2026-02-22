@@ -52,6 +52,11 @@ const GlobalAnalytics: React.FC = () => {
             setData(global);
             setLeaderboard(leaders);
             setLocations(locs);
+
+            // If the currently selected year has no data, but availableYears exist, default to the latest
+            if (global?.availableYears?.length > 0 && !global.availableYears.includes(selectedYear)) {
+                setSelectedYear(global.availableYears[0]);
+            }
         } catch (error) {
             console.error('Failed to load global analytics:', error);
         } finally {
