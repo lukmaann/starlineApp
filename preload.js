@@ -10,15 +10,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     query: (sql, params) => ipcRenderer.invoke('db-query', sql, params),
     run: (sql, params) => ipcRenderer.invoke('db-run', sql, params),
     exec: (sql) => ipcRenderer.invoke('db-exec', sql),
-    updateBatteryDetails: (currentId, newId, dealerId, model) => ipcRenderer.invoke('db-update-battery-details', currentId, newId, dealerId, model)
-  },
-  backup: () => ipcRenderer.invoke('db-backup'),
-  selectBackupFolder: () => ipcRenderer.invoke('select-backup-folder'),
-  backupCustom: (path) => ipcRenderer.invoke('db-backup-custom', path),
-  selectRestoreFile: () => ipcRenderer.invoke('select-restore-file'),
-  restore: (path) => ipcRenderer.invoke('db-restore', path),
-
-  // Dynamic Database Switching
-  initDatabase: (config) => ipcRenderer.invoke('init-database', config),
-  selectExternalDrive: () => ipcRenderer.invoke('select-external-drive')
+    backup: () => ipcRenderer.invoke('db-backup'),
+    backupCustom: (path) => ipcRenderer.invoke('db-backup-custom', path),
+    selectBackupFolder: () => ipcRenderer.invoke('select-backup-folder'),
+    optimizeDatabase: () => ipcRenderer.invoke('db-optimize'),
+    selectExternalDrive: () => ipcRenderer.invoke('select-external-drive'),
+    initDatabase: (config) => ipcRenderer.invoke('init-database', config),
+    updateBatteryDetails: (currentId, newId, dealerId, model) => ipcRenderer.invoke('db-update-battery-details', currentId, newId, dealerId, model),
+    selectRestoreFile: () => ipcRenderer.invoke('select-restore-file'),
+    restoreDatabase: (path) => ipcRenderer.invoke('db-restore', path)
+  }
 });

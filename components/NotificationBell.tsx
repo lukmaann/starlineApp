@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, PackageCheck, Scale, X, ChevronRight } from 'lucide-react';
+import { Bell, PackageCheck, Scale, X, ChevronRight, AlertTriangle } from 'lucide-react';
 import { Database } from '../db';
 
 interface NotificationBellProps {
@@ -9,20 +9,35 @@ interface NotificationBellProps {
 interface Counts {
     batches: number;
     settlements: number;
+    daysSinceBackup: number | null;
+    daysSinceOptimize: number | null;
 }
 
 const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }) => {
-    const [counts, setCounts] = useState<Counts>({ batches: 0, settlements: 0 });
+    const [counts, setCounts] = useState<Counts>({ batches: 0, settlements: 0, daysSinceBackup: null, daysSinceOptimize: null });
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const ref = useRef<HTMLDivElement>(null);
 
-    const total = counts.batches + counts.settlements;
+    const getDaysSince = (isoDate: string | null) => {
+        if (!isoDate) return null;
+        const past = new Date(isoDate).getTime();
+        const now = new Date().getTime();
+        return Math.floor((now - past) / (1000 * 60 * 60 * 24));
+    };
 
     const fetchCounts = async () => {
         try {
             const res = await Database.getNotificationCounts();
-            setCounts(res);
+
+            const lastBackup = await Database.getConfig('last_backup_date');
+            const lastOptimize = await Database.getConfig('last_optimize_date');
+
+            setCounts({
+                ...res,
+                daysSinceBackup: getDaysSince(lastBackup),
+                daysSinceOptimize: getDaysSince(lastOptimize)
+            });
         } catch {
             // silently fail
         } finally {
@@ -45,7 +60,27 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }) => {
         return () => document.removeEventListener('mousedown', handler);
     }, []);
 
+    const needsBackup = counts.daysSinceBackup === null || counts.daysSinceBackup >= 6;
+    const needsOptimize = counts.daysSinceOptimize === null || counts.daysSinceOptimize >= 5;
+
+    // Calculate total notifications including warnings
+    const total = counts.batches + counts.settlements + (needsBackup ? 1 : 0) + (needsOptimize ? 1 : 0);
+
     const notifications = [
+        needsBackup && {
+            icon: <AlertTriangle size={16} className="text-rose-500" />,
+            label: 'Action Required: Backup Registration Data',
+            count: counts.daysSinceBackup === null ? 'Never backed up' : `${counts.daysSinceBackup} days since last backup`,
+            tab: 'backup',
+            color: 'bg-rose-50',
+        },
+        needsOptimize && {
+            icon: <AlertTriangle size={16} className="text-orange-500" />,
+            label: 'Maintenance: Optimize Database',
+            count: counts.daysSinceOptimize === null ? 'Never optimized' : `${counts.daysSinceOptimize} days since last optimization`,
+            tab: 'backup',
+            color: 'bg-orange-50',
+        },
         counts.batches > 0 && {
             icon: <PackageCheck size={16} className="text-indigo-500" />,
             label: 'Pending Batches / Inspections',
@@ -60,7 +95,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }) => {
             tab: 'settlements',
             color: 'bg-amber-50',
         },
-    ].filter(Boolean) as { icon: React.ReactNode; label: string; count: number; tab: string; color: string }[];
+    ].filter(Boolean) as { icon: React.ReactNode; label: string; count: number | string; tab: string; color: string }[];
 
     return (
         <div ref={ref} className="relative">
@@ -79,14 +114,14 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }) => {
 
             {open && (
                 <div
-                    className="absolute right-0 top-12 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200/80 z-[500] animate-in zoom-in-95 slide-in-from-top-2 duration-200 overflow-hidden"
+                    className="absolute right-0 top-12 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200/80 z-[500] animate-in zoom-in-95 slide-in-from-top-2 duration-200 overflow-hidden"
                     style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}
                 >
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
                         <div className="flex items-center gap-2">
                             <Bell size={14} className="text-slate-500" />
-                            <span className="text-xs font-black text-slate-800 uppercase tracking-widest">Notifications</span>
+                            <span className="text-xs font-black text-slate-800 uppercase tracking-widest">Notifications ({total})</span>
                         </div>
                         <button onClick={() => setOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors">
                             <X size={13} />
@@ -94,7 +129,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }) => {
                     </div>
 
                     {/* Items */}
-                    <div className="p-2">
+                    <div className="p-2 max-h-96 overflow-y-auto">
                         {notifications.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-8 gap-2 text-slate-400">
                                 <Bell size={24} strokeWidth={1.5} />
@@ -113,7 +148,9 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }) => {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-xs font-bold text-slate-800 leading-snug">{n.label}</p>
-                                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">{n.count} item{n.count > 1 ? 's' : ''} need attention</p>
+                                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                                            {typeof n.count === 'number' ? `${n.count} item${n.count > 1 ? 's' : ''} need attention` : n.count}
+                                        </p>
                                     </div>
                                     <ChevronRight size={14} className="text-slate-400 group-hover:text-slate-600 shrink-0 transition-colors" />
                                 </button>

@@ -426,6 +426,21 @@ ipcMain.handle('db-backup', async () => {
   }
 });
 
+// 5. MAINTENANCE (Optimize)
+ipcMain.handle('db-optimize', async () => {
+  try {
+    if (!db) throw new Error('Database not initialized');
+    // VACUUM reconstructs the entire database file
+    db.exec('VACUUM;');
+    // Analyze gathers statistics about tables and indices for the query optimizer
+    db.exec('ANALYZE;');
+    return { success: true };
+  } catch (err) {
+    console.error('Database optimization failed:', err);
+    return { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('select-backup-folder', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory', 'createDirectory'],

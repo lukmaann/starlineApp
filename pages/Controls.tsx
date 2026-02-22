@@ -290,13 +290,6 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
             Model Registry
           </button>
           <button
-            onClick={() => setCurrentTab('data')}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2 ${currentTab === 'data' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-emerald-600 hover:bg-emerald-50'}`}
-          >
-            <Save size={16} />
-            Data Management
-          </button>
-          <button
             onClick={() => setCurrentTab('access')}
             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${currentTab === 'access' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}
           >
@@ -754,73 +747,6 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
                   Next
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- DATA MANAGEMENT TAB --- */}
-      {currentTab === 'data' && (
-        <div className="max-w-4xl mx-auto animate-in slide-in-from-right-4 duration-300">
-          <div className="p-8 bg-slate-50 border-t border-slate-100 flex flex-col gap-6 rounded-3xl border shadow-sm">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-white border border-blue-100 rounded-2xl shadow-sm">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-600 shadow-sm"><Save size={24} /></div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Database Backup</h3>
-                  <p className="text-xs font-medium text-slate-500 max-w-sm">Create a secure copy of the entire registry (10M+ records) to your Documents folder.</p>
-                </div>
-              </div>
-              <button
-                onClick={async () => {
-                  setIsBackupLoading(true);
-                  try {
-                    const res = await Database.backupDatabase();
-                    if (res.success) {
-                      notify(`Backup created at: ${res.path}`, 'success');
-                    } else {
-                      notify(`Backup failed: ${res.error}`, 'error');
-                    }
-                  } catch (e) {
-                    notify('Backup system error', 'error');
-                  } finally {
-                    setIsBackupLoading(false);
-                  }
-                }}
-                disabled={isBackupLoading}
-                className="px-6 py-3 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-70 flex items-center gap-2 whitespace-nowrap"
-              >
-                {isBackupLoading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                Execute Backup
-              </button>
-            </div>
-
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-slate-100 border border-slate-200 rounded-2xl shadow-sm">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-slate-200 border border-slate-300 rounded-xl text-slate-600 shadow-sm"><RefreshCw size={24} /></div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Restore Data</h3>
-                  <p className="text-xs font-medium text-slate-500 max-w-sm">Import data from an external SSD backup. WARNING: This overwrites current data.</p>
-                </div>
-              </div>
-              <button
-                onClick={async () => {
-                  if (!window.confirm('WARNING: Restoring will OVERWRITE all current data.\n\nThe app will restart after restoration.\n\nContinue?')) return;
-
-                  const path = await Database.selectRestoreFile();
-                  if (path) {
-                    setIsBackupLoading(true);
-                    const res = await Database.restoreDatabase(path);
-                    if (!res.success) {
-                      notify(`Restore failed: ${res.error}`, 'error');
-                      setIsBackupLoading(false);
-                    }
-                  }
-                }}
-                className="px-6 py-3 bg-slate-900 text-white font-bold text-sm rounded-xl hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20 flex items-center gap-2 whitespace-nowrap"
-              >
-                <RefreshCw size={16} /> Select Backup File
-              </button>
             </div>
           </div>
         </div>

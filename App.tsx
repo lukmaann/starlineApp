@@ -16,6 +16,7 @@ import { Database } from './db';
 import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi } from 'lucide-react';
 import UnlockPage from './pages/UnlockPage';
 import { Toaster } from './components/ui/sonner';
+import { Dialog, DialogContent } from './components/ui/dialog';
 import { toast } from "sonner";
 import { useNavigationHistory } from './hooks/useNavigationHistory';
 import NavigationControls from './components/NavigationControls';
@@ -48,6 +49,9 @@ const App: React.FC = () => {
   const [sessionCountdown, setSessionCountdown] = useState<number | null>(null);
   const [manualLockCountdown, setManualLockCountdown] = useState<number | null>(null);
   const isAdmin = user?.role === 'ADMIN';
+
+  const [showDbNotification, setShowDbNotification] = useState(false);
+  const [dbNotificationData, setDbNotificationData] = useState<{ isSSD: boolean, path: string } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     if (type === 'error') {
@@ -243,6 +247,22 @@ const App: React.FC = () => {
     const authUser = AuthSession.getCurrentUser();
     setIsLoggedIn(true);
     setUser(authUser);
+
+    // Show database notification for Admin
+    if (authUser?.role === 'ADMIN') {
+      const dbConfigStr = localStorage.getItem('dbConfig');
+      if (dbConfigStr) {
+        try {
+          const config = JSON.parse(dbConfigStr);
+          const isSSD = config.type === 'EXTERNAL';
+
+          setDbNotificationData({ isSSD, path: config.path || 'Internal Storage' });
+          setShowDbNotification(true);
+        } catch (e) {
+          // ignore parsing error
+        }
+      }
+    }
   }} />;
 
   return (
@@ -380,6 +400,68 @@ const App: React.FC = () => {
       </div >
 
       {showHelp && <ShortcutsModal onClose={() => setShowHelp(false)} />}
+
+      <Dialog open={showDbNotification} onOpenChange={setShowDbNotification}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-0 bg-transparent shadow-none [&>button]:hidden">
+          <div
+            className="bg-white rounded-2xl p-8 relative overflow-hidden"
+            style={{ boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 20px 40px -8px rgba(0,0,0,0.15)' }}
+          >
+            {/* Decorative background like Login */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+              <div
+                className="absolute inset-0 opacity-[0.03] z-0"
+                style={{
+                  backgroundImage: 'linear-gradient(#94a3b8 1px, transparent 1px), linear-gradient(90deg, #94a3b8 1px, transparent 1px)',
+                  backgroundSize: '20px 20px',
+                }}
+              />
+            </div>
+
+            <div className="relative z-10 flex flex-col items-center animate-in zoom-in-95 duration-500">
+              <div
+                className="w-14 h-14 rounded-[18px] flex items-center justify-center mb-5 shadow-lg"
+                style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}
+              >
+                <DatabaseIcon size={24} className={dbNotificationData?.isSSD ? "text-purple-400" : "text-blue-400"} />
+              </div>
+
+              <h2 className="text-xl font-black text-slate-900 tracking-tight text-center">
+                Database Connected
+              </h2>
+
+              <div className="mt-6 w-full space-y-4">
+                <div className={`p-4 rounded-xl border flex flex-col items-center justify-center gap-2 ${dbNotificationData?.isSSD
+                  ? 'bg-purple-50 border-purple-100 text-purple-900'
+                  : 'bg-blue-50 border-blue-100 text-blue-900'
+                  }`}>
+                  <span className="text-xs font-bold uppercase tracking-wider opacity-60">
+                    Active Storage
+                  </span>
+                  <span className={`text-lg font-black tracking-tight ${dbNotificationData?.isSSD ? 'text-purple-700' : 'text-blue-700'
+                    }`}>
+                    {dbNotificationData?.isSSD ? 'External SSD' : 'Internal Drive'}
+                  </span>
+                  <span className="text-[10px] font-medium opacity-60 truncate w-full text-center px-4">
+                    {dbNotificationData?.path}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => setShowDbNotification(false)}
+                  className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] mt-2"
+                  style={{
+                    background: 'linear-gradient(135deg, #0f172a 0%, #1e40af 100%)',
+                    boxShadow: '0 4px 14px rgba(15,23,42,0.25)',
+                  }}
+                >
+                  Continue Workspace
+                </button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div >
   );
 };

@@ -11,14 +11,15 @@ declare global {
         run: (sql: string, params?: any[]) => Promise<{ changes: number; lastInsertRowid: number }>;
         exec: (sql: string) => Promise<void>;
         updateBatteryDetails: (currentId: string, newId: string, dealerId: string, model?: string) => Promise<void>;
+        backup: () => Promise<{ success: boolean; path: string; error?: string }>;
+        selectBackupFolder: () => Promise<string | null>;
+        backupCustom: (path: string) => Promise<{ success: boolean; path: string; error?: string }>;
+        selectRestoreFile: () => Promise<string | null>;
+        restoreDatabase: (path: string) => Promise<{ success: boolean; error?: string }>;
+        optimizeDatabase: () => Promise<{ success: boolean; error?: string }>;
+        initDatabase: (config?: { type: 'INTERNAL' | 'EXTERNAL', path?: string }) => Promise<{ success: boolean; path?: string; error?: string }>;
+        selectExternalDrive: () => Promise<string | null>;
       };
-      backup: () => Promise<{ success: boolean; path: string; error?: string }>;
-      selectBackupFolder: () => Promise<string | null>;
-      backupCustom: (path: string) => Promise<{ success: boolean; path: string; error?: string }>;
-      selectRestoreFile: () => Promise<string | null>;
-      restore: (path: string) => Promise<{ success: boolean; error?: string }>;
-      initDatabase: (config?: { type: 'INTERNAL' | 'EXTERNAL', path?: string }) => Promise<{ success: boolean; path?: string; error?: string }>;
-      selectExternalDrive: () => Promise<string | null>;
     };
   }
 }
@@ -535,42 +536,46 @@ export class Database {
   }
 
   static async backupDatabase(): Promise<{ success: boolean; path: string; error?: string }> {
-    if (window.electronAPI?.backup) {
-      return await window.electronAPI.backup();
-    }
-    return { success: false, path: '', error: 'Backup API not available' };
+    if (window.electronAPI?.db?.backup) return await window.electronAPI.db.backup();
+    return { success: false, path: '', error: 'API missing' };
   }
 
+  // --- External DB Mapping Methods ---
+
   static async selectBackupFolder(): Promise<string | null> {
-    if (!window.electronAPI?.selectBackupFolder) {
-      alert("Update Required: Please restart the app to enable SSD Backup.");
-      return null;
+    if (window.electronAPI?.db?.selectBackupFolder) {
+      return await window.electronAPI.db.selectBackupFolder();
     }
-    return await window.electronAPI.selectBackupFolder();
+    return null;
   }
 
   static async backupCustom(path: string): Promise<{ success: boolean; path: string; error?: string }> {
-    if (window.electronAPI?.backupCustom) return await window.electronAPI.backupCustom(path);
+    if (window.electronAPI?.db?.backupCustom) return await window.electronAPI.db.backupCustom(path);
     return { success: false, path: '', error: 'API missing' };
   }
 
   static async selectRestoreFile(): Promise<string | null> {
-    if (window.electronAPI?.selectRestoreFile) return await window.electronAPI.selectRestoreFile();
+    if (window.electronAPI?.db?.selectRestoreFile) return await window.electronAPI.db.selectRestoreFile();
     return null;
   }
 
   static async restoreDatabase(path: string): Promise<{ success: boolean; error?: string }> {
-    if (window.electronAPI?.restore) return await window.electronAPI.restore(path);
+    if (window.electronAPI?.db?.restoreDatabase) return await window.electronAPI.db.restoreDatabase(path);
     return { success: false, error: 'API missing' };
   }
 
+  static async optimizeDatabase(): Promise<{ success: boolean; error?: string }> {
+    if (window.electronAPI?.db?.optimizeDatabase) return await window.electronAPI.db.optimizeDatabase();
+    return { success: false, error: 'Optimization API missing' };
+  }
+
   static async switchDatabase(type: 'INTERNAL' | 'EXTERNAL', path?: string): Promise<{ success: boolean; path?: string; error?: string }> {
-    if (window.electronAPI?.initDatabase) return await window.electronAPI.initDatabase({ type, path });
+    if (window.electronAPI?.db?.initDatabase) return await window.electronAPI.db.initDatabase({ type, path });
     return { success: false, error: 'Database API missing' };
   }
 
   static async selectExternalDrive(): Promise<string | null> {
-    if (window.electronAPI?.selectExternalDrive) return await window.electronAPI.selectExternalDrive();
+    if (window.electronAPI?.db?.selectExternalDrive) return await window.electronAPI.db.selectExternalDrive();
     return null;
   }
 
