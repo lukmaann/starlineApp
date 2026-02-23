@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import Navigation from './components/Navigation';
 import Scanner from './pages/Scanner';
-import SessionLock from './components/SessionLock';
 import Dealers from './pages/Dealers';
 import Settlements from './pages/Settlements';
 import Controls from './pages/Controls';
@@ -13,8 +12,7 @@ import DatabaseManagement from './pages/DatabaseManagement';
 import Batches from './pages/Batches';
 import GlobalAnalytics from './components/GlobalAnalytics';
 import { Database } from './db';
-import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi } from 'lucide-react';
-import UnlockPage from './pages/UnlockPage';
+import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi, LogOut, KeyRound, Loader2 } from 'lucide-react';
 import { Toaster } from './components/ui/sonner';
 import { Dialog, DialogContent } from './components/ui/dialog';
 import { toast } from "sonner";
@@ -47,7 +45,11 @@ const App: React.FC = () => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isDbReady, setIsDbReady] = useState(false);
   const [sessionCountdown, setSessionCountdown] = useState<number | null>(null);
-  const [manualLockCountdown, setManualLockCountdown] = useState<number | null>(null);
+  const [showKeepAliveAuth, setShowKeepAliveAuth] = useState(false);
+  const [keepAlivePassword, setKeepAlivePassword] = useState('');
+  const [keepAliveError, setKeepAliveError] = useState('');
+  const [isKeepAliveLoading, setIsKeepAliveLoading] = useState(false);
+
   const isAdmin = user?.role === 'ADMIN';
 
   const [showDbNotification, setShowDbNotification] = useState(false);
@@ -126,33 +128,41 @@ const App: React.FC = () => {
       }
     }, 1000);
 
-    // Manual lock: 3-second countdown then lock
-    let manualLockInterval: ReturnType<typeof setInterval> | null = null;
-    const handleManualLockRequest = () => {
-      setManualLockCountdown(3);
-      let remaining = 3;
-      manualLockInterval = setInterval(() => {
-        remaining -= 1;
-        setManualLockCountdown(remaining);
-        if (remaining <= 0) {
-          clearInterval(manualLockInterval!);
-          AuthSession.clearSession();
-          window.location.reload();
-        }
-      }, 1000);
-    };
-    window.addEventListener('request-manual-lock' as any, handleManualLockRequest);
-
     return () => {
       window.removeEventListener('app-notify' as any, handleNotify);
-      window.removeEventListener('request-manual-lock' as any, handleManualLockRequest);
       clearInterval(countdownTick);
-      if (manualLockInterval) clearInterval(manualLockInterval);
     };
   }, []);
 
   const handleLogoutClick = () => {
-    // logout is now done via session lock only
+    setShowLogoutConfirm(true);
+  };
+
+  const handleKeepAliveAttempt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsKeepAliveLoading(true);
+    setKeepAliveError('');
+
+    try {
+      const adminPass = await Database.getConfig('starline_admin_pass') || 'starline@2025';
+
+      if (keepAlivePassword === adminPass) {
+        AuthSession.refreshSession();
+        setSessionCountdown(null);
+        setKeepAlivePassword('');
+        setShowKeepAliveAuth(false);
+        toast.success('Session Extended');
+      } else {
+        setKeepAliveError('Incorrect Password');
+        setKeepAlivePassword('');
+        toast.error('Incorrect Password');
+      }
+    } catch (err) {
+      setKeepAliveError('Error');
+      toast.error('Verification Failed');
+    } finally {
+      setIsKeepAliveLoading(false);
+    }
   };
 
   const renderContent = () => {
@@ -206,14 +216,6 @@ const App: React.FC = () => {
 
       case 'database-management':
         return isAdmin ? <DatabaseManagement /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
-
-      case 'session-lock':
-        return (
-          <UnlockPage
-            onUnlock={() => navigate(history[historyIndex - 1] || 'scanner')}
-            onBack={goBack}
-          />
-        );
 
       case 'backup':
         return isAdmin ? <Backup /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
@@ -357,40 +359,36 @@ const App: React.FC = () => {
               </div>
             )}
             <div className="w-px h-6 bg-slate-200 mx-1" />
-            <SessionLock onUnlockRequest={() => navigate('session-lock')} />
+            <button
+              onClick={handleLogoutClick}
+              className="flex items-center justify-center p-2 rounded-full transition-all active:scale-95 text-rose-600 hover:bg-rose-50 active:bg-rose-100"
+              title="Logout"
+            >
+              <LogOut size={20} strokeWidth={2} />
+            </button>
           </div>
         </header>
 
         <main className="flex-1 overflow-y-auto custom-scrollbar">
           {/* Session expiry countdown banner */}
-          {(sessionCountdown !== null || manualLockCountdown !== null) && (
-            <div className="sticky top-0 z-50 flex items-center justify-between gap-3 bg-amber-50 border-b border-amber-200 px-8 py-2 animate-in slide-in-from-top-2 duration-300">
-              <div className="flex items-center gap-2 text-amber-700">
+          {sessionCountdown !== null && (
+            <div className="sticky top-0 z-50 flex items-center justify-between gap-3 bg-rose-50 border-b border-rose-200 px-8 py-2 animate-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center gap-2 text-rose-700">
                 <Clock size={14} className="shrink-0 animate-pulse" />
-                {manualLockCountdown !== null ? (
-                  <span className="text-xs font-bold uppercase tracking-wider">
-                    Locking session in{' '}
-                    <span className="font-black tabular-nums">{manualLockCountdown}s</span>
-                    {' '}— screen will lock
+                <span className="text-xs font-bold uppercase tracking-wider">
+                  Session expiring in{' '}
+                  <span className="font-black tabular-nums">
+                    {String(Math.floor(sessionCountdown / 60)).padStart(2, '0')}:{String(sessionCountdown % 60).padStart(2, '0')}
                   </span>
-                ) : (
-                  <span className="text-xs font-bold uppercase tracking-wider">
-                    Session locking in{' '}
-                    <span className="font-black tabular-nums">
-                      {String(Math.floor(sessionCountdown! / 60)).padStart(2, '0')}:{String(sessionCountdown! % 60).padStart(2, '0')}
-                    </span>
-                    {' '}— activity will require re-login
-                  </span>
-                )}
+                  {' '}— you will be logged out automatically
+                </span>
               </div>
-              {manualLockCountdown === null && (
-                <button
-                  onClick={() => navigate('session-lock')}
-                  className="px-3 py-1 bg-amber-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-colors active:scale-95 shrink-0"
-                >
-                  Lock Now
-                </button>
-              )}
+              <button
+                onClick={() => setShowKeepAliveAuth(true)}
+                className="px-3 py-1 bg-rose-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 transition-colors active:scale-95 shrink-0"
+              >
+                Keep Session Alive
+              </button>
             </div>
           )}
           <div className="p-8 max-w-[1600px] mx-auto">
@@ -400,6 +398,93 @@ const App: React.FC = () => {
       </div >
 
       {showHelp && <ShortcutsModal onClose={() => setShowHelp(false)} />}
+
+      <Dialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
+        <DialogContent className="sm:max-w-md p-6 border-0 bg-white rounded-2xl shadow-xl">
+          <div className="flex flex-col items-center text-center space-y-4">
+            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-600 mb-2 shadow-sm">
+              <LogOut size={32} />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">End Session</h2>
+            <p className="text-sm text-slate-500 max-w-[280px]">
+              Are you sure you want to log out? You will need to re-enter your credentials to access the system.
+            </p>
+            <div className="flex gap-3 w-full mt-6 pt-2">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors tracking-wide"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  AuthSession.clearSession();
+                  window.location.reload();
+                }}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-rose-600 text-white hover:bg-rose-700 shadow-md shadow-rose-200 transition-colors tracking-wide"
+              >
+                Log Out
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showKeepAliveAuth} onOpenChange={(open) => {
+        setShowKeepAliveAuth(open);
+        if (!open) {
+          setKeepAlivePassword('');
+          setKeepAliveError('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-md p-6 border-0 bg-white rounded-2xl shadow-xl">
+          <div className="flex flex-col items-center text-center space-y-4">
+            <div className="w-16 h-16 bg-blue-50 border border-blue-100 rounded-full flex items-center justify-center mb-2 shadow-sm">
+              <KeyRound size={32} className="text-blue-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Verify Access</h2>
+            <p className="text-sm text-slate-500 max-w-[280px]">
+              Please enter the administrator access key to extend your session.
+            </p>
+
+            <form onSubmit={handleKeepAliveAttempt} className="w-full mt-4 space-y-4">
+              <div className="relative group text-left">
+                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+                <input
+                  type="password"
+                  autoFocus
+                  placeholder="Access Key"
+                  required
+                  className={`w-full pl-12 pr-4 py-3.5 bg-white border rounded-xl text-sm font-bold outline-none transition-all placeholder:text-slate-300
+                            ${keepAliveError
+                      ? 'border-rose-300 bg-rose-50 text-rose-600 focus:border-rose-500 shadow-sm shadow-rose-100'
+                      : 'border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5'
+                    }`}
+                  value={keepAlivePassword}
+                  onChange={e => { setKeepAlivePassword(e.target.value); setKeepAliveError(''); }}
+                />
+              </div>
+
+              <div className="flex gap-3 w-full pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowKeepAliveAuth(false); setKeepAlivePassword(''); setKeepAliveError(''); }}
+                  className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors tracking-wide"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isKeepAliveLoading || !keepAlivePassword}
+                  className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-200 transition-colors tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isKeepAliveLoading ? <Loader2 size={16} className="animate-spin text-white/50" /> : 'Verify'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showDbNotification} onOpenChange={setShowDbNotification}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-0 bg-transparent shadow-none [&>button]:hidden">
