@@ -948,7 +948,7 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
                         onClick={async () => {
                           setIsActionLoading(true);
                           try {
-                            const result = await window.electronAPI?.backup();
+                            const result = await window.electronAPI?.db?.backup();
                             if (result?.success) {
                               setHasBackedUp(true);
                               notify(`Backup saved to: ${result.path}`, 'success');

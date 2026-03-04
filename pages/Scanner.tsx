@@ -19,7 +19,6 @@ import { StatusDisplay } from '../components/StatusDisplay';
 import { Sheet, SheetContent, SheetTrigger } from '../components/ui/sheet';
 import BatteryReportSheet from '../components/BatteryReportSheet';
 import BatteryEdit from '../components/BatteryEdit';
-import SessionLock from '../components/SessionLock';
 import { BatteryStatus, type Battery, type Dealer, WarrantyCardStatus, type Sale, Replacement, BatteryModel, WarrantyStatus } from '../types';
 import { AuthSession } from '../utils/AuthSession';
 import BatteryPrintTemplate from '../components/BatteryPrintTemplate';
