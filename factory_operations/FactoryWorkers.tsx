@@ -192,8 +192,13 @@ export default function FactoryWorkers({ userRole }: FactoryWorkersProps) {
                 });
                 toast.success(`Salary marked as paid and logged in Expenses.`);
             } else {
+                // Reset the salary flag
                 await Database.setFactoryWorkerSalaryPaid(w.id, false);
-                toast.success(`Salary status reset.`);
+                // Also remove the corresponding expense entry for this month
+                const now = new Date();
+                const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                await Database.deleteWorkerSalaryExpenseForMonth(w.enrollment_no, yearMonth);
+                toast.success(`Salary marked as unpaid and removed from Expenses.`);
             }
             // `load` updates `workers` which triggers the sync `useEffect` above to update `selectedWorker`
             await load(search);

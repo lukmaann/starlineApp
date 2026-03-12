@@ -2235,6 +2235,20 @@ export class Database {
     return id;
   }
 
+  /**
+   * Deletes any Salaries expense for a specific worker in the given month (YYYY-MM).
+   * Matches by enrollment_no contained in the description and date prefix.
+   */
+  static async deleteWorkerSalaryExpenseForMonth(enrollmentNo: string, yearMonth: string): Promise<void> {
+    await this.run(
+      `DELETE FROM expenses
+       WHERE category = 'Salaries'
+         AND description LIKE ?
+         AND strftime('%Y-%m', date) = ?`,
+      [`%(${enrollmentNo})%`, yearMonth]
+    );
+  }
+
   static async getExpenses(limit: number = 100): Promise<Expense[]> {
     return await this.query<Expense>('SELECT * FROM expenses ORDER BY date DESC, id DESC LIMIT ?', [limit]);
   }
