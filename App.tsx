@@ -10,11 +10,12 @@ import Backup from './pages/Backup';
 import DatabaseSelector from './pages/DatabaseSelector';
 import DatabaseManagement from './pages/DatabaseManagement';
 import Batches from './pages/Batches';
+import ManufacturingHub from './factory_operations/ManufacturingHub';
 import GlobalAnalytics from './components/GlobalAnalytics';
 import { Database } from './db';
 import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi, LogOut, KeyRound, Loader2 } from 'lucide-react';
 import { Toaster } from './components/ui/sonner';
-import { Dialog, DialogContent } from './components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from './components/ui/dialog';
 import { toast } from "sonner";
 import { useNavigationHistory } from './hooks/useNavigationHistory';
 import NavigationControls from './components/NavigationControls';
@@ -214,6 +215,9 @@ const App: React.FC = () => {
           }}
         />;
 
+      case 'manufacturing':
+        return isAdmin || user?.role === 'FACTORY_WORKER' ? <ManufacturingHub active={activeTab === 'manufacturing'} userRole={user?.role} /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
+
       case 'database-management':
         return isAdmin ? <DatabaseManagement /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
 
@@ -405,7 +409,7 @@ const App: React.FC = () => {
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-600 mb-2 shadow-sm">
               <LogOut size={32} />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">End Session</h2>
+            <DialogTitle className="text-xl font-bold text-slate-900 tracking-tight">End Session</DialogTitle>
             <p className="text-sm text-slate-500 max-w-[280px]">
               Are you sure you want to log out? You will need to re-enter your credentials to access the system.
             </p>
@@ -442,7 +446,7 @@ const App: React.FC = () => {
             <div className="w-16 h-16 bg-blue-50 border border-blue-100 rounded-full flex items-center justify-center mb-2 shadow-sm">
               <KeyRound size={32} className="text-blue-600" />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Verify Access</h2>
+            <DialogTitle className="text-xl font-bold text-slate-900 tracking-tight">Verify Access</DialogTitle>
             <p className="text-sm text-slate-500 max-w-[280px]">
               Please enter the administrator access key to extend your session.
             </p>
@@ -511,9 +515,9 @@ const App: React.FC = () => {
                 <DatabaseIcon size={24} className={dbNotificationData?.isSSD ? "text-purple-400" : "text-blue-400"} />
               </div>
 
-              <h2 className="text-xl font-black text-slate-900 tracking-tight text-center">
+              <DialogTitle className="text-xl font-black text-slate-900 tracking-tight text-center">
                 Database Connected
-              </h2>
+              </DialogTitle>
 
               <div className="mt-6 w-full space-y-4">
                 <div className={`p-4 rounded-xl border flex flex-col items-center justify-center gap-2 ${dbNotificationData?.isSSD
@@ -552,4 +556,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-

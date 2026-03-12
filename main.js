@@ -162,6 +162,68 @@ function initDatabase(config) {
         FOREIGN KEY(batchId) REFERENCES staged_batches(id)
       );
 
+      /* MANUFACTURING & INVENTORY ERP TABLES */
+      CREATE TABLE IF NOT EXISTS raw_materials (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        unit TEXT,
+        alert_threshold REAL
+      );
+
+      CREATE TABLE IF NOT EXISTS material_purchases (
+        id TEXT PRIMARY KEY,
+        material_id TEXT,
+        date TEXT,
+        quantity REAL,
+        unit_price REAL,
+        transport_cost REAL,
+        total_cost REAL,
+        supplier_name TEXT,
+        FOREIGN KEY(material_id) REFERENCES raw_materials(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS production_logs (
+        id TEXT PRIMARY KEY,
+        date TEXT,
+        battery_model TEXT,
+        quantity_produced INTEGER,
+        labour_cost_total REAL
+      );
+
+      CREATE TABLE IF NOT EXISTS expenses (
+        id TEXT PRIMARY KEY,
+        date TEXT,
+        category TEXT,
+        amount REAL,
+        description TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS factory_workers (
+        id TEXT PRIMARY KEY,
+        enrollment_no TEXT UNIQUE,
+        full_name TEXT,
+        gender TEXT,
+        phone TEXT,
+        join_date TEXT,
+        date_of_birth TEXT,
+        base_salary REAL,
+        emergency_contact TEXT,
+        status TEXT DEFAULT 'ACTIVE',
+        salary_paid_month TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS factory_worker_salaries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        worker_id TEXT,
+        amount REAL,
+        payment_date TEXT,
+        type TEXT DEFAULT 'BASE',
+        notes TEXT,
+        FOREIGN KEY(worker_id) REFERENCES factory_workers(id)
+      );
+
       /* Seed Default Admin if no users exist */
       INSERT OR IGNORE INTO users (id, username, password, role) 
       VALUES ('admin-001', 'admin', 'starline@2025', 'ADMIN');
@@ -185,8 +247,50 @@ function initDatabase(config) {
       
       /* ✅ Bug #2: Prevent duplicate battery serial numbers */
       CREATE UNIQUE INDEX IF NOT EXISTS idx_batteries_id_unique ON batteries(id);
+
+      /* ERP Indexes */
+      CREATE INDEX IF NOT EXISTS idx_material_purchases_date ON material_purchases(date);
+      CREATE INDEX IF NOT EXISTS idx_production_logs_date ON production_logs(date);
+      CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
+      CREATE INDEX IF NOT EXISTS idx_factory_workers_enrollment ON factory_workers(enrollment_no);
+      CREATE INDEX IF NOT EXISTS idx_factory_workers_name ON factory_workers(full_name);
+      CREATE INDEX IF NOT EXISTS idx_factory_workers_salary_month ON factory_workers(salary_paid_month);
+      CREATE INDEX IF NOT EXISTS idx_factory_worker_salaries_worker ON factory_worker_salaries(worker_id);
     `;
     db.exec(schema);
+
+    // Migration: Add date_of_birth column to factory_workers
+    try {
+      db.exec(`ALTER TABLE factory_workers ADD COLUMN date_of_birth TEXT`);
+      console.log('Migration: Added date_of_birth column to factory_workers table');
+    } catch (err) {
+      if (!err.message.includes('duplicate column')) {
+        console.error('Migration warning for factory_workers date_of_birth:', err.message);
+      }
+    }
+
+    // Migration: Remove legacy code column from raw_materials (if present)
+    try {
+      const rawMaterialCols = db.prepare(`PRAGMA table_info(raw_materials)`).all();
+      const hasCodeCol = rawMaterialCols.some((c) => c.name === 'code');
+      if (hasCodeCol) {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS raw_materials_new (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            unit TEXT,
+            alert_threshold REAL
+          );
+          INSERT INTO raw_materials_new (id, name, unit, alert_threshold)
+          SELECT id, name, unit, alert_threshold FROM raw_materials;
+          DROP TABLE raw_materials;
+          ALTER TABLE raw_materials_new RENAME TO raw_materials;
+        `);
+        console.log('Migration: Removed code column from raw_materials');
+      }
+    } catch (err) {
+      console.error('Migration warning for raw_materials code removal:', err.message);
+    }
 
     // Migration: Create model_prices table if it doesn't exist
     try {

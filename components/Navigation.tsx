@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Battery, Users, Zap, ChevronLeft, ChevronRight, Barcode, ShieldCheck, Sliders, Search, History, UserCircle, Scale, BarChart3, Layers } from 'lucide-react';
+import { Battery, Users, Zap, ChevronLeft, ChevronRight, Barcode, ShieldCheck, Sliders, Search, History, UserCircle, Scale, BarChart3, Layers, Calculator, Factory } from 'lucide-react';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { Database } from '../db';
 
@@ -114,6 +114,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab, userRo
     { id: 'dealers', label: 'Dealers', icon: <Users size={17} strokeWidth={activeTab === 'dealers' ? 2 : 1.75} />, roles: ['ADMIN'] },
     { id: 'settlements', label: 'Settlements', icon: <Scale size={17} strokeWidth={activeTab === 'settlements' ? 2 : 1.75} />, roles: ['ADMIN'], badge: counts.settlements },
     { id: 'batches', label: 'Batches', icon: <Layers size={17} strokeWidth={activeTab === 'batches' ? 2 : 1.75} />, roles: ['ADMIN'], badge: counts.batches },
+    { id: 'manufacturing', label: 'Factory Operations', icon: <Factory size={17} strokeWidth={activeTab === 'manufacturing' ? 2 : 1.75} />, roles: ['ADMIN', 'FACTORY_WORKER'] },
     { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={17} strokeWidth={activeTab === 'analytics' ? 2 : 1.75} />, roles: ['ADMIN'] },
   ];
 

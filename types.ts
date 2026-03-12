@@ -171,3 +171,65 @@ export interface StagedBatchItem {
   batchId: string;
   serialNumber: string;
 }
+
+// --- MANUFACTURING & INVENTORY (ERP) ---
+
+export interface RawMaterial {
+  id: string;
+  name: string;
+  unit: string;
+  alert_threshold: number;
+}
+
+export interface MaterialPurchase {
+  id: string;
+  material_id: string;
+  date: string;
+  quantity: number;
+  unit_price: number;
+  transport_cost: number;
+  total_cost: number;
+  supplier_name?: string;
+}
+
+export interface ProductionLog {
+  id: string;
+  date: string;
+  battery_model: string;
+  quantity_produced: number;
+  labour_cost_total: number;
+}
+
+export interface Expense {
+  id: string;
+  date: string;
+  category: string;
+  amount: number;
+  description: string;
+}
+
+export interface FactoryWorker {
+  id: string;
+  enrollment_no: string;
+  full_name: string;
+  gender?: string;
+  phone?: string;
+  join_date?: string;
+  date_of_birth?: string; // Phase 2: Track age
+  base_salary?: number;
+  emergency_contact?: string;
+  status?: 'ACTIVE' | 'INACTIVE';
+  salary_paid_month?: string | null;
+  passkey_credential?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface FactoryWorkerSalaryLog {
+  id: number;
+  worker_id: string;
+  amount: number;
+  payment_date: string;
+  type: 'BASE' | 'INCREMENT' | 'BONUS' | 'DEDUCTION' | 'OTHER';
+  notes?: string;
+}
