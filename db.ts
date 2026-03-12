@@ -60,6 +60,14 @@ export class Database {
   static async init(): Promise<void> {
     console.log('Database Client Initialized [Mode: Enterprise IPC]');
     try {
+      // Ensure a unique index exists on material names to prevent duplicates at the DB level
+      await this.run(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_raw_materials_name_unique ON raw_materials (LOWER(name))`
+      );
+    } catch (e) {
+      console.warn('Could not create unique index on raw_materials.name:', e);
+    }
+    try {
       await this.seedDefaultRawMaterials();
     } catch (e) {
       console.warn('Silent: Database not fully migrated or ready for raw materials yet.');
@@ -90,7 +98,7 @@ export class Database {
       const key = this.normalizeMaterialName(rm.name);
       if (latestByName.has(key)) continue;
       await this.run(
-        `INSERT INTO raw_materials (id, name, unit, alert_threshold) VALUES (?, ?, ?, ?)`,
+        `INSERT OR IGNORE INTO raw_materials (id, name, unit, alert_threshold) VALUES (?, ?, ?, ?)`,
         [`RM-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, rm.name, rm.unit, rm.alert_threshold]
       );
     }
