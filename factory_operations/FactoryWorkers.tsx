@@ -198,19 +198,6 @@ export default function FactoryWorkers({ userRole }: FactoryWorkersProps) {
         }
     };
 
-    const removeWorker = async (w: WorkerRow) => {
-        if (!isAdmin) return;
-        const yes = window.confirm(`Delete worker ${w.full_name}?`);
-        if (!yes) return;
-        try {
-            await Database.deleteFactoryWorker(w.id);
-            toast.success('Worker deleted.');
-            await load(search);
-        } catch {
-            toast.error('Could not delete worker.');
-        }
-    };
-
     const initialWizardData: FactoryWorkerFormData | null = editing ? {
         enrollment_no: editing.enrollment_no || generatedEnrollment,
         full_name: editing.full_name || '',
@@ -384,7 +371,6 @@ export default function FactoryWorkers({ userRole }: FactoryWorkersProps) {
                                             <button onClick={() => toggleSalaryPaid(selectedWorker, true)} className="flex-1 px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center gap-2 transition-colors"><BadgeCheck size={16} /> Mark Paid</button>
                                         )}
                                         <button onClick={() => { openEdit(selectedWorker); setSelectedWorker(null); }} className="px-5 py-3 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors"><Pencil size={14} /> Edit</button>
-                                        <button onClick={() => { removeWorker(selectedWorker); setSelectedWorker(null); }} className="px-5 py-3 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors"><Trash2 size={14} /> Delete</button>
                                     </div>
                                 )}
 
