@@ -3,7 +3,7 @@ import { Database } from '../db';
 import { User, UserRole } from '../types';
 import { UserPlus, Trash2, Edit2, Shield, User as UserIcon, Loader2, X, CheckCircle2, Search, RefreshCw, Layers } from 'lucide-react';
 import { toast } from 'sonner';
-import { UserWizard } from './UserWizard';
+import { AssignRoleModal } from './AssignRoleModal';
 
 const UserManagement: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
@@ -151,7 +151,7 @@ const UserManagement: React.FC = () => {
                             className="flex items-center gap-2 px-6 py-3 ml-2 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-sm active:scale-95"
                         >
                             <UserPlus size={16} />
-                            <span>Add User</span>
+                            <span>Assign Role</span>
                         </button>
                     )}
                 </div>
@@ -159,7 +159,7 @@ const UserManagement: React.FC = () => {
 
             {showAddForm ? (
                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                    <UserWizard
+                    <AssignRoleModal
                         onCancel={() => {
                             setShowAddForm(false);
                             setEditingUser(null);
@@ -174,14 +174,16 @@ const UserManagement: React.FC = () => {
                                         role: data.role,
                                         password: data.password || undefined
                                     });
-                                    toast.success('User updated successfully');
+                                    toast.success('Credentials updated successfully');
                                 } else {
                                     await Database.addUser({
                                         username: data.username,
-                                        password: data.password || '', // Added default handling here, UI enforces requirements
+                                        password: data.password || '',
                                         role: data.role
+                                        // TODO: We could link workerId explicitly in the `users` table
+                                        // schema in the future, but for now they log in via this username/pass.
                                     });
-                                    toast.success('User created successfully');
+                                    toast.success('Role assigned & credentials created');
                                 }
                                 setShowAddForm(false);
                                 setEditingUser(null);
@@ -192,8 +194,7 @@ const UserManagement: React.FC = () => {
                                 setIsActionLoading(false);
                             }
                         }}
-                        users={users}
-                        initialData={editingUser}
+                        existingUserToEdit={editingUser}
                     />
                 </div>
             ) : (
