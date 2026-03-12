@@ -48,11 +48,8 @@ const ManufacturingHub: React.FC<ManufacturingHubProps> = ({ active, onNavigateT
 
     return (
         <div className="flex flex-col h-full animate-in fade-in duration-300 w-full">
-            <div className="px-8 pt-8 pb-4 border-b border-slate-200 bg-white shrink-0">
-                <h1 className="text-3xl font-black text-slate-800 tracking-tight">Factory Operations</h1>
-                <p className="text-sm font-medium text-slate-500 mt-1">Clean workflow for materials, stock, production, expenses, and workers.</p>
-
-                <div className="flex flex-wrap gap-6 mt-6">
+            <div className="px-3 pt-0 pb-0 border-b border-slate-200 bg-white shrink-0">
+                <div className="flex flex-wrap gap-6 mt-0">
                     {[
                         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
                         { id: 'purchases', label: 'Purchases', icon: ShoppingCart },
