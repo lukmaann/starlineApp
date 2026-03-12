@@ -83,7 +83,7 @@ export const AssignRoleModal: React.FC<AssignRoleModalProps> = ({ onCancel, onCo
                                     // Auto-fill username if empty and worker selected
                                     if (wid && !formData.username) {
                                         const w = workers.find(x => x.id === wid);
-                                        if (w) setFormData(prev => ({ ...prev, workerId: wid, username: w.enrollment_no }));
+                                        if (w) setFormData(prev => ({ ...prev, workerId: wid, username: w.full_name.toLowerCase().replace(/\s+/g, '') }));
                                     }
                                 }}
                             >
@@ -105,7 +105,7 @@ export const AssignRoleModal: React.FC<AssignRoleModalProps> = ({ onCancel, onCo
                             <input
                                 required
                                 className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 outline-none focus:border-indigo-500 focus:bg-white transition-all uppercase"
-                                placeholder="e.g. SL-1001"
+                                placeholder="e.g. johnsmith"
                                 value={formData.username}
                                 onChange={e => setFormData({ ...formData, username: e.target.value.replace(/\s+/g, '') })}
                             />
