@@ -6,7 +6,8 @@ import RawMaterials from './RawMaterials';
 import Purchases from './Purchases';
 import Expenses from './Expenses';
 import FactoryWorkers from './FactoryWorkers';
-import { LayoutDashboard, ShoppingCart, Wallet, Users } from 'lucide-react';
+import Production from './Production';
+import { LayoutDashboard, ShoppingCart, Wallet, Users, Factory } from 'lucide-react';
 
 interface ManufacturingHubProps {
     active: boolean;
@@ -15,7 +16,7 @@ interface ManufacturingHubProps {
 }
 
 const ManufacturingHub: React.FC<ManufacturingHubProps> = ({ active, onNavigateTo, userRole }) => {
-    type ManufacturingTab = 'dashboard' | 'purchases' | 'expenses' | 'workers';
+    type ManufacturingTab = 'dashboard' | 'purchases' | 'expenses' | 'workers' | 'production';
     const [activeTab, setActiveTab] = useState<ManufacturingTab>('dashboard');
 
     if (!active) return null;
@@ -52,6 +53,7 @@ const ManufacturingHub: React.FC<ManufacturingHubProps> = ({ active, onNavigateT
                 <div className="flex flex-wrap gap-6 mt-0">
                     {[
                         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+                        { id: 'production', label: 'Production', icon: Factory },
                         { id: 'purchases', label: 'Purchases', icon: ShoppingCart },
                         { id: 'expenses', label: 'Expenses', icon: Wallet },
                         { id: 'workers', label: 'Factory Workers', icon: Users }
@@ -77,6 +79,7 @@ const ManufacturingHub: React.FC<ManufacturingHubProps> = ({ active, onNavigateT
                     if (tab === 'purchases' || tab === 'expenses' || tab === 'workers') setActiveTab(tab);
                     else onNavigateTo?.(tab);
                 }} />}
+                {activeTab === 'production' && <Production />}
                 {activeTab === 'purchases' && <Purchases onNavigate={(tab) => {
                     if (tab === 'dashboard' || tab === 'purchases' || tab === 'expenses' || tab === 'workers') {
                         setActiveTab(tab);
