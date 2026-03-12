@@ -25,6 +25,10 @@ interface DashStats {
     thisMonthExpenses: number;
     thisMonthPurchaseSpend: number;
     thisMonthBatteriesDelivered: number;
+    positiveGridTotal: number;
+    negativeGridTotal: number;
+    positiveGridAvgPrice: number;
+    negativeGridAvgPrice: number;
     productionByModel: { model: string; units: number }[];
     expenseByCategory: { category: string; total: number }[];
     last30DayAvgPrices: { name: string; unit: string; avg_cost: number }[];
@@ -256,6 +260,27 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest relative z-10">Total Dispatched (MTD)</p>
                             <p className="text-4xl font-black text-slate-900 mt-3 relative z-10">{stats?.thisMonthBatteriesDelivered?.toLocaleString('en-IN') ?? 0}</p>
                             <p className="text-xs text-slate-400 font-bold mt-1 relative z-10">Batteries shipped to external outlets</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-white border border-rose-100 rounded-3xl p-6 shadow-sm">
+                            <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Positive Grid Output</p>
+                            <p className="text-4xl font-black text-slate-900 mt-3">{stats?.positiveGridTotal?.toLocaleString('en-IN') ?? 0}</p>
+                            <p className="text-xs text-slate-400 font-bold mt-1">Total positive grids produced</p>
+                            <div className="mt-5 rounded-2xl bg-rose-50 border border-rose-100 px-4 py-3">
+                                <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Avg Single Positive Grid Price</p>
+                                <p className="text-xl font-black text-rose-700 mt-1">{fmtINR(stats?.positiveGridAvgPrice ?? 0)}</p>
+                            </div>
+                        </div>
+                        <div className="bg-white border border-blue-100 rounded-3xl p-6 shadow-sm">
+                            <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Negative Grid Output</p>
+                            <p className="text-4xl font-black text-slate-900 mt-3">{stats?.negativeGridTotal?.toLocaleString('en-IN') ?? 0}</p>
+                            <p className="text-xs text-slate-400 font-bold mt-1">Total negative grids produced</p>
+                            <div className="mt-5 rounded-2xl bg-blue-50 border border-blue-100 px-4 py-3">
+                                <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Avg Single Negative Grid Price</p>
+                                <p className="text-xl font-black text-blue-700 mt-1">{fmtINR(stats?.negativeGridAvgPrice ?? 0)}</p>
+                            </div>
                         </div>
                     </div>
                 </>

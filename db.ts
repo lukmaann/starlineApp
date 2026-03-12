@@ -2211,12 +2211,64 @@ export class Database {
     return await this.query<MaterialPurchase>('SELECT * FROM material_purchases ORDER BY date DESC, id DESC LIMIT ?', [limit]);
   }
 
+  static async getAverageMaterialUnitPrice(materialId: string): Promise<number | null> {
+    if (!materialId?.trim()) return null;
+    const result = await this.query<{ avg_price: number | null }>(
+      'SELECT AVG(unit_price) as avg_price FROM material_purchases WHERE material_id = ?',
+      [materialId]
+    );
+    const avgPrice = result[0]?.avg_price;
+    return Number.isFinite(avgPrice as number) ? Number(avgPrice) : null;
+  }
+
+  static async getAverageMaterialCostSnapshot(materialName: string): Promise<{
+    material: RawMaterial | null;
+    avg_unit_price: number | null;
+    avg_transport_cost: number | null;
+  }> {
+    const normalizedName = this.normalizeMaterialName(materialName);
+    await this.addMissingMaterialByName(materialName);
+    const materials = await this.getRawMaterials();
+    const material = materials.find((item) => this.normalizeMaterialName(item.name) === normalizedName) ?? null;
+    if (!material) return { material: null, avg_unit_price: null, avg_transport_cost: null };
+
+    const result = await this.query<{ avg_unit_price: number | null; avg_transport_cost: number | null }>(
+      `SELECT AVG(unit_price) as avg_unit_price, AVG(transport_cost) as avg_transport_cost
+       FROM material_purchases
+       WHERE material_id = ?`,
+      [material.id]
+    );
+    const row = result[0];
+    return {
+      material,
+      avg_unit_price: Number.isFinite(row?.avg_unit_price as number) ? Number(row?.avg_unit_price) : null,
+      avg_transport_cost: Number.isFinite(row?.avg_transport_cost as number) ? Number(row?.avg_transport_cost) : null,
+    };
+  }
+
   static async addProductionLog(log: Omit<ProductionLog, 'id'>): Promise<string> {
     const id = `PROD-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
     await this.run(
-      `INSERT INTO production_logs (id, date, battery_model, quantity_produced, labour_cost_total) 
-       VALUES (?, ?, ?, ?, ?)`,
-      [id, log.date, log.battery_model, log.quantity_produced, log.labour_cost_total]
+      `INSERT INTO production_logs (
+        id, date, stage, stage_detail, battery_model, quantity_produced, labour_cost_total,
+        material_name, material_quantity, unit_weight, average_unit_price, price_per_grid, total_process_cost, process_data
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        log.date,
+        log.stage,
+        log.stage_detail || null,
+        log.battery_model,
+        log.quantity_produced,
+        log.labour_cost_total,
+        log.material_name || null,
+        log.material_quantity ?? null,
+        log.unit_weight ?? null,
+        log.average_unit_price ?? null,
+        log.price_per_grid ?? null,
+        log.total_process_cost ?? null,
+        log.process_data ?? null,
+      ]
     );
     return id;
   }
@@ -2483,6 +2535,10 @@ export class Database {
     thisMonthExpenses: number;
     thisMonthPurchaseSpend: number;
     thisMonthBatteriesDelivered: number;
+    positiveGridTotal: number;
+    negativeGridTotal: number;
+    positiveGridAvgPrice: number;
+    negativeGridAvgPrice: number;
     productionByModel: { model: string; units: number }[];
     expenseByCategory: { category: string; total: number }[];
     last30DayAvgPrices: { name: string; unit: string; avg_cost: number }[];
@@ -2494,7 +2550,7 @@ export class Database {
 
     const [
       prodMonth, expMonth, purMonth, deliveredMonth,
-      byModel, byCategory, last30Avg
+      byModel, byCategory, last30Avg, castingTotals
     ] = await Promise.all([
       this.query<{ total: number }>(
         `SELECT COALESCE(SUM(quantity_produced), 0) as total FROM production_logs WHERE strftime('%Y-%m', date) = ?`, [monthStr]),
@@ -2519,14 +2575,30 @@ export class Database {
          JOIN raw_materials rm ON mp.material_id = rm.id
          WHERE mp.date >= ?
          GROUP BY rm.id ORDER BY avg_cost DESC`, [last30]
-      ).catch(() => [] as { name: string; unit: string; avg_cost: number }[])
+      ).catch(() => [] as { name: string; unit: string; avg_cost: number }[]),
+      this.query<{ stage_detail: string | null; total_grids: number; avg_price: number }>(
+        `SELECT
+           stage_detail,
+           COALESCE(SUM(quantity_produced), 0) as total_grids,
+           COALESCE(AVG(price_per_grid), 0) as avg_price
+         FROM production_logs
+         WHERE stage = 'CASTING' AND stage_detail IN ('POSITIVE_CASTING', 'NEGATIVE_CASTING')
+         GROUP BY stage_detail`
+      ).catch(() => [] as { stage_detail: string | null; total_grids: number; avg_price: number }[])
     ]);
+
+    const positiveCasting = castingTotals.find((row) => row.stage_detail === 'POSITIVE_CASTING');
+    const negativeCasting = castingTotals.find((row) => row.stage_detail === 'NEGATIVE_CASTING');
 
     return {
       thisMonthProduction: prodMonth[0]?.total || 0,
       thisMonthExpenses: expMonth[0]?.total || 0,
       thisMonthPurchaseSpend: purMonth[0]?.total || 0,
       thisMonthBatteriesDelivered: deliveredMonth[0]?.total || 0,
+      positiveGridTotal: positiveCasting?.total_grids || 0,
+      negativeGridTotal: negativeCasting?.total_grids || 0,
+      positiveGridAvgPrice: positiveCasting?.avg_price || 0,
+      negativeGridAvgPrice: negativeCasting?.avg_price || 0,
       productionByModel: byModel,
       expenseByCategory: byCategory,
       last30DayAvgPrices: last30Avg
@@ -2571,6 +2643,11 @@ export class Database {
 
     const consumedByName: Record<string, number> = {};
     prodLogs.forEach((log: ProductionLog) => {
+      if (log.stage === 'CASTING' && log.material_name && Number.isFinite(log.material_quantity || NaN)) {
+        const materialName = this.normalizeMaterialName(log.material_name);
+        consumedByName[materialName] = (consumedByName[materialName] || 0) + (log.material_quantity || 0);
+        return;
+      }
       const formula = modelFormulas[log.battery_model];
       if (!formula) return;
       consumedByName['raw lead'] = (consumedByName['raw lead'] || 0) + formula.rawLead * log.quantity_produced;

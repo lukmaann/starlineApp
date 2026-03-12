@@ -185,9 +185,18 @@ function initDatabase(config) {
       CREATE TABLE IF NOT EXISTS production_logs (
         id TEXT PRIMARY KEY,
         date TEXT,
+        stage TEXT DEFAULT 'ASSEMBLY',
+        stage_detail TEXT,
         battery_model TEXT,
         quantity_produced INTEGER,
-        labour_cost_total REAL
+        labour_cost_total REAL,
+        material_name TEXT,
+        material_quantity REAL,
+        unit_weight REAL,
+        average_unit_price REAL,
+        price_per_grid REAL,
+        total_process_cost REAL,
+        process_data TEXT
       );
 
       CREATE TABLE IF NOT EXISTS expenses (
@@ -258,6 +267,48 @@ function initDatabase(config) {
       CREATE INDEX IF NOT EXISTS idx_factory_worker_salaries_worker ON factory_worker_salaries(worker_id);
     `;
     db.exec(schema);
+
+    // Migration: Add stage column to production_logs
+    try {
+      db.exec(`ALTER TABLE production_logs ADD COLUMN stage TEXT DEFAULT 'ASSEMBLY'`);
+      console.log('Migration: Added stage column to production_logs table');
+    } catch (_) { }
+    try {
+      db.exec(`ALTER TABLE production_logs ADD COLUMN stage_detail TEXT`);
+      console.log('Migration: Added stage_detail column to production_logs table');
+    } catch (_) { }
+    try {
+      db.exec(`ALTER TABLE production_logs ADD COLUMN material_name TEXT`);
+      console.log('Migration: Added material_name column to production_logs table');
+    } catch (_) { }
+    try {
+      db.exec(`ALTER TABLE production_logs ADD COLUMN material_quantity REAL`);
+      console.log('Migration: Added material_quantity column to production_logs table');
+    } catch (_) { }
+    try {
+      db.exec(`ALTER TABLE production_logs ADD COLUMN unit_weight REAL`);
+      console.log('Migration: Added unit_weight column to production_logs table');
+    } catch (_) { }
+    try {
+      db.exec(`ALTER TABLE production_logs ADD COLUMN average_unit_price REAL`);
+      console.log('Migration: Added average_unit_price column to production_logs table');
+    } catch (_) { }
+    try {
+      db.exec(`ALTER TABLE production_logs ADD COLUMN price_per_grid REAL`);
+      console.log('Migration: Added price_per_grid column to production_logs table');
+    } catch (_) { }
+    try {
+      db.exec(`ALTER TABLE production_logs ADD COLUMN total_process_cost REAL`);
+      console.log('Migration: Added total_process_cost column to production_logs table');
+    } catch (_) { }
+    try {
+      db.exec(`ALTER TABLE production_logs ADD COLUMN process_data TEXT`);
+      console.log('Migration: Added process_data column to production_logs table');
+    } catch (_) { }
+    try {
+      db.exec(`UPDATE production_logs SET stage = 'ASSEMBLY' WHERE stage IS NULL OR TRIM(stage) = ''`);
+      console.log('Migration: Ensured production log stages are populated');
+    } catch (_) { }
 
     // Migration: Add date_of_birth column to factory_workers
     try {

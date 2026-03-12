@@ -195,9 +195,18 @@ export interface MaterialPurchase {
 export interface ProductionLog {
   id: string;
   date: string;
+  stage: 'CASTING' | 'PASTING' | 'ASSEMBLY';
+  stage_detail?: 'POSITIVE_CASTING' | 'NEGATIVE_CASTING' | 'POSITIVE_PASTING' | 'NEGATIVE_PASTING' | null;
   battery_model: string;
   quantity_produced: number;
   labour_cost_total: number;
+  material_name?: string | null;
+  material_quantity?: number | null;
+  unit_weight?: number | null;
+  average_unit_price?: number | null;
+  price_per_grid?: number | null;
+  total_process_cost?: number | null;
+  process_data?: string | null;
 }
 
 export interface Expense {
