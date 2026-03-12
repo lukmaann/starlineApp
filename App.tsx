@@ -306,7 +306,7 @@ const App: React.FC = () => {
             />
             <span className="hover:text-slate-600 transition-colors cursor-default">Starline</span>
             <span>/</span>
-            <span className="text-slate-900 font-bold capitalize">{activeTab}</span>
+            <span className="text-slate-900 font-bold capitalize">{activeTab === 'manufacturing' ? 'Factory Operations' : activeTab}</span>
           </div>
 
           <div className="flex items-center space-x-2">
