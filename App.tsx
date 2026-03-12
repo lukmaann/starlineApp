@@ -216,7 +216,7 @@ const App: React.FC = () => {
         />;
 
       case 'manufacturing':
-        return isAdmin || user?.role === 'FACTORY_WORKER' ? <ManufacturingHub active={activeTab === 'manufacturing'} userRole={user?.role} /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
+        return isAdmin ? <ManufacturingHub active={activeTab === 'manufacturing'} userRole={user?.role} /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
 
       case 'database-management':
         return isAdmin ? <DatabaseManagement /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
