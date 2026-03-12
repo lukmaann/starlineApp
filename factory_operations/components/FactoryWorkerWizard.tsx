@@ -291,7 +291,6 @@ export const FactoryWorkerWizard: React.FC<FactoryWorkerWizardProps> = ({
                                     </div>
                                     <div className="flex-1">
                                         <label htmlFor="touchIdToggle" className="text-sm font-bold text-slate-900 block cursor-pointer">Enable Touch ID Biometrics</label>
-                                        <p className="text-xs text-slate-500 font-medium mt-1">Allow this worker to clock in/out using the Mac's built-in fingerprint sensor instead of an external scanner.</p>
 
                                         {useTouchId && (
                                             <div className="mt-4 p-4 bg-white rounded-lg border border-slate-200 flex flex-col gap-3">

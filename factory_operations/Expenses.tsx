@@ -44,7 +44,8 @@ export default function Expenses() {
     const selectedWorker = workers.find(w => w.id === form.worker_id);
 
     const canGoStep2 = Boolean(form.date && form.category);
-    const canGoStep3 = Number.isFinite(amountNum) && amountNum > 0 && (form.category !== 'Salaries' || !!form.worker_id);
+    const workerAlreadyPaid = Boolean(selectedWorker?.salary_paid_this_month);
+    const canGoStep3 = Number.isFinite(amountNum) && amountNum > 0 && (form.category !== 'Salaries' || (!!form.worker_id && !workerAlreadyPaid));
 
     const loadData = useCallback(async (p = page) => {
         setIsLoad(true);
@@ -95,6 +96,13 @@ export default function Expenses() {
             const finalDescription = form.category === 'Salaries' && selectedWorker
                 ? `Salary paid to ${selectedWorker.full_name} (${selectedWorker.enrollment_no})${form.description.trim() ? ` - ${form.description.trim()}` : ''}`
                 : (form.description.trim() || `${form.category} paid`);
+
+            // Guard: prevent double salary payment for this month
+            if (form.category === 'Salaries' && form.worker_id && workerAlreadyPaid) {
+                toast.error(`Salary already paid this month for ${selectedWorker?.full_name || 'this employee'}.`);
+                setIsSaving(false);
+                return;
+            }
 
             await Database.addExpense({
                 date: form.date,
@@ -339,6 +347,16 @@ export default function Expenses() {
                                                     </option>
                                                 ))}
                                             </select>
+                                            {/* Already-paid error banner */}
+                                            {workerAlreadyPaid && form.worker_id && (
+                                                <div className="mt-2 flex items-start gap-2.5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl animate-in slide-in-from-top-2 duration-200">
+                                                    <span className="text-rose-500 mt-0.5 shrink-0">⚠️</span>
+                                                    <div>
+                                                        <p className="text-xs font-bold text-rose-700 uppercase tracking-wider">Already Paid This Month</p>
+                                                        <p className="text-xs font-medium text-rose-600 mt-0.5">This month's salary for <span className="font-bold">{selectedWorker?.full_name}</span> has already been paid. Select a different employee or wait until next month.</p>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                     <div className="space-y-2">
@@ -415,6 +433,7 @@ export default function Expenses() {
                                         if (step === 1 && !canGoStep2) return toast.error('Check form requirements.');
                                         if (step === 2 && !canGoStep3) {
                                             if (form.category === 'Salaries' && !form.worker_id) return toast.error('Select an employee.');
+                                            if (form.category === 'Salaries' && workerAlreadyPaid) return toast.error(`Salary already paid this month for ${selectedWorker?.full_name}.`);
                                             return toast.error('Enter a valid amount.');
                                         }
                                         setStep((step + 1) as ExpenseStep);
@@ -443,10 +462,10 @@ export default function Expenses() {
             {selectedExpense && createPortal(
                 <>
                     <div
-                        className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-50 animate-in fade-in duration-300"
+                        className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[60] animate-in fade-in duration-300"
                         onClick={() => setSelectedExpense(null)}
                     ></div>
-                    <div className="fixed inset-y-0 right-0 w-full md:w-1/2 bg-white shadow-2xl z-50 animate-in slide-in-from-right duration-300 flex flex-col" onClick={(e) => e.stopPropagation()}>
+                    <div className="fixed inset-y-0 right-0 w-full md:w-1/2 bg-white shadow-2xl z-[70] animate-in slide-in-from-right duration-300 flex flex-col" onClick={(e) => e.stopPropagation()}>
                         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600">

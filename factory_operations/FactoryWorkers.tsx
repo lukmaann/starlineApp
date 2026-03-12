@@ -175,6 +175,7 @@ export default function FactoryWorkers({ userRole }: FactoryWorkersProps) {
                 // When marking as paid, generate a formal salary transaction record 
                 // using the worker's base_salary for the current month
                 const today = new Date().toISOString();
+                const todayDate = today.split('T')[0]; // YYYY-MM-DD for expense date
                 await Database.addWorkerSalaryPayment({
                     worker_id: w.id,
                     amount: w.base_salary || 0,
@@ -182,8 +183,17 @@ export default function FactoryWorkers({ userRole }: FactoryWorkersProps) {
                     type: 'BASE',
                     notes: `Auto-marked paid for ${currentMonthLabel}`
                 });
+                // Also log this as an expense entry so it appears in the Expenses ledger
+                await Database.addExpense({
+                    date: todayDate,
+                    category: 'Salaries',
+                    amount: w.base_salary || 0,
+                    description: `Salary paid to ${w.full_name} (${w.enrollment_no}) - ${currentMonthLabel}`,
+                });
+                toast.success(`Salary marked as paid and logged in Expenses.`);
             } else {
                 await Database.setFactoryWorkerSalaryPaid(w.id, false);
+                toast.success(`Salary status reset.`);
             }
             // `load` updates `workers` which triggers the sync `useEffect` above to update `selectedWorker`
             await load(search);
@@ -294,10 +304,10 @@ export default function FactoryWorkers({ userRole }: FactoryWorkersProps) {
             {selectedWorker && createPortal(
                 <>
                     <div
-                        className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40 animate-in fade-in duration-300"
+                        className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[60] animate-in fade-in duration-300"
                         onClick={() => setSelectedWorker(null)}
                     ></div>
-                    <div className="fixed inset-y-0 right-0 w-full md:w-1/2 bg-white shadow-2xl z-50 animate-in slide-in-from-right duration-300 flex flex-col font-sans" onClick={(e) => e.stopPropagation()}>
+                    <div className="fixed inset-y-0 right-0 w-full md:w-1/2 bg-white shadow-2xl z-[70] animate-in slide-in-from-right duration-300 flex flex-col font-sans" onClick={(e) => e.stopPropagation()}>
                         <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600">
