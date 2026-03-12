@@ -872,7 +872,7 @@ export class Database {
 
   static async authenticateUser(username: string, password: string): Promise<User | null> {
     const results = await this.query<User>(
-      'SELECT id, username, role FROM users WHERE username = ? AND password = ?',
+      'SELECT id, username, role FROM users WHERE username COLLATE NOCASE = ? AND password = ?',
       [username, password]
     );
     return results[0] || null;
