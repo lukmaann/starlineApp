@@ -38,6 +38,7 @@ export class Database {
     { name: 'Graphite Powder', unit: 'kg', alert_threshold: 100 },
     { name: 'Barium Sulfate', unit: 'kg', alert_threshold: 100 },
     { name: 'PVC Separator', unit: 'pieces', alert_threshold: 500 },
+    { name: 'Battery Packing', unit: 'pieces', alert_threshold: 200 },
     { name: 'Lead', unit: 'kg', alert_threshold: 100 },
     { name: 'Packing Jali', unit: 'pieces', alert_threshold: 100 },
     { name: 'Plus Minus Caps', unit: 'pairs', alert_threshold: 200 },
@@ -2114,6 +2115,7 @@ export class Database {
   // ============================================
 
   static async getRawMaterials(): Promise<RawMaterial[]> {
+    await this.seedDefaultRawMaterials();
     return await this.query<RawMaterial>('SELECT id, name, unit, alert_threshold FROM raw_materials ORDER BY name ASC');
   }
 
@@ -2530,36 +2532,79 @@ export class Database {
   }
 
   // ─── MANUFACTURING DASHBOARD STATS (All backend, no frontend math) ─────────
-  static async getManufacturingDashboardStats(): Promise<{
+  static async getManufacturingDashboardStats(selectedYear?: number, selectedMonth?: number): Promise<{
+    availableYears: number[];
+    selectedYear: number;
+    selectedMonth: number;
     thisMonthProduction: number;
+    lastMonthProduction: number;
     thisMonthExpenses: number;
+    lastMonthExpenses: number;
     thisMonthPurchaseSpend: number;
+    lastMonthPurchaseSpend: number;
     thisMonthBatteriesDelivered: number;
+    lastMonthBatteriesDelivered: number;
     positiveGridTotal: number;
     negativeGridTotal: number;
     positiveGridAvgPrice: number;
     negativeGridAvgPrice: number;
+    positivePlateTotal: number;
+    negativePlateTotal: number;
+    positivePlateAvgPrice: number;
+    negativePlateAvgPrice: number;
+    assemblyByModel: { model: string; units: number; avg_price: number }[];
+    monthlyOverview: { month: number; label: string; production: number; dispatched: number; purchases: number; expenses: number }[];
+    selectedMonthModelMix: { name: string; value: number }[];
+    selectedMonthStageMix: { name: string; value: number }[];
     productionByModel: { model: string; units: number }[];
     expenseByCategory: { category: string; total: number }[];
     last30DayAvgPrices: { name: string; unit: string; avg_cost: number }[];
   }> {
     const now = new Date();
-    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const activeYear = selectedYear ?? now.getFullYear();
+    const activeMonth = selectedMonth ?? (now.getMonth() + 1);
+    const monthStr = `${activeYear}-${String(activeMonth).padStart(2, '0')}`;
+    const prevMonth = new Date(activeYear, activeMonth - 2, 1);
+    const prevMonthStr = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}`;
     const d30 = new Date(now); d30.setDate(d30.getDate() - 30);
     const last30 = d30.toISOString().slice(0, 10);
 
     const [
-      prodMonth, expMonth, purMonth, deliveredMonth,
-      byModel, byCategory, last30Avg, castingTotals
+      availableYearRows,
+      prodMonth, prodLastMonth, expMonth, expLastMonth, purMonth, purLastMonth, deliveredMonth, deliveredLastMonth,
+      byModel, byCategory, purchaseCategoryTotal, last30Avg, castingTotals, pastingTotals, assemblyByModel,
+      monthlyProduction, monthlyExpenses, monthlyPurchases, monthlyDispatches, selectedMonthModelMix, selectedMonthStageMix
     ] = await Promise.all([
+      this.query<{ year: string }>(
+        `SELECT DISTINCT year FROM (
+           SELECT strftime('%Y', date) as year FROM production_logs
+           UNION
+           SELECT strftime('%Y', date) as year FROM expenses
+           UNION
+           SELECT strftime('%Y', date) as year FROM material_purchases
+           UNION
+           SELECT strftime('%Y', saleDate) as year FROM sales
+         )
+         WHERE year IS NOT NULL AND year <> ''
+         ORDER BY year DESC`
+      ).catch(() => [] as { year: string }[]),
       this.query<{ total: number }>(
         `SELECT COALESCE(SUM(quantity_produced), 0) as total FROM production_logs WHERE strftime('%Y-%m', date) = ?`, [monthStr]),
       this.query<{ total: number }>(
+        `SELECT COALESCE(SUM(quantity_produced), 0) as total FROM production_logs WHERE strftime('%Y-%m', date) = ?`, [prevMonthStr]),
+      this.query<{ total: number }>(
         `SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE strftime('%Y-%m', date) = ?`, [monthStr]),
+      this.query<{ total: number }>(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE strftime('%Y-%m', date) = ?`, [prevMonthStr]),
       this.query<{ total: number }>(
         `SELECT COALESCE(SUM(total_cost), 0) as total FROM material_purchases WHERE strftime('%Y-%m', date) = ?`, [monthStr]),
       this.query<{ total: number }>(
+        `SELECT COALESCE(SUM(total_cost), 0) as total FROM material_purchases WHERE strftime('%Y-%m', date) = ?`, [prevMonthStr]),
+      this.query<{ total: number }>(
         `SELECT COUNT(*) as total FROM sales WHERE strftime('%Y-%m', saleDate) = ?`, [monthStr]
+      ).catch(() => [{ total: 0 }]),
+      this.query<{ total: number }>(
+        `SELECT COUNT(*) as total FROM sales WHERE strftime('%Y-%m', saleDate) = ?`, [prevMonthStr]
       ).catch(() => [{ total: 0 }]),
       this.query<{ model: string; units: number }>(
         `SELECT battery_model as model, COALESCE(SUM(quantity_produced), 0) as units
@@ -2567,6 +2612,11 @@ export class Database {
       this.query<{ category: string; total: number }>(
         `SELECT category, COALESCE(SUM(amount), 0) as total
          FROM expenses WHERE strftime('%Y-%m', date) = ? GROUP BY category ORDER BY total DESC`, [monthStr]),
+      this.query<{ total: number }>(
+        `SELECT COALESCE(SUM(total_cost), 0) as total
+         FROM material_purchases
+         WHERE strftime('%Y-%m', date) = ?`, [monthStr]
+      ).catch(() => [{ total: 0 }]),
       // Last 30 days average unit cost per material
       this.query<{ name: string; unit: string; avg_cost: number }>(
         `SELECT rm.name, rm.unit,
@@ -2584,23 +2634,138 @@ export class Database {
          FROM production_logs
          WHERE stage = 'CASTING' AND stage_detail IN ('POSITIVE_CASTING', 'NEGATIVE_CASTING')
          GROUP BY stage_detail`
-      ).catch(() => [] as { stage_detail: string | null; total_grids: number; avg_price: number }[])
+      ).catch(() => [] as { stage_detail: string | null; total_grids: number; avg_price: number }[]),
+      this.query<{ stage_detail: string | null; total_units: number; avg_price: number }>(
+        `SELECT
+           stage_detail,
+           COALESCE(SUM(quantity_produced), 0) as total_units,
+           COALESCE(AVG(price_per_grid), 0) as avg_price
+         FROM production_logs
+         WHERE stage = 'PASTING' AND stage_detail IN ('POSITIVE_PASTING', 'NEGATIVE_PASTING')
+         GROUP BY stage_detail`
+      ).catch(() => [] as { stage_detail: string | null; total_units: number; avg_price: number }[]),
+      this.query<{ model: string; units: number; avg_price: number }>(
+        `SELECT
+           battery_model as model,
+           COALESCE(SUM(quantity_produced), 0) as units,
+           COALESCE(AVG(price_per_grid), 0) as avg_price
+         FROM production_logs
+         WHERE stage = 'ASSEMBLY' AND COALESCE(battery_model, '') <> ''
+         GROUP BY battery_model
+         ORDER BY units DESC, model ASC`
+      ).catch(() => [] as { model: string; units: number; avg_price: number }[]),
+      this.query<{ month: string; total: number }>(
+        `SELECT strftime('%m', date) as month, COALESCE(SUM(quantity_produced), 0) as total
+         FROM production_logs
+         WHERE strftime('%Y', date) = ?
+         GROUP BY strftime('%m', date)`,
+        [String(activeYear)]
+      ).catch(() => [] as { month: string; total: number }[]),
+      this.query<{ month: string; total: number }>(
+        `SELECT strftime('%m', date) as month, COALESCE(SUM(amount), 0) as total
+         FROM expenses
+         WHERE strftime('%Y', date) = ?
+         GROUP BY strftime('%m', date)`,
+        [String(activeYear)]
+      ).catch(() => [] as { month: string; total: number }[]),
+      this.query<{ month: string; total: number }>(
+        `SELECT strftime('%m', date) as month, COALESCE(SUM(total_cost), 0) as total
+         FROM material_purchases
+         WHERE strftime('%Y', date) = ?
+         GROUP BY strftime('%m', date)`,
+        [String(activeYear)]
+      ).catch(() => [] as { month: string; total: number }[]),
+      this.query<{ month: string; total: number }>(
+        `SELECT strftime('%m', saleDate) as month, COUNT(*) as total
+         FROM sales
+         WHERE strftime('%Y', saleDate) = ?
+         GROUP BY strftime('%m', saleDate)`,
+        [String(activeYear)]
+      ).catch(() => [] as { month: string; total: number }[]),
+      this.query<{ name: string; value: number }>(
+        `SELECT battery_model as name, COALESCE(SUM(quantity_produced), 0) as value
+         FROM production_logs
+         WHERE stage = 'ASSEMBLY' AND strftime('%Y-%m', date) = ? AND COALESCE(battery_model, '') <> ''
+         GROUP BY battery_model
+         ORDER BY value DESC`,
+        [monthStr]
+      ).catch(() => [] as { name: string; value: number }[]),
+      this.query<{ name: string; value: number }>(
+        `SELECT
+           CASE
+             WHEN stage = 'CASTING' THEN 'Casting'
+             WHEN stage = 'PASTING' THEN 'Pasting'
+             WHEN stage = 'ASSEMBLY' THEN 'Assembly'
+             ELSE stage
+           END as name,
+           COALESCE(SUM(quantity_produced), 0) as value
+         FROM production_logs
+         WHERE strftime('%Y-%m', date) = ?
+         GROUP BY stage
+         ORDER BY value DESC`,
+        [monthStr]
+      ).catch(() => [] as { name: string; value: number }[])
     ]);
 
     const positiveCasting = castingTotals.find((row) => row.stage_detail === 'POSITIVE_CASTING');
     const negativeCasting = castingTotals.find((row) => row.stage_detail === 'NEGATIVE_CASTING');
+    const positivePasting = pastingTotals.find((row) => row.stage_detail === 'POSITIVE_PASTING');
+    const negativePasting = pastingTotals.find((row) => row.stage_detail === 'NEGATIVE_PASTING');
+    const positiveFinishedPlateAvgPrice = ((positiveCasting?.avg_price || 0) / 2) + (positivePasting?.avg_price || 0);
+    const negativeFinishedPlateAvgPrice = ((negativeCasting?.avg_price || 0) / 2) + (negativePasting?.avg_price || 0);
+    const thisMonthOperatingExpenses = expMonth[0]?.total || 0;
+    const lastMonthOperatingExpenses = expLastMonth[0]?.total || 0;
+    const thisMonthPurchaseExpenses = purMonth[0]?.total || 0;
+    const lastMonthPurchaseExpenses = purLastMonth[0]?.total || 0;
+    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const monthlyOverview = monthNames.map((label, index) => {
+      const monthKey = String(index + 1).padStart(2, '0');
+      const monthPurchase = monthlyPurchases.find((row) => row.month === monthKey)?.total || 0;
+      const monthOperatingExpense = monthlyExpenses.find((row) => row.month === monthKey)?.total || 0;
+      return {
+        month: index + 1,
+        label,
+        production: monthlyProduction.find((row) => row.month === monthKey)?.total || 0,
+        dispatched: monthlyDispatches.find((row) => row.month === monthKey)?.total || 0,
+        purchases: monthPurchase,
+        expenses: monthOperatingExpense + monthPurchase,
+      };
+    });
+    const availableYears = Array.from(new Set([
+      now.getFullYear(),
+      ...availableYearRows.map((row) => Number(row.year)).filter((year) => Number.isFinite(year)),
+    ])).sort((a, b) => b - a);
+    const expenseByCategory = [
+      { category: 'Material Purchases', total: purchaseCategoryTotal[0]?.total || 0 },
+      ...byCategory,
+    ].filter((row) => row.total > 0).sort((a, b) => b.total - a.total);
 
     return {
+      availableYears,
+      selectedYear: activeYear,
+      selectedMonth: activeMonth,
       thisMonthProduction: prodMonth[0]?.total || 0,
-      thisMonthExpenses: expMonth[0]?.total || 0,
-      thisMonthPurchaseSpend: purMonth[0]?.total || 0,
+      lastMonthProduction: prodLastMonth[0]?.total || 0,
+      thisMonthExpenses: thisMonthOperatingExpenses + thisMonthPurchaseExpenses,
+      lastMonthExpenses: lastMonthOperatingExpenses + lastMonthPurchaseExpenses,
+      thisMonthPurchaseSpend: thisMonthPurchaseExpenses,
+      lastMonthPurchaseSpend: lastMonthPurchaseExpenses,
       thisMonthBatteriesDelivered: deliveredMonth[0]?.total || 0,
+      lastMonthBatteriesDelivered: deliveredLastMonth[0]?.total || 0,
       positiveGridTotal: positiveCasting?.total_grids || 0,
       negativeGridTotal: negativeCasting?.total_grids || 0,
       positiveGridAvgPrice: positiveCasting?.avg_price || 0,
       negativeGridAvgPrice: negativeCasting?.avg_price || 0,
+      positivePlateTotal: positivePasting?.total_units || 0,
+      negativePlateTotal: negativePasting?.total_units || 0,
+      positivePlateAvgPrice: positiveFinishedPlateAvgPrice,
+      negativePlateAvgPrice: negativeFinishedPlateAvgPrice,
+      assemblyByModel,
+      monthlyOverview,
+      selectedMonthModelMix,
+      selectedMonthStageMix,
       productionByModel: byModel,
-      expenseByCategory: byCategory,
+      expenseByCategory,
       last30DayAvgPrices: last30Avg
     };
   }
@@ -2614,6 +2779,7 @@ export class Database {
     alert_threshold: number; purchased: number; consumed: number;
     current_stock: number; avg_cost: number; is_low: boolean;
   }[]> {
+    await this.seedDefaultRawMaterials();
     const materials = await this.query<RawMaterial>('SELECT id, name, unit, alert_threshold FROM raw_materials ORDER BY name ASC');
     const purchaseAggs = await this.query<{ material_id: string; total_qty: number; total_cost: number }>(
       `SELECT material_id, SUM(quantity) as total_qty, SUM(total_cost) as total_cost 
@@ -2642,21 +2808,62 @@ export class Database {
     };
 
     const consumedByName: Record<string, number> = {};
+    const addConsumed = (materialName: string, quantity: number) => {
+      const normalizedName = this.normalizeMaterialName(materialName);
+      if (!normalizedName || !Number.isFinite(quantity) || quantity <= 0) return;
+      consumedByName[normalizedName] = (consumedByName[normalizedName] || 0) + quantity;
+    };
+    const mapAssemblyLabelToMaterial = (label: string, modelName: string) => {
+      const normalizedLabel = this.normalizeMaterialName(label);
+      if (normalizedLabel === 'positive plates' || normalizedLabel === 'negative plates') return null;
+      if (normalizedLabel === 'container') return `Container - ${modelName}`;
+      if (normalizedLabel === 'plus minus caps') return 'Plus Minus Caps';
+      if (normalizedLabel === 'battery packing') return 'Battery Packing';
+      if (normalizedLabel === 'charging' || normalizedLabel === 'battery screening' || normalizedLabel === 'labour') return null;
+      return label;
+    };
     prodLogs.forEach((log: ProductionLog) => {
       if (log.stage === 'CASTING' && log.material_name && Number.isFinite(log.material_quantity || NaN)) {
-        const materialName = this.normalizeMaterialName(log.material_name);
-        consumedByName[materialName] = (consumedByName[materialName] || 0) + (log.material_quantity || 0);
+        addConsumed(log.material_name, log.material_quantity || 0);
+        return;
+      }
+      if (log.stage === 'PASTING' && log.process_data) {
+        try {
+          const processData = JSON.parse(log.process_data) as Record<string, unknown>;
+          addConsumed('Grey Oxide', Number(processData.grey_oxide_qty) || 0);
+          addConsumed('Dinal Fiber', Number(processData.dinal_fiber_qty) || 0);
+          addConsumed('DM Water', Number(processData.dm_water_qty) || 0);
+          addConsumed('Acid', Number(processData.acid_qty) || 0);
+          addConsumed('Lignin (Lugnin)', Number(processData.lugnin_qty) || 0);
+          addConsumed('Carbon Black', Number(processData.carbon_black_qty) || 0);
+          addConsumed('Graphite Powder', Number(processData.graphite_powder_qty) || 0);
+          addConsumed('Barium Sulfate', Number(processData.barium_sulfate_qty) || 0);
+        } catch {
+          // Ignore malformed historical process_data and fall back to old behavior below.
+        }
+        return;
+      }
+      if (log.stage === 'ASSEMBLY' && log.process_data) {
+        try {
+          const processData = JSON.parse(log.process_data) as { rows?: Array<{ label?: string; total_qty?: number }> };
+          (processData.rows || []).forEach((row) => {
+            const materialName = mapAssemblyLabelToMaterial(String(row.label || ''), log.battery_model);
+            if (!materialName) return;
+            addConsumed(materialName, Number(row.total_qty) || 0);
+          });
+        } catch {
+          // Ignore malformed historical process_data and fall back to formula path below.
+        }
         return;
       }
       const formula = modelFormulas[log.battery_model];
       if (!formula) return;
-      consumedByName['raw lead'] = (consumedByName['raw lead'] || 0) + formula.rawLead * log.quantity_produced;
-      consumedByName['acid'] = (consumedByName['acid'] || 0) + formula.acid * log.quantity_produced;
-      consumedByName['pvc separator'] = (consumedByName['pvc separator'] || 0) + formula.pvcSeparator * log.quantity_produced;
-      consumedByName['packing jali'] = (consumedByName['packing jali'] || 0) + formula.packingJali * log.quantity_produced;
-      consumedByName['plus minus caps'] = (consumedByName['plus minus caps'] || 0) + formula.plusMinusCaps * log.quantity_produced;
-      const containerMaterial = this.normalizeMaterialName(`Container - ${log.battery_model}`);
-      consumedByName[containerMaterial] = (consumedByName[containerMaterial] || 0) + formula.containers * log.quantity_produced;
+      addConsumed('Raw Lead', formula.rawLead * log.quantity_produced);
+      addConsumed('Acid', formula.acid * log.quantity_produced);
+      addConsumed('PVC Separator', formula.pvcSeparator * log.quantity_produced);
+      addConsumed('Packing Jali', formula.packingJali * log.quantity_produced);
+      addConsumed('Plus Minus Caps', formula.plusMinusCaps * log.quantity_produced);
+      addConsumed(`Container - ${log.battery_model}`, formula.containers * log.quantity_produced);
     });
 
     return materials.map(m => {
