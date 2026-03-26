@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { getLocalDate } from '../utils';
 import PriceManager from '../components/PriceManager';
 import UserManagement from '../components/UserManagement';
+import { scheduleUndoableAction } from '../utils/undoToast';
 
 interface ControlsProps {
   active?: boolean;
@@ -73,6 +74,8 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
   const [replacementSearchId, setReplacementSearchId] = useState('');
   const [foundReplacement, setFoundReplacement] = useState<any>(null);
   const [isSearchingReplacement, setIsSearchingReplacement] = useState(false);
+  const [workers, setWorkers] = useState<any[]>([]);
+  const [deletingWorker, setDeletingWorker] = useState<any | null>(null);
 
   // --- Activity Log State ---
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
@@ -87,6 +90,8 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
     setModels(mods);
     const dls = await Database.getAll<Dealer>('dealers');
     setDealers(dls);
+    const wrkrs = await Database.getAll<any>('factory_workers');
+    setWorkers(wrkrs);
   };
 
   const loadActivityLogs = async () => {
@@ -180,11 +185,20 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
     if (!deletingModel) return;
     setIsActionLoading(true);
     try {
-      await Database.deleteModel(deletingModel.id);
+      const modelToDelete = deletingModel;
+      scheduleUndoableAction({
+        label: `Model ${modelToDelete.name} queued for deletion`,
+        description: 'Undo within 5 seconds to keep this model.',
+        onCommit: async () => {
+          await Database.deleteModel(modelToDelete.id);
+          await Database.logActivity('MODEL_DELETE', `Deleted model ${modelToDelete.name}`, { modelId: modelToDelete.id, name: modelToDelete.name });
+          await loadModelData();
+        },
+        onSuccess: () => notify('Model deleted from registry', 'success'),
+        onError: (error) => notify(error?.message || 'Failed to delete model', 'error'),
+      });
       setDeletingModel(null);
       setModelDeleteConfirmName('');
-      loadModelData();
-      notify('Model deleted from registry', 'success');
     } catch (e: any) {
       notify(e.message || 'Failed to delete model', 'error');
     } finally {
@@ -917,18 +931,83 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
                     onClick={async () => {
                       if (deletingDealer) {
                         setIsActionLoading(true);
-                        await Database.deleteDealer(deletingDealer.id);
-                        await Database.logActivity('PARTNER_DELETE', `Deleted dealer ${deletingDealer.name}`, { dealerId: deletingDealer.id, name: deletingDealer.name });
+                        const dealerToDelete = deletingDealer;
+                        scheduleUndoableAction({
+                          label: `Dealer ${dealerToDelete.name} queued for deletion`,
+                          description: 'Undo within 5 seconds to cancel dealer removal.',
+                          onCommit: async () => {
+                            await Database.deleteDealer(dealerToDelete.id);
+                            await Database.logActivity('PARTNER_DELETE', `Deleted dealer ${dealerToDelete.name}`, { dealerId: dealerToDelete.id, name: dealerToDelete.name });
+                            await loadModelData();
+                          },
+                          onSuccess: () => notify('Dealer removed successfully', 'success'),
+                          onError: () => notify('Failed to remove dealer', 'error'),
+                        });
                         setDeletingDealer(null);
                         setModelDeleteConfirmName('');
-                        loadModelData();
-                        notify('Dealer removed successfully', 'success');
                         setIsActionLoading(false);
                       }
                     }}
                     className="w-full py-2 bg-white border border-rose-200 text-rose-600 font-bold rounded-lg text-xs hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
                     {isActionLoading ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Delete Dealer'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Factory Worker Deletion */}
+              <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm">
+                <div className="mb-4">
+                  <h5 className="font-bold text-slate-900 text-sm">Remove Factory Worker</h5>
+                  <p className="text-xs text-slate-500 mt-1">Permanently delete a factory worker profile and their login access.</p>
+                </div>
+
+                <div className="space-y-3">
+                  <select className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-rose-500 uppercase" value={deletingWorker?.id || ''} onChange={e => { setDeletingWorker(workers.find(w => w.id === e.target.value) || null); setModelDeleteConfirmName(''); }}>
+                    <option value="">Select Worker...</option>
+                    {workers.map(w => <option key={w.id} value={w.id}>{w.full_name} ({w.enrollment_no})</option>)}
+                  </select>
+
+                  {deletingWorker && (
+                    <input
+                      placeholder={`Type "${deletingWorker.full_name}"`}
+                      className="w-full px-3 py-2 bg-white border border-rose-200 text-rose-600 rounded-lg text-sm font-bold focus:border-rose-500 outline-none placeholder:text-rose-200 placeholder:font-normal uppercase"
+                      value={modelDeleteConfirmName}
+                      onChange={e => setModelDeleteConfirmName(e.target.value)}
+                    />
+                  )}
+
+                  <button
+                    disabled={!deletingWorker || modelDeleteConfirmName.trim().toUpperCase() !== deletingWorker.full_name.toUpperCase() || isActionLoading}
+                    onClick={async () => {
+                      if (deletingWorker) {
+                        setIsActionLoading(true);
+                        try {
+                          const workerToDelete = deletingWorker;
+                          scheduleUndoableAction({
+                            label: `Worker ${workerToDelete.full_name} queued for deletion`,
+                            description: 'Undo within 5 seconds to keep this worker profile.',
+                            onCommit: async () => {
+                              await Database.deleteFactoryWorker(workerToDelete.id);
+                              await Database.logActivity('WORKER_DELETE', `Deleted factory worker ${workerToDelete.full_name}`, { workerId: workerToDelete.id, name: workerToDelete.full_name });
+                              const updatedWorkers = await Database.getFactoryWorkers();
+                              setWorkers(updatedWorkers);
+                            },
+                            onSuccess: () => notify('Worker removed successfully', 'success'),
+                            onError: () => notify('Failed to remove worker', 'error'),
+                          });
+                          setDeletingWorker(null);
+                          setModelDeleteConfirmName('');
+                        } catch (e) {
+                          notify('Failed to remove worker', 'error');
+                        } finally {
+                          setIsActionLoading(false);
+                        }
+                      }
+                    }}
+                    className="w-full py-2 bg-white border border-rose-200 text-rose-600 font-bold rounded-lg text-xs hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {isActionLoading ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Delete Worker'}
                   </button>
                 </div>
               </div>

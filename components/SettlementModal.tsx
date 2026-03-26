@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
     X,
     FileSignature,
@@ -130,7 +131,7 @@ export const SettlementModal: React.FC<SettlementModalProps> = ({ isOpen, onClos
                 stageLabel={processingState.progress >= 90 ? "FINALIZING" : "UPDATING DATABASE"}
             />
 
-            {!isOpen || !target ? null : (
+            {!isOpen || !target ? null : createPortal(
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
                     <div className="bg-white rounded-xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 relative border border-slate-200">
                         <div className="flex justify-between items-start mb-6">
@@ -219,7 +220,8 @@ export const SettlementModal: React.FC<SettlementModalProps> = ({ isOpen, onClos
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );

@@ -14,7 +14,6 @@ import {
 import { Database } from '../db';
 import { Dealer } from '../types';
 import { AuthSession } from '../utils/AuthSession';
-import { AnalyticsLoader } from './AnalyticsLoader';
 import DealerAnalytics from './DealerAnalytics';
 
 const GlobalAnalytics: React.FC = () => {
@@ -34,7 +33,6 @@ const GlobalAnalytics: React.FC = () => {
     const [selectedLocation, setSelectedLocation] = useState<string>('All');
     const [locations, setLocations] = useState<string[]>([]);
     const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
-    const [isSyncing, setIsSyncing] = useState(true);
 
     const months = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -43,6 +41,7 @@ const GlobalAnalytics: React.FC = () => {
 
     const loadData = async () => {
         setLoading(true);
+        const startTime = Date.now();
         try {
             const [global, leaders, locs] = await Promise.all([
                 Database.getGlobalAnalytics(selectedYear, selectedMonth, selectedLocation),
@@ -60,6 +59,11 @@ const GlobalAnalytics: React.FC = () => {
         } catch (error) {
             console.error('Failed to load global analytics:', error);
         } finally {
+            const elapsed = Date.now() - startTime;
+            const remaining = Math.max(0, 2000 - elapsed);
+            if (remaining > 0) {
+                await new Promise((resolve) => setTimeout(resolve, remaining));
+            }
             setLoading(false);
         }
     };
@@ -167,17 +171,6 @@ const GlobalAnalytics: React.FC = () => {
         );
     }
 
-    if (isSyncing) {
-        return (
-            <AnalyticsLoader
-                title="Global Performance Registry"
-                subtitle="Syncing Enterprise Data"
-                duration={6000}
-                onComplete={() => setIsSyncing(false)}
-            />
-        );
-    }
-
     if (selectedDealer) {
         return (
             <div className="animate-in fade-in zoom-in-95 duration-400">
@@ -191,9 +184,42 @@ const GlobalAnalytics: React.FC = () => {
 
     if (loading && !data) {
         return (
-            <div className="w-full min-h-[60vh] flex flex-col items-center justify-center space-y-4">
-                <div className="w-12 h-12 border-[3px] border-slate-100 border-t-slate-900 rounded-full animate-spin"></div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing Registry</p>
+            <div className="max-w-[1600px] mx-auto pb-20">
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
+                            <BarChart3 size={22} />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold text-slate-900 uppercase tracking-tight leading-none">Analytics Registry</h1>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Loading enterprise metrics</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-4 py-2.5">
+                        <Loader2 size={16} className="animate-spin text-slate-700" />
+                        <span className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Syncing</span>
+                    </div>
+                </div>
+
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                            <div className="h-3 w-24 bg-slate-100 rounded animate-pulse" />
+                            <div className="mt-5 h-8 w-20 bg-slate-100 rounded animate-pulse" />
+                            <div className="mt-4 h-2 w-full bg-slate-100 rounded animate-pulse" />
+                        </div>
+                    ))}
+                </div>
+
+                <div className="mt-6 bg-white border border-slate-200 rounded-xl p-6 shadow-sm min-h-[320px] flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-4">
+                        <div className="w-14 h-14 rounded-full border-[3px] border-slate-200 border-t-slate-900 animate-spin" />
+                        <div className="text-center">
+                            <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">Preparing Dashboard</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-600">Loading analytics without interrupting the page</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         );
     }

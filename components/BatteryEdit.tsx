@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Database } from '../db';
+import { scheduleUndoableAction } from '../utils/undoToast';
 import { Battery, Replacement, Sale, WarrantyCardStatus } from '../types';
 import { getLocalDate, formatDate } from '../utils';
 import {
     Save, ShieldCheck, X, Calendar, User, Phone,
     CreditCard, CheckCircle2, AlertCircle, Loader2,
-    Store, Barcode, ChevronDown, History, Zap, Trash2, AlertTriangle, RotateCcw
+    Store, Barcode, ChevronDown, History, Zap, Trash2, AlertTriangle, RotateCcw, Search, MapPin, Check
 } from 'lucide-react';
 
 interface BatteryEditProps {
@@ -152,6 +153,9 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
     const [dealers, setDealers] = useState<any[]>([]);
     const [models, setModels] = useState<any[]>([]);
     const [originalDealerId, setOriginalDealerId] = useState('');
+    const [dealerQuery, setDealerQuery] = useState('');
+    const [showDealerDropdown, setShowDealerDropdown] = useState(false);
+    const dealerDropdownRef = useRef<HTMLDivElement>(null);
 
     const [formData, setFormData] = useState({
         // customerName: '', // REPLACED BY DEALER SELECT
@@ -217,6 +221,40 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         };
         loadData();
     }, [batteryId]);
+
+    useEffect(() => {
+        const selectedDealer = dealers.find((dealer) => dealer.id === formData.dealerId);
+        setDealerQuery(selectedDealer?.name || '');
+    }, [formData.dealerId, dealers]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dealerDropdownRef.current && !dealerDropdownRef.current.contains(event.target as Node)) {
+                setShowDealerDropdown(false);
+                const selectedDealer = dealers.find((dealer) => dealer.id === formData.dealerId);
+                setDealerQuery(selectedDealer?.name || '');
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [dealers, formData.dealerId]);
+
+    const selectedDealer = useMemo(
+        () => dealers.find((dealer) => dealer.id === formData.dealerId),
+        [dealers, formData.dealerId]
+    );
+
+    const filteredDealers = useMemo(() => {
+        const query = dealerQuery.trim().toLowerCase();
+        if (!query) return dealers;
+
+        return dealers.filter((dealer) =>
+            dealer.name?.toLowerCase().includes(query) ||
+            dealer.location?.toLowerCase().includes(query) ||
+            dealer.id?.toLowerCase().includes(query)
+        );
+    }, [dealerQuery, dealers]);
 
     const getChanges = () => {
         const changes: { field: string, old: string, new: string }[] = [];
@@ -334,9 +372,18 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         if (!activeAsset?.replacement) return;
         setDeleteLoading(true);
         try {
-            await Database.deleteReplacement(activeAsset.replacement.id);
-            onUpdate();
-            onClose();
+            const replacementId = activeAsset.replacement.id;
+            scheduleUndoableAction({
+                label: `Replacement ${replacementId} queued for deletion`,
+                description: 'Undo within 5 seconds to keep this replacement record.',
+                onCommit: async () => {
+                    await Database.deleteReplacement(replacementId);
+                    onUpdate();
+                    onClose();
+                },
+                onSuccess: () => window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: 'Replacement deleted successfully' } })),
+                onError: (error) => alert(error.message || 'Failed to delete record'),
+            });
         } catch (error: any) {
             console.error('Delete Failed:', error);
             alert(error.message || 'Failed to delete record');
@@ -412,17 +459,108 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Assigned Dealer</label>
-                            <div className="relative">
-                                <select
-                                    className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-lg uppercase outline-none focus:border-amber-500 transition-all text-slate-700 appearance-none"
-                                    value={formData.dealerId}
-                                    onChange={e => setFormData({ ...formData, dealerId: e.target.value })}
-                                >
-                                    {dealers.map(d => (
-                                        <option key={d.id} value={d.id}>{d.name} ({d.location})</option>
-                                    ))}
-                                </select>
-                                <Store className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
+                            <div ref={dealerDropdownRef} className="relative">
+                                <div className={`rounded-xl border bg-slate-50 transition-all overflow-hidden ${showDealerDropdown ? 'border-blue-400 ring-4 ring-blue-500/10 bg-white shadow-lg' : 'border-slate-200 hover:border-slate-300'}`}>
+                                    <div className="flex items-center gap-3 px-4 pt-3">
+                                        <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-blue-600 shrink-0">
+                                            <Store size={16} />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Dealer</p>
+                                            <p className="text-[11px] font-semibold text-slate-500 truncate">
+                                                {selectedDealer ? `${selectedDealer.id} • ${selectedDealer.location}` : 'Search by dealer, city, or id'}
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setShowDealerDropdown(prev => {
+                                                    const next = !prev;
+                                                    if (next) {
+                                                        setDealerQuery('');
+                                                    } else {
+                                                        setDealerQuery(selectedDealer?.name || '');
+                                                    }
+                                                    return next;
+                                                });
+                                            }}
+                                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
+                                        >
+                                            <ChevronDown size={16} className={`transition-transform ${showDealerDropdown ? 'rotate-180' : ''}`} />
+                                        </button>
+                                    </div>
+
+                                    <div className="relative px-4 pb-3 pt-2.5">
+                                        <Search className="absolute left-7 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                        <input
+                                            value={dealerQuery}
+                                            onFocus={() => setShowDealerDropdown(true)}
+                                            onChange={(e) => {
+                                                setDealerQuery(e.target.value);
+                                                setShowDealerDropdown(true);
+                                            }}
+                                            placeholder="Search dealer..."
+                                            className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-9 py-2.5 text-[13px] font-bold uppercase tracking-wide text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5"
+                                        />
+                                        {selectedDealer && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setFormData({ ...formData, dealerId: '' });
+                                                    setDealerQuery('');
+                                                    setShowDealerDropdown(true);
+                                                }}
+                                                className="absolute right-6 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all"
+                                                title="Clear dealer"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {showDealerDropdown && (
+                                    <div className="absolute z-50 left-0 right-0 mt-2 rounded-xl border border-slate-200 bg-white shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)] overflow-hidden">
+                                        <div className="max-h-[280px] overflow-y-auto p-2">
+                                            {filteredDealers.length > 0 ? filteredDealers.map((dealer) => (
+                                                <button
+                                                    key={dealer.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setFormData({ ...formData, dealerId: dealer.id });
+                                                        setDealerQuery(dealer.name);
+                                                        setShowDealerDropdown(false);
+                                                    }}
+                                                    className={`w-full text-left rounded-lg px-3 py-2.5 transition-all border ${formData.dealerId === dealer.id
+                                                        ? 'bg-blue-50 border-blue-200 shadow-sm'
+                                                        : 'border-transparent hover:bg-slate-50'
+                                                        }`}
+                                                >
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="text-[13px] font-black uppercase text-slate-900 truncate">{dealer.name}</p>
+                                                            <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-semibold text-slate-500">
+                                                                <MapPin size={11} className="shrink-0" />
+                                                                <span className="truncate">{dealer.location || 'No location'}</span>
+                                                            </div>
+                                                            <p className="mt-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">{dealer.id}</p>
+                                                        </div>
+                                                        {formData.dealerId === dealer.id && (
+                                                            <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                                                                <Check size={12} />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                            )) : (
+                                                <div className="px-4 py-8 text-center">
+                                                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">No dealers found</p>
+                                                    <p className="mt-1 text-xs font-medium text-slate-500">Try another dealer name, city, or id.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                             {formData.dealerId !== originalDealerId && (
                                 <p className="text-[10px] font-bold text-amber-600 px-2 animate-pulse">

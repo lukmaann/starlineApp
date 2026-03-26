@@ -1,4 +1,4 @@
-import { Battery, Dealer, Replacement, BatteryModel, Sale, WarrantyCardStatus, BatteryStatus, PriceRecord, User, UserRole, StagedBatch } from './types';
+import { Battery, Dealer, Replacement, BatteryModel, Sale, WarrantyCardStatus, BatteryStatus, PriceRecord, User, UserRole, StagedBatch, RawMaterial, MaterialPurchase, ProductionLog, Expense, FactoryWorker } from './types';
 import { validateName, validatePhone } from './utils/validation';
 import { getLocalDate } from './utils';
 
@@ -27,9 +27,91 @@ declare global {
 // Enterprise Async Database Client
 export class Database {
   private static STORAGE_KEY = 'starline_warranty_db';
+  private static BASE_REQUIRED_RAW_MATERIALS: Array<{ name: string; unit: string; alert_threshold: number }> = [
+    { name: 'Raw Lead', unit: 'kg', alert_threshold: 500 },
+    { name: 'Grey Oxide', unit: 'kg', alert_threshold: 200 },
+    { name: 'Dinal Fiber', unit: 'kg', alert_threshold: 100 },
+    { name: 'DM Water', unit: 'liters', alert_threshold: 200 },
+    { name: 'Acid', unit: 'liters', alert_threshold: 200 },
+    { name: 'Lignin (Lugnin)', unit: 'kg', alert_threshold: 100 },
+    { name: 'Carbon Black', unit: 'kg', alert_threshold: 100 },
+    { name: 'Graphite Powder', unit: 'kg', alert_threshold: 100 },
+    { name: 'Barium Sulfate', unit: 'kg', alert_threshold: 100 },
+    { name: 'PVC Separator', unit: 'pieces', alert_threshold: 500 },
+    { name: 'Battery Packing', unit: 'pieces', alert_threshold: 200 },
+    { name: 'Lead', unit: 'kg', alert_threshold: 100 },
+    { name: 'Packing Jali', unit: 'pieces', alert_threshold: 100 },
+    { name: 'Plus Minus Caps', unit: 'pairs', alert_threshold: 200 },
+  ];
+
+  private static normalizeMaterialName(name: string): string {
+    return (name || '').trim().toLowerCase();
+  }
+
+  private static async getRequiredRawMaterials(): Promise<Array<{ name: string; unit: string; alert_threshold: number }>> {
+    const models = await this.query<{ name: string }>(`SELECT DISTINCT name FROM models WHERE name IS NOT NULL AND TRIM(name) != ''`);
+    const modelContainers = models.map((m) => ({
+      name: `Container - ${String(m.name).trim()}`,
+      unit: 'pieces',
+      alert_threshold: 50,
+    }));
+    return [...this.BASE_REQUIRED_RAW_MATERIALS, ...modelContainers];
+  }
 
   static async init(): Promise<void> {
     console.log('Database Client Initialized [Mode: Enterprise IPC]');
+    try {
+      // Ensure a unique index exists on material names to prevent duplicates at the DB level
+      await this.run(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_raw_materials_name_unique ON raw_materials (LOWER(name))`
+      );
+    } catch (e) {
+      console.warn('Could not create unique index on raw_materials.name:', e);
+    }
+    try {
+      await this.seedDefaultRawMaterials();
+    } catch (e) {
+      console.warn('Silent: Database not fully migrated or ready for raw materials yet.');
+    }
+  }
+
+  static async seedDefaultRawMaterials(): Promise<void> {
+    const required = await this.getRequiredRawMaterials();
+
+    const existing = await this.query<RawMaterial>('SELECT id, name, unit, alert_threshold FROM raw_materials ORDER BY rowid ASC');
+    const seenByName = new Map<string, RawMaterial>();
+    for (const m of existing) {
+      const key = this.normalizeMaterialName(m.name);
+      const keeper = seenByName.get(key);
+      if (!keeper) {
+        seenByName.set(key, m);
+        continue;
+      }
+      await this.run(`UPDATE material_purchases SET material_id = ? WHERE material_id = ?`, [keeper.id, m.id]);
+      await this.run(`DELETE FROM raw_materials WHERE id = ?`, [m.id]);
+    }
+
+    const latest = await this.query<RawMaterial>('SELECT id, name, unit, alert_threshold FROM raw_materials ORDER BY rowid ASC');
+    const latestByName = new Map(latest.map((m) => [this.normalizeMaterialName(m.name), m]));
+    const allowedNames = new Set(required.map((r) => this.normalizeMaterialName(r.name)));
+
+    for (const rm of required) {
+      const key = this.normalizeMaterialName(rm.name);
+      if (latestByName.has(key)) continue;
+      await this.run(
+        `INSERT OR IGNORE INTO raw_materials (id, name, unit, alert_threshold) VALUES (?, ?, ?, ?)`,
+        [`RM-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, rm.name, rm.unit, rm.alert_threshold]
+      );
+    }
+
+    const finalMaterials = await this.query<RawMaterial>('SELECT id, name FROM raw_materials');
+    for (const m of finalMaterials) {
+      if (allowedNames.has(this.normalizeMaterialName(m.name))) continue;
+      await this.run(`DELETE FROM material_purchases WHERE material_id = ?`, [m.id]);
+      await this.run(`DELETE FROM raw_materials WHERE id = ?`, [m.id]);
+    }
+
+    console.log('Synchronized raw materials catalogue.');
   }
 
   // --- GENERIC HELPERS ---
@@ -799,7 +881,7 @@ export class Database {
 
   static async authenticateUser(username: string, password: string): Promise<User | null> {
     const results = await this.query<User>(
-      'SELECT id, username, role FROM users WHERE username = ? AND password = ?',
+      'SELECT id, username, role FROM users WHERE username COLLATE NOCASE = ? AND password = ?',
       [username, password]
     );
     return results[0] || null;
@@ -2026,5 +2108,798 @@ export class Database {
   static async getAvailableLocations(): Promise<string[]> {
     const locations = await this.query<any>(`SELECT DISTINCT location FROM dealers WHERE location IS NOT NULL AND location != '' ORDER BY location ASC`);
     return locations.map(l => l.location);
+  }
+
+  // ============================================
+  // --- MANUFACTURING ERP METHODS ---
+  // ============================================
+
+  static async getRawMaterials(): Promise<RawMaterial[]> {
+    await this.seedDefaultRawMaterials();
+    return await this.query<RawMaterial>('SELECT id, name, unit, alert_threshold FROM raw_materials ORDER BY name ASC');
+  }
+
+  static async addRawMaterial(material: { name: string; unit: string; alert_threshold: number }): Promise<string> {
+    const name = material.name.trim();
+    const unit = material.unit.trim();
+    const alertThreshold = Number(material.alert_threshold);
+
+    if (!name || !unit) throw new Error('Name and unit are required.');
+    if (!Number.isFinite(alertThreshold) || alertThreshold < 0) throw new Error('Alert threshold must be 0 or more.');
+
+    const duplicate = await this.query<{ id: string }>(
+      `SELECT id FROM raw_materials WHERE LOWER(name) = LOWER(?) LIMIT 1`,
+      [name]
+    );
+    if (duplicate.length > 0) throw new Error('Material name already exists.');
+
+    const id = `RM-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    await this.run(
+      `INSERT INTO raw_materials (id, name, unit, alert_threshold) VALUES (?, ?, ?, ?)`,
+      [id, name, unit, alertThreshold]
+    );
+    return id;
+  }
+
+  static async updateRawMaterial(
+    id: string,
+    updates: { name: string; unit: string; alert_threshold: number }
+  ): Promise<void> {
+    const name = updates.name.trim();
+    const unit = updates.unit.trim();
+    const alertThreshold = Number(updates.alert_threshold);
+
+    if (!id?.trim()) throw new Error('Material id is required.');
+    if (!name || !unit) throw new Error('Name and unit are required.');
+    if (!Number.isFinite(alertThreshold) || alertThreshold < 0) throw new Error('Alert threshold must be 0 or more.');
+
+    const duplicate = await this.query<{ id: string }>(
+      `SELECT id FROM raw_materials WHERE LOWER(name) = LOWER(?) AND id != ? LIMIT 1`,
+      [name, id]
+    );
+    if (duplicate.length > 0) throw new Error('Material name already exists.');
+
+    await this.run(
+      `UPDATE raw_materials SET name = ?, unit = ?, alert_threshold = ? WHERE id = ?`,
+      [name, unit, alertThreshold, id]
+    );
+  }
+
+  static async deleteRawMaterial(id: string): Promise<void> {
+    const linked = await this.query<{ c: number }>('SELECT COUNT(*) as c FROM material_purchases WHERE material_id = ?', [id]);
+    if ((linked[0]?.c || 0) > 0) {
+      throw new Error('Cannot delete material with purchase history.');
+    }
+    await this.run('DELETE FROM raw_materials WHERE id = ?', [id]);
+  }
+
+  static async getMissingRequiredMaterials(): Promise<Array<{ name: string; unit: string; alert_threshold: number }>> {
+    const required = await this.getRequiredRawMaterials();
+    const existing = await this.query<{ name: string }>('SELECT name FROM raw_materials');
+    const existingNames = new Set(existing.map((e) => this.normalizeMaterialName(e.name)));
+    return required.filter((m) => !existingNames.has(this.normalizeMaterialName(m.name)));
+  }
+
+  static async addMissingMaterialByName(name: string): Promise<string> {
+    const normalizedName = this.normalizeMaterialName(name);
+    const required = await this.getRequiredRawMaterials();
+    const template = required.find((m) => this.normalizeMaterialName(m.name) === normalizedName);
+    if (!template) throw new Error('Unknown required material name.');
+
+    const existing = await this.query<{ id: string }>('SELECT id FROM raw_materials WHERE LOWER(name) = LOWER(?) LIMIT 1', [template.name]);
+    if (existing.length > 0) return existing[0].id;
+
+    const generatedId = `RM-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    await this.run(
+      `INSERT OR IGNORE INTO raw_materials (id, name, unit, alert_threshold) VALUES (?, ?, ?, ?)`,
+      [generatedId, template.name, template.unit, template.alert_threshold]
+    );
+
+    const inserted = await this.query<{ id: string }>('SELECT id FROM raw_materials WHERE LOWER(name) = LOWER(?) LIMIT 1', [template.name]);
+    return inserted[0]?.id || generatedId;
+  }
+
+  static async addMaterialPurchase(purchase: Omit<MaterialPurchase, 'id'>): Promise<string> {
+    const id = `PUR-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+    await this.run(
+      `INSERT INTO material_purchases (id, material_id, date, quantity, unit_price, transport_cost, total_cost, supplier_name) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, purchase.material_id, purchase.date, purchase.quantity, purchase.unit_price, purchase.transport_cost, purchase.total_cost, purchase.supplier_name || null]
+    );
+    return id;
+  }
+
+  static async getMaterialPurchases(limit: number = 100): Promise<MaterialPurchase[]> {
+    return await this.query<MaterialPurchase>('SELECT * FROM material_purchases ORDER BY date DESC, id DESC LIMIT ?', [limit]);
+  }
+
+  static async getAverageMaterialUnitPrice(materialId: string): Promise<number | null> {
+    if (!materialId?.trim()) return null;
+    const result = await this.query<{ avg_price: number | null }>(
+      'SELECT AVG(unit_price) as avg_price FROM material_purchases WHERE material_id = ?',
+      [materialId]
+    );
+    const avgPrice = result[0]?.avg_price;
+    return Number.isFinite(avgPrice as number) ? Number(avgPrice) : null;
+  }
+
+  static async getAverageMaterialCostSnapshot(materialName: string): Promise<{
+    material: RawMaterial | null;
+    avg_unit_price: number | null;
+    avg_transport_cost: number | null;
+  }> {
+    const normalizedName = this.normalizeMaterialName(materialName);
+    await this.addMissingMaterialByName(materialName);
+    const materials = await this.getRawMaterials();
+    const material = materials.find((item) => this.normalizeMaterialName(item.name) === normalizedName) ?? null;
+    if (!material) return { material: null, avg_unit_price: null, avg_transport_cost: null };
+
+    const result = await this.query<{ avg_unit_price: number | null; avg_transport_cost: number | null }>(
+      `SELECT AVG(unit_price) as avg_unit_price, AVG(transport_cost) as avg_transport_cost
+       FROM material_purchases
+       WHERE material_id = ?`,
+      [material.id]
+    );
+    const row = result[0];
+    return {
+      material,
+      avg_unit_price: Number.isFinite(row?.avg_unit_price as number) ? Number(row?.avg_unit_price) : null,
+      avg_transport_cost: Number.isFinite(row?.avg_transport_cost as number) ? Number(row?.avg_transport_cost) : null,
+    };
+  }
+
+  static async addProductionLog(log: Omit<ProductionLog, 'id'>): Promise<string> {
+    const id = `PROD-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+    await this.run(
+      `INSERT INTO production_logs (
+        id, date, stage, stage_detail, battery_model, quantity_produced, labour_cost_total,
+        material_name, material_quantity, unit_weight, average_unit_price, price_per_grid, total_process_cost, process_data
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        log.date,
+        log.stage,
+        log.stage_detail || null,
+        log.battery_model,
+        log.quantity_produced,
+        log.labour_cost_total,
+        log.material_name || null,
+        log.material_quantity ?? null,
+        log.unit_weight ?? null,
+        log.average_unit_price ?? null,
+        log.price_per_grid ?? null,
+        log.total_process_cost ?? null,
+        log.process_data ?? null,
+      ]
+    );
+    return id;
+  }
+
+  static async getProductionLogs(limit: number = 100): Promise<ProductionLog[]> {
+    return await this.query<ProductionLog>('SELECT * FROM production_logs ORDER BY date DESC, id DESC LIMIT ?', [limit]);
+  }
+
+  static async addExpense(expense: Omit<Expense, 'id'>): Promise<string> {
+    const id = `EXP-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+    await this.run(
+      `INSERT INTO expenses (id, date, category, amount, description) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [id, expense.date, expense.category, expense.amount, expense.description]
+    );
+    return id;
+  }
+
+  /**
+   * Deletes any Salaries expense for a specific worker in the given month (YYYY-MM).
+   * Matches by enrollment_no contained in the description and date prefix.
+   */
+  static async deleteWorkerSalaryExpenseForMonth(enrollmentNo: string, yearMonth: string): Promise<void> {
+    await this.run(
+      `DELETE FROM expenses
+       WHERE category = 'Salaries'
+         AND description LIKE ?
+         AND strftime('%Y-%m', date) = ?`,
+      [`%(${enrollmentNo})%`, yearMonth]
+    );
+  }
+
+  static async getExpenses(limit: number = 100): Promise<Expense[]> {
+    return await this.query<Expense>('SELECT * FROM expenses ORDER BY date DESC, id DESC LIMIT ?', [limit]);
+  }
+
+  private static getCurrentMonthKey(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  private static async generateUniqueWorkerEnrollment(): Promise<string> {
+    const year = new Date().getFullYear();
+    for (let i = 0; i < 20; i++) {
+      const code = `FW-${year}-${Math.random().toString().slice(2, 7)}`;
+      const exists = await this.query<{ id: string }>('SELECT id FROM factory_workers WHERE enrollment_no = ? LIMIT 1', [code]);
+      if (exists.length === 0) return code;
+    }
+    return `FW-${year}-${Date.now().toString().slice(-6)}`;
+  }
+
+  static async getFactoryWorkers(search?: string): Promise<Array<FactoryWorker & { salary_paid_this_month: boolean }>> {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    if (search?.trim()) {
+      const q = `%${search.trim().toLowerCase()}%`;
+      conditions.push('(LOWER(COALESCE(enrollment_no, \'\')) LIKE ? OR LOWER(COALESCE(full_name, \'\')) LIKE ? OR LOWER(COALESCE(phone, \'\')) LIKE ?)');
+      params.push(q, q, q);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const rows = await this.query<FactoryWorker>(`SELECT * FROM factory_workers ${where} ORDER BY full_name ASC`, params);
+
+    const currentMonth = this.getCurrentMonthKey();
+    return rows.map((row) => ({
+      ...row,
+      salary_paid_this_month: row.salary_paid_month === currentMonth,
+    }));
+  }
+
+  static async addFactoryWorker(worker: Omit<FactoryWorker, 'id' | 'created_at' | 'updated_at' | 'salary_paid_month'>): Promise<string> {
+    const id = `WRK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    const enrollment = (worker.enrollment_no || '').trim() || await this.generateUniqueWorkerEnrollment();
+    const fullName = (worker.full_name || '').trim();
+
+    if (!enrollment) throw new Error('Enrollment number is required.');
+    if (!fullName) throw new Error('Worker name is required.');
+
+    const duplicate = await this.query<{ id: string }>('SELECT id FROM factory_workers WHERE LOWER(enrollment_no) = LOWER(?) LIMIT 1', [enrollment]);
+    if (duplicate.length > 0) throw new Error('Enrollment number already exists.');
+
+    await this.run(
+      `INSERT INTO factory_workers (
+        id, enrollment_no, full_name, gender, phone,
+        join_date, date_of_birth, base_salary, emergency_contact, status, salary_paid_month, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [
+        id,
+        enrollment,
+        fullName,
+        worker.gender || null,
+        worker.phone || null,
+        worker.join_date || null,
+        worker.date_of_birth || null,
+        worker.base_salary || 0,
+        worker.emergency_contact || null,
+        worker.status || 'ACTIVE',
+        null,
+      ]
+    );
+    return id;
+  }
+
+  static async updateFactoryWorker(id: string, worker: Partial<Omit<FactoryWorker, 'id' | 'created_at' | 'updated_at'>>): Promise<void> {
+    const existing = await this.query<FactoryWorker>('SELECT * FROM factory_workers WHERE id = ? LIMIT 1', [id]);
+    if (existing.length === 0) throw new Error('Worker not found.');
+
+    const merged = { ...existing[0], ...worker };
+    const enrollment = (merged.enrollment_no || '').trim();
+    const fullName = (merged.full_name || '').trim();
+    if (!enrollment) throw new Error('Enrollment number is required.');
+    if (!fullName) throw new Error('Worker name is required.');
+
+    const duplicate = await this.query<{ id: string }>(
+      'SELECT id FROM factory_workers WHERE LOWER(enrollment_no) = LOWER(?) AND id != ? LIMIT 1',
+      [enrollment, id]
+    );
+    if (duplicate.length > 0) throw new Error('Enrollment number already exists.');
+
+    await this.run(
+      `UPDATE factory_workers SET
+        enrollment_no = ?, full_name = ?, gender = ?, phone = ?,
+        join_date = ?, date_of_birth = ?, base_salary = ?,
+        emergency_contact = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`,
+      [
+        enrollment,
+        fullName,
+        merged.gender || null,
+        merged.phone || null,
+        merged.join_date || null,
+        merged.date_of_birth || null,
+        merged.base_salary || 0,
+        merged.emergency_contact || null,
+        merged.status || 'ACTIVE',
+        id,
+      ]
+    );
+  }
+
+  static async setFactoryWorkerSalaryPaid(workerId: string, paid: boolean): Promise<void> {
+    const monthKey = paid ? this.getCurrentMonthKey() : null;
+    await this.run(
+      'UPDATE factory_workers SET salary_paid_month = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [monthKey, workerId]
+    );
+  }
+
+  static async deleteFactoryWorker(workerId: string): Promise<void> {
+    await this.run('DELETE FROM factory_worker_salaries WHERE worker_id = ?', [workerId]);
+    await this.run('DELETE FROM factory_workers WHERE id = ?', [workerId]);
+  }
+
+  // ─── FACTORY WORKER PHASE 2: SALARY & HISTORY ─────────────────────────────
+
+  static async getWorkerSalaryHistory(workerId: string): Promise<any[]> {
+    return await this.query<any>(
+      'SELECT * FROM factory_worker_salaries WHERE worker_id = ? ORDER BY payment_date DESC, id DESC',
+      [workerId]
+    );
+  }
+
+  static async addWorkerSalaryPayment(data: { worker_id: string, amount: number, payment_date: string, type: string, notes?: string }): Promise<void> {
+    await this.run(
+      `INSERT INTO factory_worker_salaries (worker_id, amount, payment_date, type, notes)
+       VALUES (?, ?, ?, ?, ?)`,
+      [data.worker_id, data.amount, data.payment_date, data.type, data.notes || null]
+    );
+
+    // If it's a base salary or increment, auto-mark salary as paid for the month
+    if (data.type === 'BASE' || data.type === 'INCREMENT') {
+      await this.setFactoryWorkerSalaryPaid(data.worker_id, true);
+    }
+  }
+
+  static async getUpcomingWorkerBirthdays(): Promise<FactoryWorker[]> {
+    const today = new Date();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    // Match records where date_of_birth ends in "-MM-DD"
+    const suffix = `-${mm}-${dd}`;
+
+    return await this.query<FactoryWorker>(
+      `SELECT * FROM factory_workers WHERE status = 'ACTIVE' AND date_of_birth LIKE ?`,
+      [`%${suffix}`]
+    );
+  }
+
+  // ─── SQL-LEVEL PAGINATION ─────────────────────────────────────────────────
+  static async getPaginatedPurchases(
+    page: number = 1,
+    limit: number = 10,
+    materialId?: string,
+    dateFrom?: string,
+    dateTo?: string,
+    supplierSearch?: string
+  ): Promise<{ data: MaterialPurchase[]; total: number }> {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    if (materialId) { conditions.push('material_id = ?'); params.push(materialId); }
+    if (dateFrom) { conditions.push('date >= ?'); params.push(dateFrom); }
+    if (dateTo) { conditions.push('date <= ?'); params.push(dateTo); }
+    if (supplierSearch?.trim()) { conditions.push('LOWER(COALESCE(supplier_name, \'\')) LIKE ?'); params.push(`%${supplierSearch.trim().toLowerCase()}%`); }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const offset = (page - 1) * limit;
+    const [data, countResult] = await Promise.all([
+      this.query<MaterialPurchase>(`SELECT * FROM material_purchases ${where} ORDER BY date DESC, id DESC LIMIT ? OFFSET ?`, [...params, limit, offset]),
+      this.query<{ c: number }>(`SELECT COUNT(*) as c FROM material_purchases ${where}`, params)
+    ]);
+    return { data, total: countResult[0]?.c || 0 };
+  }
+
+  static async getPaginatedProduction(
+    page: number = 1,
+    limit: number = 10,
+    batteryModel?: string,
+    dateFrom?: string,
+    dateTo?: string
+  ): Promise<{ data: ProductionLog[]; total: number }> {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    if (batteryModel) { conditions.push('battery_model = ?'); params.push(batteryModel); }
+    if (dateFrom) { conditions.push('date >= ?'); params.push(dateFrom); }
+    if (dateTo) { conditions.push('date <= ?'); params.push(dateTo); }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const offset = (page - 1) * limit;
+    const [data, countResult] = await Promise.all([
+      this.query<ProductionLog>(`SELECT * FROM production_logs ${where} ORDER BY date DESC, id DESC LIMIT ? OFFSET ?`, [...params, limit, offset]),
+      this.query<{ c: number }>(`SELECT COUNT(*) as c FROM production_logs ${where}`, params)
+    ]);
+    return { data, total: countResult[0]?.c || 0 };
+  }
+
+  static async getPaginatedExpenses(
+    page: number = 1,
+    limit: number = 10,
+    category?: string,
+    dateFrom?: string,
+    dateTo?: string,
+    searchText?: string
+  ): Promise<{ data: Expense[]; total: number }> {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    if (category) { conditions.push('category = ?'); params.push(category); }
+    if (dateFrom) { conditions.push('date >= ?'); params.push(dateFrom); }
+    if (dateTo) { conditions.push('date <= ?'); params.push(dateTo); }
+    if (searchText?.trim()) {
+      const q = `%${searchText.trim().toLowerCase()}%`;
+      conditions.push('(LOWER(COALESCE(description, \'\')) LIKE ? OR LOWER(COALESCE(category, \'\')) LIKE ?)');
+      params.push(q, q);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const offset = (page - 1) * limit;
+    const [data, countResult] = await Promise.all([
+      this.query<Expense>(`SELECT * FROM expenses ${where} ORDER BY date DESC, id DESC LIMIT ? OFFSET ?`, [...params, limit, offset]),
+      this.query<{ c: number }>(`SELECT COUNT(*) as c FROM expenses ${where}`, params)
+    ]);
+    return { data, total: countResult[0]?.c || 0 };
+  }
+
+  // ─── MANUFACTURING DASHBOARD STATS (All backend, no frontend math) ─────────
+  static async getManufacturingDashboardStats(selectedYear?: number, selectedMonth?: number): Promise<{
+    availableYears: number[];
+    selectedYear: number;
+    selectedMonth: number;
+    thisMonthProduction: number;
+    lastMonthProduction: number;
+    thisMonthExpenses: number;
+    lastMonthExpenses: number;
+    thisMonthPurchaseSpend: number;
+    lastMonthPurchaseSpend: number;
+    thisMonthBatteriesDelivered: number;
+    lastMonthBatteriesDelivered: number;
+    positiveGridTotal: number;
+    negativeGridTotal: number;
+    positiveGridAvgPrice: number;
+    negativeGridAvgPrice: number;
+    positivePlateTotal: number;
+    negativePlateTotal: number;
+    positivePlateAvgPrice: number;
+    negativePlateAvgPrice: number;
+    assemblyByModel: { model: string; units: number; avg_price: number }[];
+    monthlyOverview: { month: number; label: string; production: number; dispatched: number; purchases: number; expenses: number }[];
+    selectedMonthModelMix: { name: string; value: number }[];
+    selectedMonthStageMix: { name: string; value: number }[];
+    productionByModel: { model: string; units: number }[];
+    expenseByCategory: { category: string; total: number }[];
+    last30DayAvgPrices: { name: string; unit: string; avg_cost: number }[];
+  }> {
+    const now = new Date();
+    const activeYear = selectedYear ?? now.getFullYear();
+    const activeMonth = selectedMonth ?? (now.getMonth() + 1);
+    const monthStr = `${activeYear}-${String(activeMonth).padStart(2, '0')}`;
+    const prevMonth = new Date(activeYear, activeMonth - 2, 1);
+    const prevMonthStr = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}`;
+    const d30 = new Date(now); d30.setDate(d30.getDate() - 30);
+    const last30 = d30.toISOString().slice(0, 10);
+
+    const [
+      availableYearRows,
+      prodMonth, prodLastMonth, expMonth, expLastMonth, purMonth, purLastMonth, deliveredMonth, deliveredLastMonth,
+      byModel, byCategory, purchaseCategoryTotal, last30Avg, castingTotals, pastingTotals, assemblyByModel,
+      monthlyProduction, monthlyExpenses, monthlyPurchases, monthlyDispatches, selectedMonthModelMix, selectedMonthStageMix
+    ] = await Promise.all([
+      this.query<{ year: string }>(
+        `SELECT DISTINCT year FROM (
+           SELECT strftime('%Y', date) as year FROM production_logs
+           UNION
+           SELECT strftime('%Y', date) as year FROM expenses
+           UNION
+           SELECT strftime('%Y', date) as year FROM material_purchases
+           UNION
+           SELECT strftime('%Y', saleDate) as year FROM sales
+         )
+         WHERE year IS NOT NULL AND year <> ''
+         ORDER BY year DESC`
+      ).catch(() => [] as { year: string }[]),
+      this.query<{ total: number }>(
+        `SELECT COALESCE(SUM(quantity_produced), 0) as total FROM production_logs WHERE strftime('%Y-%m', date) = ?`, [monthStr]),
+      this.query<{ total: number }>(
+        `SELECT COALESCE(SUM(quantity_produced), 0) as total FROM production_logs WHERE strftime('%Y-%m', date) = ?`, [prevMonthStr]),
+      this.query<{ total: number }>(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE strftime('%Y-%m', date) = ?`, [monthStr]),
+      this.query<{ total: number }>(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE strftime('%Y-%m', date) = ?`, [prevMonthStr]),
+      this.query<{ total: number }>(
+        `SELECT COALESCE(SUM(total_cost), 0) as total FROM material_purchases WHERE strftime('%Y-%m', date) = ?`, [monthStr]),
+      this.query<{ total: number }>(
+        `SELECT COALESCE(SUM(total_cost), 0) as total FROM material_purchases WHERE strftime('%Y-%m', date) = ?`, [prevMonthStr]),
+      this.query<{ total: number }>(
+        `SELECT COUNT(*) as total FROM sales WHERE strftime('%Y-%m', saleDate) = ?`, [monthStr]
+      ).catch(() => [{ total: 0 }]),
+      this.query<{ total: number }>(
+        `SELECT COUNT(*) as total FROM sales WHERE strftime('%Y-%m', saleDate) = ?`, [prevMonthStr]
+      ).catch(() => [{ total: 0 }]),
+      this.query<{ model: string; units: number }>(
+        `SELECT battery_model as model, COALESCE(SUM(quantity_produced), 0) as units
+         FROM production_logs WHERE strftime('%Y-%m', date) = ? GROUP BY battery_model ORDER BY units DESC`, [monthStr]),
+      this.query<{ category: string; total: number }>(
+        `SELECT category, COALESCE(SUM(amount), 0) as total
+         FROM expenses WHERE strftime('%Y-%m', date) = ? GROUP BY category ORDER BY total DESC`, [monthStr]),
+      this.query<{ total: number }>(
+        `SELECT COALESCE(SUM(total_cost), 0) as total
+         FROM material_purchases
+         WHERE strftime('%Y-%m', date) = ?`, [monthStr]
+      ).catch(() => [{ total: 0 }]),
+      // Last 30 days average unit cost per material
+      this.query<{ name: string; unit: string; avg_cost: number }>(
+        `SELECT rm.name, rm.unit,
+           COALESCE(SUM(mp.total_cost) / NULLIF(SUM(mp.quantity), 0), 0) as avg_cost
+         FROM material_purchases mp
+         JOIN raw_materials rm ON mp.material_id = rm.id
+         WHERE mp.date >= ?
+         GROUP BY rm.id ORDER BY avg_cost DESC`, [last30]
+      ).catch(() => [] as { name: string; unit: string; avg_cost: number }[]),
+      this.query<{ stage_detail: string | null; total_grids: number; avg_price: number }>(
+        `SELECT
+           stage_detail,
+           COALESCE(SUM(quantity_produced), 0) as total_grids,
+           COALESCE(AVG(price_per_grid), 0) as avg_price
+         FROM production_logs
+         WHERE stage = 'CASTING' AND stage_detail IN ('POSITIVE_CASTING', 'NEGATIVE_CASTING')
+         GROUP BY stage_detail`
+      ).catch(() => [] as { stage_detail: string | null; total_grids: number; avg_price: number }[]),
+      this.query<{ stage_detail: string | null; total_units: number; avg_price: number }>(
+        `SELECT
+           stage_detail,
+           COALESCE(SUM(quantity_produced), 0) as total_units,
+           COALESCE(AVG(price_per_grid), 0) as avg_price
+         FROM production_logs
+         WHERE stage = 'PASTING' AND stage_detail IN ('POSITIVE_PASTING', 'NEGATIVE_PASTING')
+         GROUP BY stage_detail`
+      ).catch(() => [] as { stage_detail: string | null; total_units: number; avg_price: number }[]),
+      this.query<{ model: string; units: number; avg_price: number }>(
+        `SELECT
+           battery_model as model,
+           COALESCE(SUM(quantity_produced), 0) as units,
+           COALESCE(AVG(price_per_grid), 0) as avg_price
+         FROM production_logs
+         WHERE stage = 'ASSEMBLY' AND COALESCE(battery_model, '') <> ''
+         GROUP BY battery_model
+         ORDER BY units DESC, model ASC`
+      ).catch(() => [] as { model: string; units: number; avg_price: number }[]),
+      this.query<{ month: string; total: number }>(
+        `SELECT strftime('%m', date) as month, COALESCE(SUM(quantity_produced), 0) as total
+         FROM production_logs
+         WHERE strftime('%Y', date) = ?
+         GROUP BY strftime('%m', date)`,
+        [String(activeYear)]
+      ).catch(() => [] as { month: string; total: number }[]),
+      this.query<{ month: string; total: number }>(
+        `SELECT strftime('%m', date) as month, COALESCE(SUM(amount), 0) as total
+         FROM expenses
+         WHERE strftime('%Y', date) = ?
+         GROUP BY strftime('%m', date)`,
+        [String(activeYear)]
+      ).catch(() => [] as { month: string; total: number }[]),
+      this.query<{ month: string; total: number }>(
+        `SELECT strftime('%m', date) as month, COALESCE(SUM(total_cost), 0) as total
+         FROM material_purchases
+         WHERE strftime('%Y', date) = ?
+         GROUP BY strftime('%m', date)`,
+        [String(activeYear)]
+      ).catch(() => [] as { month: string; total: number }[]),
+      this.query<{ month: string; total: number }>(
+        `SELECT strftime('%m', saleDate) as month, COUNT(*) as total
+         FROM sales
+         WHERE strftime('%Y', saleDate) = ?
+         GROUP BY strftime('%m', saleDate)`,
+        [String(activeYear)]
+      ).catch(() => [] as { month: string; total: number }[]),
+      this.query<{ name: string; value: number }>(
+        `SELECT battery_model as name, COALESCE(SUM(quantity_produced), 0) as value
+         FROM production_logs
+         WHERE stage = 'ASSEMBLY' AND strftime('%Y-%m', date) = ? AND COALESCE(battery_model, '') <> ''
+         GROUP BY battery_model
+         ORDER BY value DESC`,
+        [monthStr]
+      ).catch(() => [] as { name: string; value: number }[]),
+      this.query<{ name: string; value: number }>(
+        `SELECT
+           CASE
+             WHEN stage = 'CASTING' THEN 'Casting'
+             WHEN stage = 'PASTING' THEN 'Pasting'
+             WHEN stage = 'ASSEMBLY' THEN 'Assembly'
+             ELSE stage
+           END as name,
+           COALESCE(SUM(quantity_produced), 0) as value
+         FROM production_logs
+         WHERE strftime('%Y-%m', date) = ?
+         GROUP BY stage
+         ORDER BY value DESC`,
+        [monthStr]
+      ).catch(() => [] as { name: string; value: number }[])
+    ]);
+
+    const positiveCasting = castingTotals.find((row) => row.stage_detail === 'POSITIVE_CASTING');
+    const negativeCasting = castingTotals.find((row) => row.stage_detail === 'NEGATIVE_CASTING');
+    const positivePasting = pastingTotals.find((row) => row.stage_detail === 'POSITIVE_PASTING');
+    const negativePasting = pastingTotals.find((row) => row.stage_detail === 'NEGATIVE_PASTING');
+    const positiveFinishedPlateAvgPrice = ((positiveCasting?.avg_price || 0) / 2) + (positivePasting?.avg_price || 0);
+    const negativeFinishedPlateAvgPrice = ((negativeCasting?.avg_price || 0) / 2) + (negativePasting?.avg_price || 0);
+    const thisMonthOperatingExpenses = expMonth[0]?.total || 0;
+    const lastMonthOperatingExpenses = expLastMonth[0]?.total || 0;
+    const thisMonthPurchaseExpenses = purMonth[0]?.total || 0;
+    const lastMonthPurchaseExpenses = purLastMonth[0]?.total || 0;
+    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const monthlyOverview = monthNames.map((label, index) => {
+      const monthKey = String(index + 1).padStart(2, '0');
+      const monthPurchase = monthlyPurchases.find((row) => row.month === monthKey)?.total || 0;
+      const monthOperatingExpense = monthlyExpenses.find((row) => row.month === monthKey)?.total || 0;
+      return {
+        month: index + 1,
+        label,
+        production: monthlyProduction.find((row) => row.month === monthKey)?.total || 0,
+        dispatched: monthlyDispatches.find((row) => row.month === monthKey)?.total || 0,
+        purchases: monthPurchase,
+        expenses: monthOperatingExpense + monthPurchase,
+      };
+    });
+    const availableYears = Array.from(new Set([
+      now.getFullYear(),
+      ...availableYearRows.map((row) => Number(row.year)).filter((year) => Number.isFinite(year)),
+    ])).sort((a, b) => b - a);
+    const expenseByCategory = [
+      { category: 'Material Purchases', total: purchaseCategoryTotal[0]?.total || 0 },
+      ...byCategory,
+    ].filter((row) => row.total > 0).sort((a, b) => b.total - a.total);
+
+    return {
+      availableYears,
+      selectedYear: activeYear,
+      selectedMonth: activeMonth,
+      thisMonthProduction: prodMonth[0]?.total || 0,
+      lastMonthProduction: prodLastMonth[0]?.total || 0,
+      thisMonthExpenses: thisMonthOperatingExpenses + thisMonthPurchaseExpenses,
+      lastMonthExpenses: lastMonthOperatingExpenses + lastMonthPurchaseExpenses,
+      thisMonthPurchaseSpend: thisMonthPurchaseExpenses,
+      lastMonthPurchaseSpend: lastMonthPurchaseExpenses,
+      thisMonthBatteriesDelivered: deliveredMonth[0]?.total || 0,
+      lastMonthBatteriesDelivered: deliveredLastMonth[0]?.total || 0,
+      positiveGridTotal: positiveCasting?.total_grids || 0,
+      negativeGridTotal: negativeCasting?.total_grids || 0,
+      positiveGridAvgPrice: positiveCasting?.avg_price || 0,
+      negativeGridAvgPrice: negativeCasting?.avg_price || 0,
+      positivePlateTotal: positivePasting?.total_units || 0,
+      negativePlateTotal: negativePasting?.total_units || 0,
+      positivePlateAvgPrice: positiveFinishedPlateAvgPrice,
+      negativePlateAvgPrice: negativeFinishedPlateAvgPrice,
+      assemblyByModel,
+      monthlyOverview,
+      selectedMonthModelMix,
+      selectedMonthStageMix,
+      productionByModel: byModel,
+      expenseByCategory,
+      last30DayAvgPrices: last30Avg
+    };
+  }
+
+
+
+
+  // ─── INVENTORY OVERVIEW (Backend Calculated) ─────────────────────────────
+  static async getInventoryOverview(): Promise<{
+    id: string; name: string; unit: string;
+    alert_threshold: number; purchased: number; consumed: number;
+    current_stock: number; avg_cost: number; is_low: boolean;
+  }[]> {
+    await this.seedDefaultRawMaterials();
+    const materials = await this.query<RawMaterial>('SELECT id, name, unit, alert_threshold FROM raw_materials ORDER BY name ASC');
+    const purchaseAggs = await this.query<{ material_id: string; total_qty: number; total_cost: number }>(
+      `SELECT material_id, SUM(quantity) as total_qty, SUM(total_cost) as total_cost 
+       FROM material_purchases GROUP BY material_id`
+    );
+    const prodLogs = await this.query<ProductionLog>('SELECT * FROM production_logs');
+
+    const purchaseMap: Record<string, { total_qty: number; total_cost: number }> = {};
+    purchaseAggs.forEach((p: any) => {
+      purchaseMap[p.material_id] = { total_qty: p.total_qty || 0, total_cost: p.total_cost || 0 };
+    });
+
+    const modelFormulas: Record<string, { rawLead: number; acid: number; pvcSeparator: number; packingJali: number; plusMinusCaps: number; containers: number }> = {
+      SL35: { rawLead: 0.6, acid: 2, pvcSeparator: 18, packingJali: 12, plusMinusCaps: 2, containers: 1 },
+      SL40: { rawLead: 0.6, acid: 2, pvcSeparator: 24, packingJali: 12, plusMinusCaps: 2, containers: 1 },
+      SL60: { rawLead: 0.8, acid: 3, pvcSeparator: 30, packingJali: 15, plusMinusCaps: 2, containers: 1 },
+      SL75: { rawLead: 1.0, acid: 3, pvcSeparator: 36, packingJali: 15, plusMinusCaps: 2, containers: 1 },
+      SL80: { rawLead: 1.2, acid: 4, pvcSeparator: 40, packingJali: 18, plusMinusCaps: 2, containers: 1 },
+      SL90: { rawLead: 1.2, acid: 4, pvcSeparator: 42, packingJali: 18, plusMinusCaps: 2, containers: 1 },
+      SL100: { rawLead: 1.5, acid: 5, pvcSeparator: 48, packingJali: 20, plusMinusCaps: 2, containers: 1 },
+      SL120: { rawLead: 1.8, acid: 6, pvcSeparator: 56, packingJali: 22, plusMinusCaps: 2, containers: 1 },
+      SL130: { rawLead: 2.0, acid: 6, pvcSeparator: 60, packingJali: 22, plusMinusCaps: 2, containers: 1 },
+      SL150: { rawLead: 2.3, acid: 7, pvcSeparator: 66, packingJali: 25, plusMinusCaps: 2, containers: 1 },
+      SL180: { rawLead: 2.8, acid: 8, pvcSeparator: 72, packingJali: 25, plusMinusCaps: 2, containers: 1 },
+      B23: { rawLead: 0.4, acid: 1.5, pvcSeparator: 14, packingJali: 10, plusMinusCaps: 2, containers: 1 },
+    };
+
+    const consumedByName: Record<string, number> = {};
+    const addConsumed = (materialName: string, quantity: number) => {
+      const normalizedName = this.normalizeMaterialName(materialName);
+      if (!normalizedName || !Number.isFinite(quantity) || quantity <= 0) return;
+      consumedByName[normalizedName] = (consumedByName[normalizedName] || 0) + quantity;
+    };
+    const mapAssemblyLabelToMaterial = (label: string, modelName: string) => {
+      const normalizedLabel = this.normalizeMaterialName(label);
+      if (normalizedLabel === 'positive plates' || normalizedLabel === 'negative plates') return null;
+      if (normalizedLabel === 'container') return `Container - ${modelName}`;
+      if (normalizedLabel === 'plus minus caps') return 'Plus Minus Caps';
+      if (normalizedLabel === 'battery packing') return 'Battery Packing';
+      if (normalizedLabel === 'charging' || normalizedLabel === 'battery screening' || normalizedLabel === 'labour') return null;
+      return label;
+    };
+    prodLogs.forEach((log: ProductionLog) => {
+      if (log.stage === 'CASTING' && log.material_name && Number.isFinite(log.material_quantity || NaN)) {
+        addConsumed(log.material_name, log.material_quantity || 0);
+        return;
+      }
+      if (log.stage === 'PASTING' && log.process_data) {
+        try {
+          const processData = JSON.parse(log.process_data) as Record<string, unknown>;
+          addConsumed('Grey Oxide', Number(processData.grey_oxide_qty) || 0);
+          addConsumed('Dinal Fiber', Number(processData.dinal_fiber_qty) || 0);
+          addConsumed('DM Water', Number(processData.dm_water_qty) || 0);
+          addConsumed('Acid', Number(processData.acid_qty) || 0);
+          addConsumed('Lignin (Lugnin)', Number(processData.lugnin_qty) || 0);
+          addConsumed('Carbon Black', Number(processData.carbon_black_qty) || 0);
+          addConsumed('Graphite Powder', Number(processData.graphite_powder_qty) || 0);
+          addConsumed('Barium Sulfate', Number(processData.barium_sulfate_qty) || 0);
+        } catch {
+          // Ignore malformed historical process_data and fall back to old behavior below.
+        }
+        return;
+      }
+      if (log.stage === 'ASSEMBLY' && log.process_data) {
+        try {
+          const processData = JSON.parse(log.process_data) as { rows?: Array<{ label?: string; total_qty?: number }> };
+          (processData.rows || []).forEach((row) => {
+            const materialName = mapAssemblyLabelToMaterial(String(row.label || ''), log.battery_model);
+            if (!materialName) return;
+            addConsumed(materialName, Number(row.total_qty) || 0);
+          });
+        } catch {
+          // Ignore malformed historical process_data and fall back to formula path below.
+        }
+        return;
+      }
+      const formula = modelFormulas[log.battery_model];
+      if (!formula) return;
+      addConsumed('Raw Lead', formula.rawLead * log.quantity_produced);
+      addConsumed('Acid', formula.acid * log.quantity_produced);
+      addConsumed('PVC Separator', formula.pvcSeparator * log.quantity_produced);
+      addConsumed('Packing Jali', formula.packingJali * log.quantity_produced);
+      addConsumed('Plus Minus Caps', formula.plusMinusCaps * log.quantity_produced);
+      addConsumed(`Container - ${log.battery_model}`, formula.containers * log.quantity_produced);
+    });
+
+    return materials.map(m => {
+      const pur = purchaseMap[m.id] || { total_qty: 0, total_cost: 0 };
+      const consumed = consumedByName[this.normalizeMaterialName(m.name)] || 0;
+      const current_stock = Math.max(0, pur.total_qty - consumed);
+      const avg_cost = pur.total_qty > 0 ? pur.total_cost / pur.total_qty : 0;
+      return {
+        id: m.id, name: m.name, unit: m.unit,
+        alert_threshold: m.alert_threshold,
+        purchased: pur.total_qty, consumed, current_stock, avg_cost,
+        is_low: current_stock <= m.alert_threshold
+      };
+    });
+  }
+
+  static async getLowStockMaterials(limit: number = 8): Promise<Array<{
+    id: string;
+    name: string;
+    unit: string;
+    current_stock: number;
+    alert_threshold: number;
+    shortage: number;
+  }>> {
+    const overview = await this.getInventoryOverview();
+    return overview
+      .filter((item) => item.is_low)
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        unit: item.unit,
+        current_stock: item.current_stock,
+        alert_threshold: item.alert_threshold,
+        shortage: Math.max(0, item.alert_threshold - item.current_stock),
+      }))
+      .sort((a, b) => b.shortage - a.shortage)
+      .slice(0, Math.max(1, limit));
   }
 }
