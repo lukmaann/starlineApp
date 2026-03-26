@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navigation from './components/Navigation';
 import Scanner from './pages/Scanner';
 import Dealers from './pages/Dealers';
@@ -13,7 +13,7 @@ import Batches from './pages/Batches';
 import ManufacturingHub from './factory_operations/ManufacturingHub';
 import GlobalAnalytics from './components/GlobalAnalytics';
 import { Database } from './db';
-import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi, LogOut, KeyRound, Loader2 } from 'lucide-react';
+import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi, LogOut, KeyRound, Loader2, CheckCircle2 } from 'lucide-react';
 import { Toaster } from './components/ui/sonner';
 import { Dialog, DialogContent, DialogTitle } from './components/ui/dialog';
 import { toast } from "sonner";
@@ -24,6 +24,14 @@ import NotificationBell from './components/NotificationBell';
 import ShortcutsModal from './components/ShortcutsModal';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import BackupReminderBanner from './components/BackupReminderBanner';
+import { BatteryStatus } from './types';
+
+type PendingDealerTarget = {
+  dealerId: string;
+  batteryId: string;
+  status: BatteryStatus;
+  isExpired: boolean;
+};
 
 const App: React.FC = () => {
   const {
@@ -44,6 +52,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pendingSearch, setPendingSearch] = useState<string | null>(null);
+  const [pendingDealerTarget, setPendingDealerTarget] = useState<PendingDealerTarget | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isDbReady, setIsDbReady] = useState(false);
   const [sessionCountdown, setSessionCountdown] = useState<number | null>(null);
@@ -56,6 +65,7 @@ const App: React.FC = () => {
 
   const [showDbNotification, setShowDbNotification] = useState(false);
   const [dbNotificationData, setDbNotificationData] = useState<{ isSSD: boolean, path: string } | null>(null);
+  const storageNoticeRef = useRef<HTMLDivElement | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     if (type === 'error') {
@@ -68,6 +78,11 @@ const App: React.FC = () => {
   const triggerHubSearch = (serial: string) => {
     setPendingSearch(serial);
     navigate('scanner');
+  };
+
+  const openDealerDetail = (dealerId: string, batteryId: string, status: BatteryStatus, isExpired: boolean) => {
+    setPendingDealerTarget({ dealerId, batteryId, status, isExpired });
+    navigate('dealers');
   };
 
   useEffect(() => {
@@ -136,6 +151,19 @@ const App: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!showDbNotification || !storageNoticeRef.current) return;
+      const target = event.target as Node;
+      if (!storageNoticeRef.current.contains(target)) {
+        setShowDbNotification(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [showDbNotification]);
+
   const handleLogoutClick = () => {
     setShowLogoutConfirm(true);
   };
@@ -178,6 +206,7 @@ const App: React.FC = () => {
             initialState={getPageState('scanner')}
             onStateChange={(s) => savePageState('scanner', s)}
             active={activeTab === 'scanner'}
+            onOpenDealers={openDealerDetail}
           />
         );
       case 'dealers':
@@ -190,6 +219,8 @@ const App: React.FC = () => {
             initialState={getPageState('dealers')}
             onStateChange={(s) => savePageState('dealers', s)}
             active={activeTab === 'dealers'}
+            pendingDealerTarget={pendingDealerTarget}
+            onPendingDealerHandled={() => setPendingDealerTarget(null)}
           />
         );
       case 'settlements':
@@ -200,13 +231,13 @@ const App: React.FC = () => {
               navigate('scanner');
             }}
           />
-        ) : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
+        ) : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} />;
 
       case 'controls':
-        return isAdmin ? <Controls active={activeTab === 'controls'} /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
+        return isAdmin ? <Controls active={activeTab === 'controls'} /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} />;
 
       case 'analytics':
-        return isAdmin ? <GlobalAnalytics /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
+        return isAdmin ? <GlobalAnalytics /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} />;
 
       case 'batches':
         return <Batches
@@ -217,13 +248,13 @@ const App: React.FC = () => {
         />;
 
       case 'manufacturing':
-        return isAdmin ? <ManufacturingHub active={activeTab === 'manufacturing'} userRole={user?.role} /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
+        return isAdmin ? <ManufacturingHub active={activeTab === 'manufacturing'} userRole={user?.role} /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} />;
 
       case 'database-management':
-        return isAdmin ? <DatabaseManagement /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
+        return isAdmin ? <DatabaseManagement /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} />;
 
       case 'backup':
-        return isAdmin ? <Backup /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} />;
+        return isAdmin ? <Backup /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} />;
 
       default:
         return null;
@@ -314,23 +345,53 @@ const App: React.FC = () => {
 
             {isAdmin && (
               <>
-                <div className="flex items-center mr-2 bg-slate-50 border border-slate-200 rounded-full p-1 h-9">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${localStorage.getItem('dbConfig') && JSON.parse(localStorage.getItem('dbConfig') || '{}').type === 'EXTERNAL'
-                    ? 'bg-purple-100 text-purple-700'
-                    : 'bg-blue-100 text-blue-700'
-                    }`}>
-                    {localStorage.getItem('dbConfig') && JSON.parse(localStorage.getItem('dbConfig') || '{}').type === 'EXTERNAL' ? 'SSD' : 'Internal'}
-                  </span>
-                  <button
-                    title="Manage Database"
-                    onClick={() => navigate('database-management')}
-                    className={`ml-1 p-1.5 rounded-full transition-all ${activeTab === 'database-management'
-                      ? 'bg-slate-900 text-white shadow-md'
-                      : 'text-slate-400 hover:text-slate-900 hover:bg-slate-200'
-                      }`}
-                  >
-                    <DatabaseIcon size={16} />
-                  </button>
+                <div ref={storageNoticeRef} className="relative mr-2">
+                  <div className="flex items-center bg-slate-50 border border-slate-200 rounded-full p-1 h-9">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${localStorage.getItem('dbConfig') && JSON.parse(localStorage.getItem('dbConfig') || '{}').type === 'EXTERNAL'
+                      ? 'bg-purple-100 text-purple-700'
+                      : 'bg-blue-100 text-blue-700'
+                      }`}>
+                      {localStorage.getItem('dbConfig') && JSON.parse(localStorage.getItem('dbConfig') || '{}').type === 'EXTERNAL' ? 'SSD' : 'Internal'}
+                    </span>
+                    <button
+                      title="Manage Database"
+                      onClick={() => navigate('database-management')}
+                      className={`ml-1 p-1.5 rounded-full transition-all ${activeTab === 'database-management'
+                        ? 'bg-slate-900 text-white shadow-md'
+                        : 'text-slate-400 hover:text-slate-900 hover:bg-slate-200'
+                        }`}
+                    >
+                      <DatabaseIcon size={16} />
+                    </button>
+                  </div>
+
+                  {showDbNotification && dbNotificationData && (
+                    <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-72 animate-in slide-in-from-top-2 fade-in duration-300">
+                      <div className={`rounded-2xl border p-4 shadow-[0_20px_40px_-20px_rgba(15,23,42,0.25)] ${dbNotificationData.isSSD ? 'border-purple-200 bg-gradient-to-br from-purple-50 via-white to-fuchsia-50' : 'border-blue-200 bg-gradient-to-br from-blue-50 via-white to-cyan-50'}`}>
+                        <div className="flex items-start gap-3">
+                          <div className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${dbNotificationData.isSSD ? 'bg-purple-600 text-white shadow-lg shadow-purple-200' : 'bg-blue-600 text-white shadow-lg shadow-blue-200'}`}>
+                            <CheckCircle2 size={18} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-slate-900">Storage connected</p>
+                            <p className={`mt-1 text-xs font-semibold ${dbNotificationData.isSSD ? 'text-purple-700' : 'text-blue-700'}`}>
+                              {dbNotificationData.isSSD ? 'External SSD is currently active.' : 'Internal storage is currently active.'}
+                            </p>
+                            <p className="mt-2 truncate text-[11px] font-medium text-slate-500">
+                              {dbNotificationData.path}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setShowDbNotification(false)}
+                            className="rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                            aria-label="Close storage notification"
+                          >
+                            <span className="block text-sm leading-none">x</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="w-px h-6 bg-slate-200 mx-1" />
@@ -492,67 +553,6 @@ const App: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showDbNotification} onOpenChange={setShowDbNotification}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-0 bg-transparent shadow-none [&>button]:hidden">
-          <div
-            className="bg-white rounded-2xl p-8 relative overflow-hidden"
-            style={{ boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 20px 40px -8px rgba(0,0,0,0.15)' }}
-          >
-            {/* Decorative background like Login */}
-            <div className="absolute inset-0 pointer-events-none overflow-hidden">
-              <div
-                className="absolute inset-0 opacity-[0.03] z-0"
-                style={{
-                  backgroundImage: 'linear-gradient(#94a3b8 1px, transparent 1px), linear-gradient(90deg, #94a3b8 1px, transparent 1px)',
-                  backgroundSize: '20px 20px',
-                }}
-              />
-            </div>
-
-            <div className="relative z-10 flex flex-col items-center animate-in zoom-in-95 duration-500">
-              <div
-                className="w-14 h-14 rounded-[18px] flex items-center justify-center mb-5 shadow-lg"
-                style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}
-              >
-                <DatabaseIcon size={24} className={dbNotificationData?.isSSD ? "text-purple-400" : "text-blue-400"} />
-              </div>
-
-              <DialogTitle className="text-xl font-black text-slate-900 tracking-tight text-center">
-                Database Connected
-              </DialogTitle>
-
-              <div className="mt-6 w-full space-y-4">
-                <div className={`p-4 rounded-xl border flex flex-col items-center justify-center gap-2 ${dbNotificationData?.isSSD
-                  ? 'bg-purple-50 border-purple-100 text-purple-900'
-                  : 'bg-blue-50 border-blue-100 text-blue-900'
-                  }`}>
-                  <span className="text-xs font-bold uppercase tracking-wider opacity-60">
-                    Active Storage
-                  </span>
-                  <span className={`text-lg font-black tracking-tight ${dbNotificationData?.isSSD ? 'text-purple-700' : 'text-blue-700'
-                    }`}>
-                    {dbNotificationData?.isSSD ? 'External SSD' : 'Internal Drive'}
-                  </span>
-                  <span className="text-[10px] font-medium opacity-60 truncate w-full text-center px-4">
-                    {dbNotificationData?.path}
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => setShowDbNotification(false)}
-                  className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] mt-2"
-                  style={{
-                    background: 'linear-gradient(135deg, #0f172a 0%, #1e40af 100%)',
-                    boxShadow: '0 4px 14px rgba(15,23,42,0.25)',
-                  }}
-                >
-                  Continue Workspace
-                </button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div >
   );
 };

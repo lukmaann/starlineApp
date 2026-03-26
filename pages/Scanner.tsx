@@ -42,10 +42,11 @@ interface ScannerProps {
   initialState?: any;
   onStateChange?: (state: any) => void;
   active?: boolean;
+  onOpenDealers?: (dealerId: string, batteryId: string, status: BatteryStatus, isExpired: boolean) => void;
 }
 
 
-const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, initialState, onStateChange, active }) => {
+const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, initialState, onStateChange, active, onOpenDealers }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const replacementInputRef = useRef<HTMLInputElement>(null);
   const batchIntervalRef = useRef<any>(null);
@@ -987,6 +988,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
             showDateCorrection={showDateCorrection}
             setShowDateCorrection={setShowDateCorrection}
             userRole={userRole}
+            onOpenDealers={onOpenDealers}
           />
 
           {isInspecting && (

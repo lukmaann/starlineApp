@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Database } from '../db';
 import { Dealer, Battery, Replacement, BatteryStatus, BatteryModel } from '../types';
@@ -35,6 +35,13 @@ interface DealersProps {
   initialState?: any;
   onStateChange?: (state: any) => void;
   active?: boolean;
+  pendingDealerTarget?: {
+    dealerId: string;
+    batteryId: string;
+    status: BatteryStatus;
+    isExpired: boolean;
+  } | null;
+  onPendingDealerHandled?: () => void;
 }
 
 
@@ -64,7 +71,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   }
 }
 
-const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState, onStateChange, active }) => {
+const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState, onStateChange, active, pendingDealerTarget, onPendingDealerHandled }) => {
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [totalDealers, setTotalDealers] = useState(0);
   const DEALERS_PER_PAGE = 12;
@@ -98,10 +105,14 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   const [filterYear, setFilterYear] = useState<number | undefined>(undefined);
   const [filterMonth, setFilterMonth] = useState<number | undefined>(undefined);
   const [isFilterOpen, setIsFilterOpen] = useState<'TABS' | 'FILTERS' | ''>('');
+  const tabsMenuRef = useRef<HTMLDivElement | null>(null);
+  const filtersMenuRef = useRef<HTMLDivElement | null>(null);
+  const registrySearchRef = useRef<HTMLDivElement | null>(null);
 
   const [unitPage, setUnitPage] = useState(0);
   const unitsLimit = 100;
   const [analytics, setAnalytics] = useState<any>(null);
+  const [highlightedBatteryId, setHighlightedBatteryId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -137,6 +148,28 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
   }, []); // Reload when page changes
 
   useEffect(() => {
+    if (!active || !pendingDealerTarget || dealers.length === 0) return;
+
+    const targetDealer = dealers.find(d => d.id === pendingDealerTarget.dealerId);
+    if (targetDealer) {
+      executeLoadDealerDetail(targetDealer);
+      setHighlightedBatteryId(pendingDealerTarget.batteryId);
+      setUnitPage(0);
+      setLogSearchQuery(pendingDealerTarget.batteryId);
+
+      if (pendingDealerTarget.status === BatteryStatus.RETURNED || pendingDealerTarget.status === BatteryStatus.RETURNED_PENDING) {
+        setActiveLogTab('RETURNED');
+      } else if (pendingDealerTarget.isExpired) {
+        setActiveLogTab('EXPIRED');
+      } else {
+        setActiveLogTab('ACTIVE');
+      }
+
+      onPendingDealerHandled?.();
+    }
+  }, [active, pendingDealerTarget, dealers]);
+
+  useEffect(() => {
     if (active) {
       loadData();
       // Refresh analytics if we are in detail view
@@ -167,6 +200,29 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
     }
   }, [selectedDealer, viewMode, searchTerm, activeLogTab]);
 
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      if (isFilterOpen === 'TABS' && tabsMenuRef.current && !tabsMenuRef.current.contains(target)) {
+        setIsFilterOpen('');
+      }
+
+      if (isFilterOpen === 'FILTERS' && filtersMenuRef.current && !filtersMenuRef.current.contains(target)) {
+        resetRegistryFilters();
+        setIsFilterOpen('');
+      }
+
+      if (registrySearchRef.current && !registrySearchRef.current.contains(target) && logSearchQuery) {
+        setLogSearchQuery('');
+        setUnitPage(0);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isFilterOpen, logSearchQuery]);
+
   // Reset page when search term changes
   useEffect(() => {
     setPage(1);
@@ -192,6 +248,15 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
 
   const [paginatedData, setPaginatedData] = useState<any[]>([]);
   const [totalItems, setTotalItems] = useState(0);
+
+  const resetRegistryFilters = () => {
+    setFilterDateStart('');
+    setFilterDateEnd('');
+    setFilterModel('');
+    setFilterYear(undefined);
+    setFilterMonth(undefined);
+    setUnitPage(0);
+  };
 
   const fetchTabData = async () => {
     if (!selectedDealer) return;
@@ -574,7 +639,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
               {/* LEFT: REGISTRY SELECTOR */}
               <div className="flex items-center gap-3 w-full md:w-auto">
                 {/* <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap ml-1">Registry Mode</span> */}
-                <div className="relative group/tabs flex-1 md:flex-none">
+                <div ref={tabsMenuRef} className="relative group/tabs flex-1 md:flex-none">
                   {(() => {
                     const activeTab = [
                       { id: 'ACTIVE', label: 'Active Warranty', icon: Box, color: 'text-blue-600' },
@@ -631,7 +696,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
 
               {/* RIGHT: SEARCH & TOOLS */}
               <div className="flex items-center gap-2 w-full md:w-auto">
-                <div className="relative flex-1 md:flex-none">
+                <div ref={registrySearchRef} className="relative flex-1 md:flex-none">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     placeholder="SEARCH REGISTRY..."
@@ -644,7 +709,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                 <div className="h-6 w-px bg-slate-100 mx-1 hidden md:block"></div>
 
                 {/* FILTER GHOST */}
-                <div className="relative group/filter">
+                <div ref={filtersMenuRef} className="relative group/filter">
                   <button
                     onClick={() => setIsFilterOpen(prev => prev === 'FILTERS' ? '' as any : 'FILTERS' as any)}
                     className={`p-2.5 rounded-full transition-all active:scale-90 relative ${isFilterOpen === 'FILTERS' || (filterDateStart || filterDateEnd || filterModel) ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}
@@ -665,7 +730,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                             <ListFilter size={14} className="text-blue-600" /> Filter Registry
                           </h4>
                           <button
-                            onClick={() => { setFilterDateStart(''); setFilterDateEnd(''); setFilterModel(''); setFilterYear(undefined); setFilterMonth(undefined); }}
+                            onClick={() => resetRegistryFilters()}
                             className="text-[10px] font-black text-blue-600 hover:text-blue-700 transition-colors uppercase tracking-wider"
                           >
                             Reset Defaults
@@ -801,10 +866,17 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedData.map((item: any) => (
+                    (() => {
+                      const isHighlighted =
+                        activeLogTab === 'EXCHANGES'
+                          ? item.oldBatteryId === highlightedBatteryId || item.newBatteryId === highlightedBatteryId
+                          : item.id === highlightedBatteryId;
+
+                      return (
                     <tr
                       key={item.id || item.rowid}
                       onClick={() => onNavigateToHub?.(activeLogTab === 'EXCHANGES' ? item.oldBatteryId : item.id)}
-                      className="group/row hover:bg-slate-50 transition-all cursor-pointer"
+                      className={`group/row transition-all cursor-pointer ${isHighlighted ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-slate-50'}`}
                     >
                       {activeLogTab === 'EXCHANGES' ? (
                         <>
@@ -919,6 +991,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                         </>
                       )}
                     </tr>
+                      );
+                    })()
                   ))}
                 </tbody>
               </table>
