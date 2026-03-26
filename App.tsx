@@ -23,6 +23,7 @@ import { AuthSession } from './utils/AuthSession';
 import NotificationBell from './components/NotificationBell';
 import ShortcutsModal from './components/ShortcutsModal';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import BackupReminderBanner from './components/BackupReminderBanner';
 
 const App: React.FC = () => {
   const {
@@ -395,6 +396,7 @@ const App: React.FC = () => {
               </button>
             </div>
           )}
+          {isAdmin && <BackupReminderBanner activeTab={activeTab} onOpenBackup={() => navigate('backup')} />}
           <div className="p-8 max-w-[1600px] mx-auto">
             {renderContent()}
           </div>

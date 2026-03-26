@@ -28,6 +28,7 @@ import { SettlementModal, SettlementTarget } from '../components/SettlementModal
 import BatteryPrintTemplate from '../components/BatteryPrintTemplate';
 import { DealerWizard } from '../components/DealerWizard';
 import DealerAnalytics from '../components/DealerAnalytics';
+import { scheduleUndoableAction } from '../utils/undoToast';
 
 interface DealersProps {
   onNavigateToHub?: (serial: string) => void;
@@ -360,9 +361,21 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
       }
     }
 
-    await Database.deleteDealer(dealerId);
+    const dealerToDelete = selectedDealer;
+    if (!dealerToDelete) return;
+
+    scheduleUndoableAction({
+      label: `Dealer ${dealerToDelete.name} queued for deletion`,
+      description: 'Undo within 5 seconds to keep this dealer.',
+      onCommit: async () => {
+        await Database.deleteDealer(dealerId);
+        await Database.logActivity('PARTNER_DELETE', `Deleted dealer ${dealerToDelete.name}`, { dealerId: dealerToDelete.id, name: dealerToDelete.name });
+        await loadData();
+      },
+      onSuccess: () => window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: 'Dealer removed successfully' } })),
+      onError: () => window.dispatchEvent(new CustomEvent('app-notify', { detail: { message: 'Failed to remove dealer', type: 'error' } })),
+    });
     setViewMode('LIST');
-    loadData();
   };
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];

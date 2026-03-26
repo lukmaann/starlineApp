@@ -1,6 +1,7 @@
 import React from 'react';
 import { Barcode, Search, CheckCircle2, Loader2, X, LayoutGrid, PackagePlus } from 'lucide-react';
 import { Dealer, BatteryModel } from '../../types';
+import DealerInlineSummary from '../DealerInlineSummary';
 
 interface ScannerHeaderProps {
     batchMode: boolean;
@@ -42,6 +43,7 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
     userRole
 }) => {
     const isAdmin = userRole === 'ADMIN';
+    const selectedDealer = dealers.find((dealer) => dealer.id === batchConfig.dealerId) || null;
 
     return (
         <div className={`transition-all duration-300 ${batchMode ? 'bg-indigo-900 border-indigo-700' : 'bg-white border-slate-200'} border rounded-2xl p-8 shadow-sm no-print`}>
@@ -88,6 +90,15 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
                             onChange={e => setBatchConfig({ ...batchConfig, date: e.target.value })}
                         />
                     </div>
+                )}
+
+                {batchMode && selectedDealer && (
+                    <DealerInlineSummary
+                        dealerId={selectedDealer.id}
+                        dealer={selectedDealer}
+                        tone="dark"
+                        compact
+                    />
                 )}
 
                 <div className="flex flex-col md:flex-row items-center gap-6">

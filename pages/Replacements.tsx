@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { formatDate } from '../utils';
 import { StatusDisplay } from '../components/StatusDisplay';
+import DealerInlineSummary from '../components/DealerInlineSummary';
 
 const FAILURE_MODES = [
   "Dead Cell", "Charging Circuit Failure", "Internal Short-Circuit",
@@ -59,6 +60,10 @@ const Replacements: React.FC = () => {
   const [isConfirming, setIsConfirming] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [success, setSuccess] = useState('');
+  const selectedDealer = useMemo(
+    () => db.dealers.find((dealer) => dealer.id === formData.dealerId) || null,
+    [db.dealers, formData.dealerId]
+  );
 
   // Enterprise Scale: Only load necessary data (dealers)
   const loadData = async () => {
@@ -361,6 +366,7 @@ const Replacements: React.FC = () => {
                         )}
                       </div>
                     </div>
+                    <DealerInlineSummary dealerId={selectedDealer?.id} dealer={selectedDealer} />
                     <button type="submit" disabled={!formData.newBatteryId || !formData.dealerId} className="w-full py-5 bg-slate-950 text-white rounded-xl font-black text-[10px] uppercase tracking-[0.3em] hover:bg-black transition-all disabled:opacity-20 shadow-xl flex items-center justify-center gap-3">Next Protocol Step <ArrowRight size={18} /></button>
                   </div>
                 ) : (

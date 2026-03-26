@@ -935,6 +935,22 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
 
       {activeAsset && (
         <>
+          {showEdit && createPortal(
+            <div className="fixed inset-0 z-[120] bg-slate-950/40 backdrop-blur-sm p-4 md:p-8 overflow-y-auto">
+              <div className="max-w-5xl mx-auto">
+                <BatteryEdit
+                  batteryId={activeAsset.battery.id}
+                  onClose={() => setShowEdit(false)}
+                  onUpdate={() => {
+                    setShowEdit(false);
+                    handleSearch(activeAsset.battery.id);
+                  }}
+                />
+              </div>
+            </div>,
+            document.body
+          )}
+
           <WarrantyCorrectionForm
             isExp={isExpired}
             showDateCorrection={showDateCorrection}

@@ -26,6 +26,7 @@ const Backup: React.FC = () => {
                 const now = new Date().toISOString();
                 localStorage.setItem('lastBackupDate', now);
                 await Database.setConfig('last_backup_date', now);
+                window.dispatchEvent(new CustomEvent('backup-status-updated'));
                 setLastBackup(now);
             } else {
                 toast.error('Backup Failed', { id: 'backup-process', description: res.error });
