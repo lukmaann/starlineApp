@@ -9,6 +9,7 @@ import {
   Printer, Shield, Hash, MapPin, BadgeCheck, Receipt
 } from 'lucide-react';
 import { formatDate } from '../utils';
+import DealerInlineSummary from '../components/DealerInlineSummary';
 
 const formatINR = (v: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(v);
 
@@ -359,6 +360,9 @@ const Sales: React.FC = () => {
   const netPrice = parseFloat(form.price) || 0;
   const gst = isBilled ? netPrice * 0.18 : 0;
   const total = netPrice + gst;
+  const selectedDealer = filteredDealers.find((dealer) => dealer.id === form.dealerId)
+    || db.dealers.find((dealer) => dealer.id === form.dealerId)
+    || null;
 
   if (view === 'success' && lastSaleData) return (
     <div className="max-w-4xl mx-auto py-10 animate-in zoom-in-95 duration-500">
@@ -497,6 +501,7 @@ const Sales: React.FC = () => {
                   </div>
                 )}
               </div>
+              <DealerInlineSummary dealerId={selectedDealer?.id} dealer={selectedDealer} />
 
               <div className="space-y-3">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">RETAIL CONSUMER NAME</label>

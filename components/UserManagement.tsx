@@ -4,6 +4,7 @@ import { User, UserRole } from '../types';
 import { UserPlus, Trash2, Edit2, Shield, User as UserIcon, Loader2, X, CheckCircle2, Search, RefreshCw, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import { AssignRoleModal } from './AssignRoleModal';
+import { scheduleUndoableAction } from '../utils/undoToast';
 
 const UserManagement: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
@@ -80,9 +81,16 @@ const UserManagement: React.FC = () => {
         if (!window.confirm(`Are you sure you want to delete user "${username}"?`)) return;
 
         try {
-            await Database.deleteUser(id);
-            toast.success('User deleted');
-            loadUsers();
+            scheduleUndoableAction({
+                label: `User ${username} queued for deletion`,
+                description: 'Undo within 5 seconds to keep this account.',
+                onCommit: async () => {
+                    await Database.deleteUser(id);
+                    await loadUsers();
+                },
+                onSuccess: () => toast.success('User deleted'),
+                onError: () => toast.error('Failed to delete user'),
+            });
         } catch (e) {
             toast.error('Failed to delete user');
         }

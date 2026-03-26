@@ -4,6 +4,7 @@ import { Database } from '../db';
 import { RawMaterial } from '../types';
 import { toast } from 'sonner';
 import { AlertTriangle, PackageSearch, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { scheduleUndoableAction } from '../utils/undoToast';
 
 interface RawMaterialsProps {
     onNavigate?: (tab: string) => void;
@@ -99,10 +100,17 @@ export default function RawMaterials({ onNavigate, onClose }: RawMaterialsProps)
         if (!yes) return;
 
         try {
-            await Database.deleteRawMaterial(material.id);
-            toast.success('Material deleted.');
-            if (editingId === material.id) resetForm();
-            await load();
+            scheduleUndoableAction({
+                label: `Material ${material.name} queued for deletion`,
+                description: 'Undo within 5 seconds to keep this material.',
+                onCommit: async () => {
+                    await Database.deleteRawMaterial(material.id);
+                    if (editingId === material.id) resetForm();
+                    await load();
+                },
+                onSuccess: () => toast.success('Material deleted.'),
+                onError: (error) => toast.error(error?.message || 'Could not delete material.'),
+            });
         } catch (error: any) {
             toast.error(error?.message || 'Could not delete material.');
         }

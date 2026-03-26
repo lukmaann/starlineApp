@@ -1,6 +1,17 @@
-import React, { useState } from 'react';
-import { ShieldCheck, ShieldAlert, Calendar, CheckCircle2, Loader2, X, ArrowRight, Fingerprint, History as LucideHistory, RefreshCw, ChevronDown } from 'lucide-react';
-import { Battery, BatteryStatus } from '../types';
+import React, { useMemo, useState } from 'react';
+import {
+    ShieldCheck,
+    ShieldAlert,
+    Calendar,
+    CheckCircle2,
+    Loader2,
+    X,
+    ArrowRight,
+    RefreshCw,
+    ChevronDown,
+    TimerReset,
+} from 'lucide-react';
+import { Battery } from '../types';
 import { Database } from '../db';
 import { notify } from '../utils/notifications';
 import { getLocalDate, formatDate } from '../utils';
@@ -13,21 +24,51 @@ interface BatteryInspectionProps {
     userRole?: string;
 }
 
-export const BatteryInspection: React.FC<BatteryInspectionProps> = ({ battery, onClose, onComplete, onStartExchange, userRole }) => {
+type InspectionPhase = 'START' | 'STARTED' | 'VERDICT';
+
+export const BatteryInspection: React.FC<BatteryInspectionProps> = ({
+    battery,
+    onClose,
+    onComplete,
+    onStartExchange,
+    userRole,
+}) => {
     const isAdmin = userRole === 'ADMIN';
-    const [result, setResult] = useState<'GOOD' | 'FAULTY' | null>(battery.inspectionStatus === 'GOOD' ? 'GOOD' : battery.inspectionStatus === 'FAULTY' ? 'FAULTY' : null);
-    const [failureReason, setFailureReason] = useState<string>('DEAD CELL');
+    const initialPhase: InspectionPhase =
+        !battery.inspectionStatus || battery.inspectionStatus === 'PENDING'
+            ? 'START'
+            : battery.inspectionStatus === 'IN_PROGRESS'
+                ? 'VERDICT'
+                : 'VERDICT';
+
+    const [phase, setPhase] = useState<InspectionPhase>(initialPhase);
+    const [inspectionStatus, setInspectionStatus] = useState<string>(battery.inspectionStatus || 'PENDING');
+    const [inspectionStartDate, setInspectionStartDate] = useState<string | undefined>(battery.inspectionStartDate);
+    const [result, setResult] = useState<'GOOD' | 'FAULTY' | null>(
+        battery.inspectionStatus === 'GOOD' ? 'GOOD' : battery.inspectionStatus === 'FAULTY' ? 'FAULTY' : null
+    );
+    const [failureReason, setFailureReason] = useState<string>(battery.inspectionReason || 'DEAD CELL');
     const [returnDate, setReturnDate] = useState(battery.inspectionReturnDate || getLocalDate());
     const [isSaving, setIsSaving] = useState(false);
     const [isStarting, setIsStarting] = useState(false);
     const [isResetting, setIsResetting] = useState(false);
 
+    const failureReasons = useMemo(
+        () => ['DEAD CELL', 'INTERNAL SHORT', 'BULGE', 'LOW GRAVITY', 'LEAKAGE'],
+        []
+    );
+
+    const isCompleted = inspectionStatus === 'GOOD' || inspectionStatus === 'FAULTY';
+
     const handleStart = async () => {
         setIsStarting(true);
         try {
             await Database.startInspection(battery.id, battery.inspectionNotes || '');
+            const startedAt = getLocalDate();
+            setInspectionStatus('IN_PROGRESS');
+            setInspectionStartDate(startedAt);
+            setPhase('STARTED');
             notify('Inspection started', 'success');
-            onComplete();
         } catch (err) {
             console.error('Failed to start:', err);
             notify('Failed to start inspection', 'error');
@@ -42,6 +83,10 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({ battery, o
         setIsResetting(true);
         try {
             await Database.resetInspection(battery.id, 'User requested reset');
+            setInspectionStatus('PENDING');
+            setInspectionStartDate(undefined);
+            setResult(null);
+            setPhase('START');
             notify('Inspection record reset', 'success');
             onComplete();
         } catch (err) {
@@ -65,6 +110,7 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({ battery, o
             );
 
             notify(`Inspection completed: Battery is ${result}`, 'success');
+            setInspectionStatus(result);
             onComplete();
         } catch (err: any) {
             console.error('Inspection failed:', err);
@@ -87,8 +133,9 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({ battery, o
                 failureReason
             );
 
-            notify(`Results saved. Starting exchange...`, 'success');
-            if (onStartExchange) onStartExchange(failureReason);
+            notify('Results saved. Starting exchange...', 'success');
+            setInspectionStatus('FAULTY');
+            onStartExchange?.(failureReason);
         } catch (err: any) {
             console.error('Save failed:', err);
             notify(`Failed to save results: ${err.message || 'Unknown error'}`, 'error');
@@ -97,217 +144,255 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({ battery, o
         }
     };
 
-    const isPending = !battery.inspectionStatus || battery.inspectionStatus === 'PENDING';
-    const isInProgress = battery.inspectionStatus === 'IN_PROGRESS';
-    const isCompleted = battery.inspectionStatus === 'GOOD' || battery.inspectionStatus === 'FAULTY';
-
     return (
-        <div className="bg-slate-100/50 border border-slate-200 rounded-2xl p-5 animate-in fade-in slide-in-from-top-2 duration-300 space-y-5 relative overflow-hidden w-full">
-            <div className="flex justify-between items-center opacity-80">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-600 rounded-lg text-white">
-                        <ShieldCheck size={18} />
-                    </div>
-                    <div>
-                        <h3 className="text-base font-bold text-slate-900 tracking-tight">Technical Assessment</h3>
-                        <div className="flex items-center gap-2 mt-0.5">
-                            <p className="text-indigo-600 text-[10px] font-bold uppercase tracking-wider">Serial: {battery.id}</p>
-                            {battery.inspectionStartDate && (
-                                <p className="text-slate-400 text-[9px] font-medium uppercase tracking-wider border-l border-slate-200 pl-2">
-                                    Started: {formatDate(battery.inspectionStartDate)}
-                                </p>
-                            )}
+        <div className="w-full overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_18px_50px_-24px_rgba(15,23,42,0.28)] animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="border-b border-slate-200 bg-[linear-gradient(180deg,_#f8fafc_0%,_#ffffff_100%)] px-5 py-5 md:px-6">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                        <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-600/20">
+                            <ShieldCheck size={18} />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-black text-slate-900 tracking-tight">Technical Inspection</h3>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em]">
+                                <span className="text-indigo-600">Serial: {battery.id}</span>
+                                {inspectionStartDate && (
+                                    <span className="text-slate-400 border-l border-slate-200 pl-2">
+                                        Started: {formatDate(inspectionStartDate)}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div className="flex items-center gap-2">
-                    {isCompleted && (
-                        <button
-                            onClick={handleReset}
-                            disabled={isResetting}
-                            className="p-1.5 hover:bg-amber-50 text-slate-400 hover:text-amber-600 rounded-lg transition-all active:scale-95"
-                            title="Reset Assessment"
-                        >
-                            {isResetting ? <Loader2 size={16} className="animate-spin" /> : <LucideHistory size={16} />}
+                    <div className="flex items-center gap-2">
+                        {isCompleted && (
+                            <button
+                                onClick={handleReset}
+                                disabled={isResetting}
+                                className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-amber-700 hover:bg-amber-100 transition-all"
+                            >
+                                {isResetting ? <Loader2 size={14} className="animate-spin" /> : <TimerReset size={14} />}
+                                Reset
+                            </button>
+                        )}
+                        <button onClick={onClose} className="p-2 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl transition-all active:scale-95">
+                            <X size={18} />
                         </button>
-                    )}
-                    <button onClick={onClose} className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all active:scale-95">
-                        <X size={18} />
-                    </button>
+                    </div>
                 </div>
             </div>
 
-            {isPending ? (
-                <div className="bg-white border border-slate-200 rounded-2xl p-8 flex flex-col items-center gap-4 text-center animate-in zoom-in-95 duration-300">
-                    <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl">
-                        <LucideHistory size={40} className="animate-pulse" />
-                    </div>
-                    <div className="space-y-1">
-                        <h4 className="text-lg font-bold text-slate-900 leading-tight">Prepare Inspection</h4>
-                        <p className="text-xs text-slate-500 max-w-[280px]">Start the technical verification process to record the unit's entry date into the lab.</p>
-                    </div>
+            <div className="p-5 md:p-6 bg-slate-50/70">
+                {phase === 'START' && (
+                    <div className="rounded-[20px] border border-slate-200 bg-white p-6 text-center">
+                        <div className="mx-auto w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                            <ShieldCheck size={28} />
+                        </div>
+                        <h4 className="mt-4 text-xl font-black text-slate-900">Ready To Start Inspection</h4>
+                        <p className="mt-2 max-w-md mx-auto text-sm text-slate-500">
+                            Start the inspection first. After that, move to the next step and record the final verdict.
+                        </p>
 
-                    <button
-                        onClick={handleStart}
-                        disabled={isStarting}
-                        className="mt-2 w-full max-w-[240px] px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                    >
-                        {isStarting ? <Loader2 size={18} className="animate-spin" /> : (
-                            <>
-                                Start Inspection
-                                <ArrowRight size={18} />
-                            </>
-                        )}
-                    </button>
-                    <button onClick={onClose} className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors">
-                        Postpone Assessment
-                    </button>
-                </div>
-            ) : (
-                <>
-                    <div className="grid grid-cols-2 gap-4">
-                        {isAdmin && (
+                        {isAdmin ? (
                             <button
-                                onClick={() => setResult('FAULTY')}
-                                className={`group p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-4 relative overflow-hidden ${result === 'FAULTY'
-                                    ? 'bg-rose-50 border-rose-500 shadow-lg shadow-rose-200/50'
-                                    : 'bg-white border-slate-100 hover:border-rose-200 text-slate-400'
-                                    }`}
+                                onClick={handleStart}
+                                disabled={isStarting}
+                                className="mt-6 w-full max-w-[240px] px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 active:scale-95 transition-all inline-flex items-center justify-center gap-3 disabled:opacity-50"
                             >
-                                {result === 'FAULTY' && <div className="absolute top-0 right-0 p-2 text-rose-500"><CheckCircle2 size={18} /></div>}
-                                <div className={`p-4 rounded-2xl transition-all duration-300 ${result === 'FAULTY' ? 'bg-rose-500 text-white scale-105' : 'bg-slate-50 text-slate-300 group-hover:bg-rose-100 group-hover:text-rose-400'}`}>
-                                    <ShieldAlert size={32} />
-                                </div>
-                                <div className="text-center">
-                                    <span className={`block font-bold text-base ${result === 'FAULTY' ? 'text-rose-700' : 'text-slate-500'}`}>Faulty</span>
-                                    <p className="text-[10px] font-medium opacity-60 tracking-wide mt-0.5">Defective Unit</p>
-                                </div>
+                                {isStarting ? <Loader2 size={18} className="animate-spin" /> : (
+                                    <>
+                                        Start Inspection
+                                        <ArrowRight size={18} />
+                                    </>
+                                )}
                             </button>
-                        )}
-
-                        <button
-                            onClick={() => {
-                                if (!isAdmin) {
-                                    notify('Only Admin can finalize assessment', 'error');
-                                    return;
-                                }
-                                setResult('GOOD');
-                            }}
-                            className={`group p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-4 relative overflow-hidden ${result === 'GOOD'
-                                ? 'bg-emerald-50 border-emerald-500 shadow-lg shadow-emerald-200/50'
-                                : 'bg-white border-slate-100 hover:border-emerald-200 text-slate-400'
-                                } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            {result === 'GOOD' && <div className="absolute top-0 right-0 p-2 text-emerald-500"><CheckCircle2 size={18} /></div>}
-                            <div className={`p-4 rounded-2xl transition-all duration-300 ${result === 'GOOD' ? 'bg-emerald-500 text-white scale-105' : 'bg-slate-50 text-slate-300 group-hover:bg-emerald-100 group-hover:text-emerald-400'}`}>
-                                <ShieldCheck size={32} />
-                            </div>
-                            <div className="text-center">
-                                <span className={`block font-bold text-base ${result === 'GOOD' ? 'text-emerald-700' : 'text-slate-500'}`}>Healthy</span>
-                                <p className="text-[10px] font-medium opacity-60 tracking-wide mt-0.5">Good to go</p>
-                            </div>
-                        </button>
-                    </div>
-
-                    <div className="flex flex-col bg-white rounded-2xl border-2 border-slate-100 p-6 shadow-sm space-y-4">
-                        {!result ? (
-                            <div className="flex items-center justify-center py-4 border-t border-slate-50">
-                                <div className="text-center space-y-2">
-                                    <Fingerprint size={24} className="mx-auto text-slate-300" />
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Awaiting assessment</p>
-                                </div>
-                            </div>
-                        ) : result === 'GOOD' ? (
-                            <div className="w-full animate-in fade-in slide-in-from-top-2 duration-300 pt-2 border-t border-slate-50">
-                                <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-xl flex items-center justify-between">
-                                    <div>
-                                        <label className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block mb-1">Target Return Date</label>
-                                        <input
-                                            type="date"
-                                            className="bg-transparent border-none outline-none font-black text-base text-emerald-900 mono p-0"
-                                            value={returnDate}
-                                            onChange={(e) => setReturnDate(e.target.value)}
-                                        />
-                                    </div>
-                                    <Calendar className="text-emerald-400" size={24} />
-                                </div>
-                            </div>
                         ) : (
-                            <>
-                                <div className="w-full p-4 bg-rose-50/50 border border-rose-100 rounded-xl flex items-center gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                    <div className="bg-rose-500 text-white p-2.5 rounded-lg shadow-md shadow-rose-200">
-                                        <ShieldAlert size={20} />
+                            <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-700">
+                                Only admin can start inspection
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {phase === 'STARTED' && (
+                    <div className="rounded-[20px] border border-emerald-200 bg-white p-6 text-center animate-in fade-in duration-200">
+                        <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            <CheckCircle2 size={28} />
+                        </div>
+                        <h4 className="mt-4 text-xl font-black text-slate-900">Inspection Started</h4>
+                        <p className="mt-2 text-sm text-slate-500">
+                            The inspection session is now active. You can close this window and come back later, or continue now.
+                        </p>
+                        <div className="mt-3 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                            Started on {inspectionStartDate ? formatDate(inspectionStartDate) : formatDate(getLocalDate())}
+                        </div>
+
+                        <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+                            <button
+                                onClick={onClose}
+                                className="px-6 py-3 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all"
+                            >
+                                Close For Now
+                            </button>
+                            <button
+                                onClick={() => setPhase('VERDICT')}
+                                className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm transition-all inline-flex items-center justify-center gap-2"
+                            >
+                                Next
+                                <ArrowRight size={16} />
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {phase === 'VERDICT' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-5">
+                        <div className="rounded-[20px] border border-slate-200 bg-white p-5 space-y-5">
+                            <div>
+                                <h4 className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">Select Final Verdict</h4>
+                                <p className="mt-1 text-xs text-slate-500">Choose the inspection result and complete the next step.</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {isAdmin && (
+                                    <button
+                                        onClick={() => setResult('FAULTY')}
+                                        className={`p-5 rounded-2xl border-2 transition-all text-left ${result === 'FAULTY'
+                                            ? 'bg-rose-50 border-rose-500 shadow-lg shadow-rose-200/50'
+                                            : 'bg-white border-slate-200 hover:border-rose-200'
+                                            }`}
+                                    >
+                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${result === 'FAULTY' ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                            <ShieldAlert size={24} />
+                                        </div>
+                                        <p className={`mt-4 text-base font-black ${result === 'FAULTY' ? 'text-rose-700' : 'text-slate-900'}`}>Faulty</p>
+                                        <p className="mt-1 text-[11px] font-medium text-slate-500">Battery failed inspection and should move to exchange.</p>
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={() => {
+                                        if (!isAdmin) {
+                                            notify('Only Admin can finalize assessment', 'error');
+                                            return;
+                                        }
+                                        setResult('GOOD');
+                                    }}
+                                    className={`p-5 rounded-2xl border-2 transition-all text-left ${result === 'GOOD'
+                                        ? 'bg-emerald-50 border-emerald-500 shadow-lg shadow-emerald-200/50'
+                                        : 'bg-white border-slate-200 hover:border-emerald-200'
+                                        } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${result === 'GOOD' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                        <ShieldCheck size={24} />
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="text-xs font-black text-rose-900 uppercase tracking-tight">Faulty Confirmed</p>
-                                        <p className="text-[10px] font-bold text-rose-600/70 mt-0.5 uppercase tracking-wide">Verification protocol passed. Exchange eligible.</p>
+                                    <p className={`mt-4 text-base font-black ${result === 'GOOD' ? 'text-emerald-700' : 'text-slate-900'}`}>Healthy</p>
+                                    <p className="mt-1 text-[11px] font-medium text-slate-500">Battery passed inspection and can be returned.</p>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="rounded-[20px] border border-slate-200 bg-white p-5 space-y-4">
+                            {!result && (
+                                <div className="min-h-[220px] flex items-center justify-center text-center">
+                                    <div>
+                                        <div className="mx-auto w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center">
+                                            <RefreshCw size={22} />
+                                        </div>
+                                        <p className="mt-4 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Waiting For Verdict</p>
+                                        <p className="mt-2 text-sm text-slate-500">Select `Healthy` or `Faulty` to continue.</p>
                                     </div>
                                 </div>
+                            )}
 
-                                <div className="p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl space-y-3 animate-in fade-in slide-in-from-top-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Detected Failure Mode</label>
-                                    <div className="relative group">
-                                        <select
-                                            value={failureReason}
-                                            onChange={(e) => setFailureReason(e.target.value)}
-                                            className="w-full pl-5 pr-12 py-4 bg-white border-2 border-slate-200 rounded-xl font-bold text-sm uppercase outline-none focus:border-rose-500 transition-all cursor-pointer appearance-none text-slate-700 shadow-sm"
-                                        >
-                                            <option value="DEAD CELL">Dead Cell</option>
-                                            <option value="INTERNAL SHORT">Internal Short</option>
-                                            <option value="BULGE">Casing Bulge</option>
-                                            <option value="LOW GRAVITY">Low Gravity</option>
-                                            <option value="LEAKAGE">Leakage</option>
-                                        </select>
-                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-rose-500 transition-colors">
-                                            <ChevronDown size={18} />
+                            {result === 'GOOD' && (
+                                <div className="space-y-4">
+                                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                                        <p className="text-sm font-black text-emerald-900 uppercase tracking-[0.14em]">Healthy Battery</p>
+                                        <p className="mt-1 text-xs text-emerald-700">Set the return date and finalize the inspection.</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.18em] block mb-2">Return Date</label>
+                                        <div className="relative">
+                                            <input
+                                                type="date"
+                                                value={returnDate}
+                                                onChange={(e) => setReturnDate(e.target.value)}
+                                                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 font-bold text-slate-800 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5"
+                                            />
+                                            <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                         </div>
                                     </div>
                                 </div>
-                            </>
-                        )}
-                    </div>
+                            )}
 
-                    <div className="flex gap-3">
-                        <button
-                            onClick={onClose}
-                            className="px-6 py-3 font-bold rounded-xl transition-all text-sm text-slate-400 hover:bg-white hover:text-slate-600 border border-slate-200"
-                        >
-                            Dismiss
-                        </button>
-                        {result === 'FAULTY' ? (
-                            isAdmin && (
-                                <button
-                                    onClick={handleSaveAndStartExchange}
-                                    disabled={isSaving}
-                                    className="flex-1 font-black py-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg transform active:scale-[0.98] disabled:opacity-50"
-                                >
-                                    {isSaving ? <Loader2 className="animate-spin" size={18} /> : (
-                                        <>
-                                            Start Warranty Exchange
-                                            <RefreshCw size={18} />
-                                        </>
-                                    )}
-                                </button>
-                            )
-                        ) : (
-                            isAdmin && (
-                                <button
-                                    onClick={handleSave}
-                                    disabled={!result || isSaving}
-                                    className="flex-1 font-black py-4 rounded-xl transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg transform active:scale-[0.98] disabled:opacity-30 disabled:grayscale bg-indigo-600 text-white hover:bg-indigo-700"
-                                >
-                                    {isSaving ? <Loader2 className="animate-spin" size={18} /> : (
-                                        <>
-                                            {isCompleted ? 'Update Verdict' : 'Send Back to Dealer'}
-                                            <ArrowRight size={18} />
-                                        </>
-                                    )}
-                                </button>
-                            )
-                        )}
+                            {result === 'FAULTY' && (
+                                <div className="space-y-4">
+                                    <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                                        <p className="text-sm font-black text-rose-900 uppercase tracking-[0.14em]">Faulty Battery</p>
+                                        <p className="mt-1 text-xs text-rose-700">Select the failure reason and continue to exchange.</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.18em] block mb-2">Failure Reason</label>
+                                        <div className="relative">
+                                            <select
+                                                value={failureReason}
+                                                onChange={(e) => setFailureReason(e.target.value)}
+                                                className="w-full appearance-none px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 font-bold text-slate-800 outline-none focus:border-rose-500 focus:ring-4 focus:ring-rose-500/5"
+                                            >
+                                                {failureReasons.map((reason) => (
+                                                    <option key={reason} value={reason}>{reason}</option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="lg:col-span-2 flex gap-3">
+                            <button
+                                onClick={onClose}
+                                className="px-6 py-3 font-bold rounded-xl transition-all text-sm text-slate-500 hover:bg-white hover:text-slate-700 border border-slate-200"
+                            >
+                                Close
+                            </button>
+                            {result === 'FAULTY' ? (
+                                isAdmin && (
+                                    <button
+                                        onClick={handleSaveAndStartExchange}
+                                        disabled={isSaving}
+                                        className="flex-1 font-black py-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition-all text-sm uppercase tracking-[0.18em] flex items-center justify-center gap-3 shadow-lg active:scale-[0.98] disabled:opacity-50"
+                                    >
+                                        {isSaving ? <Loader2 className="animate-spin" size={18} /> : (
+                                            <>
+                                                Save And Start Exchange
+                                                <RefreshCw size={18} />
+                                            </>
+                                        )}
+                                    </button>
+                                )
+                            ) : (
+                                isAdmin && (
+                                    <button
+                                        onClick={handleSave}
+                                        disabled={!result || isSaving}
+                                        className="flex-1 font-black py-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-all text-sm uppercase tracking-[0.18em] flex items-center justify-center gap-3 shadow-lg active:scale-[0.98] disabled:opacity-30"
+                                    >
+                                        {isSaving ? <Loader2 className="animate-spin" size={18} /> : (
+                                            <>
+                                                Complete Inspection
+                                                <ArrowRight size={18} />
+                                            </>
+                                        )}
+                                    </button>
+                                )
+                            )}
+                        </div>
                     </div>
-                </>
-            )}
+                )}
+            </div>
         </div>
     );
 };

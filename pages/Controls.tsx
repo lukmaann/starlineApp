@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { getLocalDate } from '../utils';
 import PriceManager from '../components/PriceManager';
 import UserManagement from '../components/UserManagement';
+import { scheduleUndoableAction } from '../utils/undoToast';
 
 interface ControlsProps {
   active?: boolean;
@@ -184,11 +185,20 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
     if (!deletingModel) return;
     setIsActionLoading(true);
     try {
-      await Database.deleteModel(deletingModel.id);
+      const modelToDelete = deletingModel;
+      scheduleUndoableAction({
+        label: `Model ${modelToDelete.name} queued for deletion`,
+        description: 'Undo within 5 seconds to keep this model.',
+        onCommit: async () => {
+          await Database.deleteModel(modelToDelete.id);
+          await Database.logActivity('MODEL_DELETE', `Deleted model ${modelToDelete.name}`, { modelId: modelToDelete.id, name: modelToDelete.name });
+          await loadModelData();
+        },
+        onSuccess: () => notify('Model deleted from registry', 'success'),
+        onError: (error) => notify(error?.message || 'Failed to delete model', 'error'),
+      });
       setDeletingModel(null);
       setModelDeleteConfirmName('');
-      loadModelData();
-      notify('Model deleted from registry', 'success');
     } catch (e: any) {
       notify(e.message || 'Failed to delete model', 'error');
     } finally {
@@ -921,12 +931,20 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
                     onClick={async () => {
                       if (deletingDealer) {
                         setIsActionLoading(true);
-                        await Database.deleteDealer(deletingDealer.id);
-                        await Database.logActivity('PARTNER_DELETE', `Deleted dealer ${deletingDealer.name}`, { dealerId: deletingDealer.id, name: deletingDealer.name });
+                        const dealerToDelete = deletingDealer;
+                        scheduleUndoableAction({
+                          label: `Dealer ${dealerToDelete.name} queued for deletion`,
+                          description: 'Undo within 5 seconds to cancel dealer removal.',
+                          onCommit: async () => {
+                            await Database.deleteDealer(dealerToDelete.id);
+                            await Database.logActivity('PARTNER_DELETE', `Deleted dealer ${dealerToDelete.name}`, { dealerId: dealerToDelete.id, name: dealerToDelete.name });
+                            await loadModelData();
+                          },
+                          onSuccess: () => notify('Dealer removed successfully', 'success'),
+                          onError: () => notify('Failed to remove dealer', 'error'),
+                        });
                         setDeletingDealer(null);
                         setModelDeleteConfirmName('');
-                        loadModelData();
-                        notify('Dealer removed successfully', 'success');
                         setIsActionLoading(false);
                       }
                     }}
@@ -965,13 +983,21 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
                       if (deletingWorker) {
                         setIsActionLoading(true);
                         try {
-                          await Database.deleteFactoryWorker(deletingWorker.id);
-                          await Database.logActivity('WORKER_DELETE', `Deleted factory worker ${deletingWorker.full_name}`, { workerId: deletingWorker.id, name: deletingWorker.full_name });
+                          const workerToDelete = deletingWorker;
+                          scheduleUndoableAction({
+                            label: `Worker ${workerToDelete.full_name} queued for deletion`,
+                            description: 'Undo within 5 seconds to keep this worker profile.',
+                            onCommit: async () => {
+                              await Database.deleteFactoryWorker(workerToDelete.id);
+                              await Database.logActivity('WORKER_DELETE', `Deleted factory worker ${workerToDelete.full_name}`, { workerId: workerToDelete.id, name: workerToDelete.full_name });
+                              const updatedWorkers = await Database.getFactoryWorkers();
+                              setWorkers(updatedWorkers);
+                            },
+                            onSuccess: () => notify('Worker removed successfully', 'success'),
+                            onError: () => notify('Failed to remove worker', 'error'),
+                          });
                           setDeletingWorker(null);
                           setModelDeleteConfirmName('');
-                          const updatedWorkers = await Database.getFactoryWorkers();
-                          setWorkers(updatedWorkers);
-                          notify('Worker removed successfully', 'success');
                         } catch (e) {
                           notify('Failed to remove worker', 'error');
                         } finally {

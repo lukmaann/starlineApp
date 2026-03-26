@@ -158,8 +158,9 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                                     if (AuthSession.isValid()) {
                                         setShowEdit(true);
                                     } else {
-                                        setPendingAction('EDIT');
-                                        setIsLocked(true);
+                                        AuthSession.clearSession();
+                                        window.alert('Your session has expired. Please log in again to edit this record.');
+                                        window.location.reload();
                                     }
                                 }}
                                 className="p-2.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all border border-slate-100 no-print flex items-center gap-2"
