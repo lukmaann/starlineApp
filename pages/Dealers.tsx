@@ -42,6 +42,8 @@ interface DealersProps {
     isExpired: boolean;
   } | null;
   onPendingDealerHandled?: () => void;
+  pendingDealerProfileId?: string | null;
+  onPendingDealerProfileHandled?: () => void;
 }
 
 
@@ -71,7 +73,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   }
 }
 
-const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState, onStateChange, active, pendingDealerTarget, onPendingDealerHandled }) => {
+const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState, onStateChange, active, pendingDealerTarget, onPendingDealerHandled, pendingDealerProfileId, onPendingDealerProfileHandled }) => {
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [totalDealers, setTotalDealers] = useState(0);
   const DEALERS_PER_PAGE = 12;
@@ -168,6 +170,16 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
       onPendingDealerHandled?.();
     }
   }, [active, pendingDealerTarget, dealers]);
+
+  useEffect(() => {
+    if (!active || !pendingDealerProfileId || dealers.length === 0) return;
+
+    const targetDealer = dealers.find(d => d.id === pendingDealerProfileId);
+    if (targetDealer) {
+      executeLoadDealerDetail(targetDealer);
+      onPendingDealerProfileHandled?.();
+    }
+  }, [active, pendingDealerProfileId, dealers]);
 
   useEffect(() => {
     if (active) {

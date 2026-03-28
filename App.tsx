@@ -53,6 +53,7 @@ const App: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pendingSearch, setPendingSearch] = useState<string | null>(null);
   const [pendingDealerTarget, setPendingDealerTarget] = useState<PendingDealerTarget | null>(null);
+  const [pendingDealerProfileId, setPendingDealerProfileId] = useState<string | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isDbReady, setIsDbReady] = useState(false);
   const [sessionCountdown, setSessionCountdown] = useState<number | null>(null);
@@ -67,12 +68,18 @@ const App: React.FC = () => {
   const [dbNotificationData, setDbNotificationData] = useState<{ isSSD: boolean, path: string } | null>(null);
   const storageNoticeRef = useRef<HTMLDivElement | null>(null);
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     if (type === 'error') {
       toast.error(message);
-    } else {
-      toast.success(message);
+      return;
     }
+
+    if (type === 'info') {
+      toast(message);
+      return;
+    }
+
+    toast.success(message);
   };
 
   const triggerHubSearch = (serial: string) => {
@@ -82,6 +89,11 @@ const App: React.FC = () => {
 
   const openDealerDetail = (dealerId: string, batteryId: string, status: BatteryStatus, isExpired: boolean) => {
     setPendingDealerTarget({ dealerId, batteryId, status, isExpired });
+    navigate('dealers');
+  };
+
+  const openDealerProfile = (dealerId: string) => {
+    setPendingDealerProfileId(dealerId);
     navigate('dealers');
   };
 
@@ -123,8 +135,9 @@ const App: React.FC = () => {
       showToast(message, type || 'success');
     };
 
-    window.addEventListener('db-synced' as any, () => showToast('Database Synced'));
+    const handleDbSynced = () => showToast('Database Synced');
     window.addEventListener('app-notify' as any, handleNotify);
+    window.addEventListener('db-synced' as any, handleDbSynced);
 
     const handleAppRefresh = () => {
       setIsRefreshing(true);
@@ -147,6 +160,8 @@ const App: React.FC = () => {
 
     return () => {
       window.removeEventListener('app-notify' as any, handleNotify);
+      window.removeEventListener('db-synced' as any, handleDbSynced);
+      window.removeEventListener('app-refresh' as any, handleAppRefresh);
       clearInterval(countdownTick);
     };
   }, []);
@@ -207,6 +222,7 @@ const App: React.FC = () => {
             onStateChange={(s) => savePageState('scanner', s)}
             active={activeTab === 'scanner'}
             onOpenDealers={openDealerDetail}
+            onOpenDealerProfile={openDealerProfile}
           />
         );
       case 'dealers':
@@ -221,6 +237,8 @@ const App: React.FC = () => {
             active={activeTab === 'dealers'}
             pendingDealerTarget={pendingDealerTarget}
             onPendingDealerHandled={() => setPendingDealerTarget(null)}
+            pendingDealerProfileId={pendingDealerProfileId}
+            onPendingDealerProfileHandled={() => setPendingDealerProfileId(null)}
           />
         );
       case 'settlements':
@@ -231,13 +249,13 @@ const App: React.FC = () => {
               navigate('scanner');
             }}
           />
-        ) : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} />;
+        ) : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} onOpenDealerProfile={openDealerProfile} />;
 
       case 'controls':
-        return isAdmin ? <Controls active={activeTab === 'controls'} /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} />;
+        return isAdmin ? <Controls active={activeTab === 'controls'} /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} onOpenDealerProfile={openDealerProfile} />;
 
       case 'analytics':
-        return isAdmin ? <GlobalAnalytics /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} />;
+        return isAdmin ? <GlobalAnalytics /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} onOpenDealerProfile={openDealerProfile} />;
 
       case 'batches':
         return <Batches
@@ -248,13 +266,13 @@ const App: React.FC = () => {
         />;
 
       case 'manufacturing':
-        return isAdmin ? <ManufacturingHub active={activeTab === 'manufacturing'} userRole={user?.role} /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} />;
+        return isAdmin ? <ManufacturingHub active={activeTab === 'manufacturing'} userRole={user?.role} /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} onOpenDealerProfile={openDealerProfile} />;
 
       case 'database-management':
-        return isAdmin ? <DatabaseManagement /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} />;
+        return isAdmin ? <DatabaseManagement /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} onOpenDealerProfile={openDealerProfile} />;
 
       case 'backup':
-        return isAdmin ? <Backup /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} />;
+        return isAdmin ? <Backup /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} onOpenDealerProfile={openDealerProfile} />;
 
       default:
         return null;

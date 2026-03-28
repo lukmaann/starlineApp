@@ -26,6 +26,7 @@ import { ProgressFlow } from '../components/ProgressFlow';
 import { SuccessFlow } from '../components/SuccessFlow';
 import { BatteryInspection } from '../components/BatteryInspection';
 import { notify } from '../utils/notifications';
+import { SettlementModal, type SettlementTarget } from '../components/SettlementModal';
 
 // Scanner Sub-components
 import { ScannerHeader } from '../components/scanner/ScannerHeader';
@@ -43,10 +44,11 @@ interface ScannerProps {
   onStateChange?: (state: any) => void;
   active?: boolean;
   onOpenDealers?: (dealerId: string, batteryId: string, status: BatteryStatus, isExpired: boolean) => void;
+  onOpenDealerProfile?: (dealerId: string) => void;
 }
 
 
-const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, initialState, onStateChange, active, onOpenDealers }) => {
+const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, initialState, onStateChange, active, onOpenDealers, onOpenDealerProfile }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const replacementInputRef = useRef<HTMLInputElement>(null);
   const batchIntervalRef = useRef<any>(null);
@@ -114,6 +116,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   const [isInspecting, setIsInspecting] = useState(false);
   const [showBatchSuccess, setShowBatchSuccess] = useState(false);
   const [batchSuccessDetails, setBatchSuccessDetails] = useState<{ dealerName: string; count: number; items: any[] }>({ dealerName: '', count: 0, items: [] });
+  const [resolvingSettlement, setResolvingSettlement] = useState<SettlementTarget | null>(null);
 
   // Lock Screen State
   const [isLocked, setIsLocked] = useState(false);
@@ -183,6 +186,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       const id = localStorage.getItem('deep_link_inspection_id');
       if (id && active) {
         localStorage.removeItem('deep_link_inspection_id');
+        setBatchMode(false);
         setScanBuffer(id);
         handleSearch(id);
       }
@@ -225,6 +229,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
 
   useEffect(() => {
     if (initialSearch) {
+      setBatchMode(false);
       handleSearch(initialSearch);
       if (onSearchHandled) onSearchHandled();
     }
@@ -871,6 +876,23 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   };
 
   const isExpired = activeAsset?.battery?.warrantyExpiry ? new Date() > new Date(activeAsset.battery.warrantyExpiry) : false;
+  const pendingSettlement = useMemo(() => {
+    if (!activeAsset?.battery?.id || !activeAsset?.replacements?.length) return null;
+
+    return [...activeAsset.replacements]
+      .reverse()
+      .find((replacement: Replacement) => {
+        const isLinkedToBattery =
+          replacement.oldBatteryId === activeAsset.battery.id ||
+          replacement.newBatteryId === activeAsset.battery.id;
+
+        const isPendingSettlement =
+          !replacement.settlementType ||
+          (replacement.settlementType === 'CREDIT' && !replacement.paidInAccount);
+
+        return isLinkedToBattery && isPendingSettlement && !!replacement.newBatteryId;
+      }) || null;
+  }, [activeAsset]);
 
   const getStatusBadge = (status: BatteryStatus, expired: boolean) => {
     if (expired && status !== BatteryStatus.MANUFACTURED) return "bg-rose-50 text-rose-700 border-rose-200";
@@ -899,6 +921,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         batchMode={batchMode}
         setBatchMode={setBatchMode}
         lastScanned={lastScanned}
+        stagedCount={stagedItems.length}
         dealers={dealers}
         models={models}
         batchConfig={batchConfig}
@@ -911,6 +934,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         activeAsset={activeAsset}
         inputRef={inputRef}
         userRole={userRole}
+        onOpenDealerProfile={onOpenDealerProfile}
       />
 
       {batchMode && (
@@ -934,7 +958,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         />
       )}
 
-      {activeAsset && (
+      {!batchMode && activeAsset && (
         <>
           {showEdit && createPortal(
             <div className="fixed inset-0 z-[120] bg-slate-950/40 backdrop-blur-sm p-4 md:p-8 overflow-y-auto">
@@ -989,6 +1013,15 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
             setShowDateCorrection={setShowDateCorrection}
             userRole={userRole}
             onOpenDealers={onOpenDealers}
+            pendingSettlement={pendingSettlement}
+            onSettleHere={() => {
+              if (!pendingSettlement) return;
+              setResolvingSettlement({
+                id: pendingSettlement.id,
+                dealerName: dealers.find(d => d.id === pendingSettlement.dealerId)?.name || 'Dealer',
+                oldBatteryId: pendingSettlement.oldBatteryId
+              });
+            }}
           />
 
           {isInspecting && (
@@ -1038,6 +1071,19 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
             handleSearch={handleSearch}
             formatReference={formatReference}
             getStatusBadge={getStatusBadge}
+          />
+
+          <SettlementModal
+            isOpen={!!resolvingSettlement}
+            target={resolvingSettlement}
+            onClose={() => setResolvingSettlement(null)}
+            onSuccess={() => {
+              const currentBatteryId = activeAsset?.battery?.id;
+              setResolvingSettlement(null);
+              if (currentBatteryId) {
+                handleSearch(currentBatteryId, true);
+              }
+            }}
           />
         </>
       )}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 
 interface ProgressFlowProps {
@@ -20,8 +21,8 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
 }) => {
     if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 z-[200] bg-slate-900/10 backdrop-blur-[2px] flex items-center justify-center p-6 animate-in fade-in duration-300 print:hidden">
+    return createPortal(
+        <div className="fixed inset-0 z-[5000] bg-slate-900/10 backdrop-blur-[2px] flex items-center justify-center p-6 animate-in fade-in duration-300 print:hidden">
             <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-500">
                 {/* Progress Strip */}
                 <div className="h-1.5 w-full bg-slate-50">
@@ -77,6 +78,7 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
                     )}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };

@@ -8,6 +8,7 @@ interface DealerInlineSummaryProps {
   dealer?: Dealer | null;
   tone?: 'light' | 'dark';
   compact?: boolean;
+  minimal?: boolean;
 }
 
 interface DealerSummary {
@@ -34,6 +35,7 @@ export default function DealerInlineSummary({
   dealer,
   tone = 'light',
   compact = false,
+  minimal = false,
 }: DealerInlineSummaryProps) {
   const [summary, setSummary] = useState<DealerSummary>(emptySummary);
   const [isLoading, setIsLoading] = useState(false);
@@ -42,7 +44,7 @@ export default function DealerInlineSummary({
     let alive = true;
 
     const load = async () => {
-      if (!dealerId) {
+      if (!dealerId || minimal) {
         setSummary(emptySummary);
         return;
       }
@@ -72,7 +74,7 @@ export default function DealerInlineSummary({
     return () => {
       alive = false;
     };
-  }, [dealerId]);
+  }, [dealerId, minimal]);
 
   if (!dealerId || !dealer) return null;
 
@@ -83,6 +85,18 @@ export default function DealerInlineSummary({
 
   const mutedClass = tone === 'dark' ? 'text-indigo-200' : 'text-slate-500';
   const labelClass = tone === 'dark' ? 'text-indigo-200/80' : 'text-slate-400';
+
+  if (minimal) {
+    return (
+      <div className={`rounded-xl p-4 animate-in fade-in duration-200 ${shellClass}`}>
+        <p className={`text-[10px] font-black uppercase tracking-[0.3em] ${labelClass}`}>Selected Dealer</p>
+        <div className="mt-2 flex items-center gap-2 min-w-0">
+          <Store size={16} className={tone === 'dark' ? 'text-indigo-200' : 'text-blue-600'} />
+          <p className="text-sm font-black uppercase truncate">{dealer.name}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`rounded-xl p-4 animate-in fade-in duration-200 ${shellClass}`}>

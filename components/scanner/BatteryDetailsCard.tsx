@@ -1,10 +1,10 @@
 import React from 'react';
 import {
     ShieldAlert, Calendar, Edit, FileText,
-    Activity, RefreshCw, Store, ChevronRight, MapPin
+    Activity, RefreshCw, Store, ChevronRight, MapPin, Landmark
 } from 'lucide-react';
 import { formatDate } from '../../utils';
-import { BatteryStatus, Dealer } from '../../types';
+import { BatteryStatus, Dealer, Replacement } from '../../types';
 import { StatusDisplay } from '../StatusDisplay';
 import { Sheet, SheetContent, SheetTrigger } from '../ui/sheet';
 import BatteryReportSheet from '../BatteryReportSheet';
@@ -29,6 +29,8 @@ interface BatteryDetailsCardProps {
     setShowDateCorrection: (show: boolean) => void;
     userRole?: string;
     onOpenDealers?: (dealerId: string, batteryId: string, status: BatteryStatus, isExpired: boolean) => void;
+    pendingSettlement?: Replacement | null;
+    onSettleHere?: () => void;
 }
 
 export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
@@ -49,7 +51,9 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
     showDateCorrection,
     setShowDateCorrection,
     userRole,
-    onOpenDealers
+    onOpenDealers,
+    pendingSettlement,
+    onSettleHere
 }) => {
     const isExp = isExpired;
     const isAdmin = userRole === 'ADMIN';
@@ -217,7 +221,8 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                         </div>
 
                         <div className="w-full max-w-md no-print">
-                            <div className="flex flex-col gap-2 sm:flex-row xl:justify-end">
+                            <div className="flex flex-col gap-2 xl:items-end">
+                                <div className="flex flex-col gap-2 sm:flex-row xl:justify-end w-full">
                                 {!isLocked && isAdmin && (
                                     <button
                                         onClick={() => {
@@ -255,6 +260,29 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                                         />
                                     </SheetContent>
                                 </Sheet>
+                                </div>
+                                {pendingSettlement && activeAsset.battery.status !== BatteryStatus.RETURNED_PENDING && (
+                                    <div className="w-full rounded-2xl border border-slate-200 bg-slate-50/90 p-3.5 shadow-sm">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                                                    <Landmark size={16} />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-semibold text-slate-900">
+                                                        {pendingSettlement.oldBatteryId} still needs dealer settlement
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={onSettleHere}
+                                                className="inline-flex shrink-0 items-center justify-center rounded-xl bg-slate-900 px-3.5 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white transition-all hover:bg-blue-600 active:scale-95"
+                                            >
+                                                Settle Here
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

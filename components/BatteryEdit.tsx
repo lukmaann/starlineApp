@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Database } from '../db';
 import { scheduleUndoableAction } from '../utils/undoToast';
-import { Battery, Replacement, Sale, WarrantyCardStatus } from '../types';
+import { Battery, BatteryStatus, Replacement, Sale, WarrantyCardStatus } from '../types';
 import { getLocalDate, formatDate } from '../utils';
 import {
     Save, ShieldCheck, X, Calendar, User, Phone,
@@ -256,6 +256,36 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         );
     }, [dealerQuery, dealers]);
 
+    const dealerEditLockReason = useMemo(() => {
+        if (!activeAsset?.battery) return null;
+
+        const { battery, sale, replacement } = activeAsset;
+        const hasReplacementLinks = !!battery.previousBatteryId || !!battery.nextBatteryId || !!replacement;
+        const hasCommercialHistory = !!sale;
+
+        if (battery.status === BatteryStatus.RETURNED || battery.status === BatteryStatus.RETURNED_PENDING) {
+            return 'Returned and pending-exchange batteries must keep their original dealer.';
+        }
+
+        if (hasReplacementLinks) {
+            return 'Dealer cannot be changed after this battery becomes part of a replacement chain.';
+        }
+
+        if (hasCommercialHistory) {
+            return 'Dealer cannot be changed after the battery is sold or billed.';
+        }
+
+        if (battery.status !== BatteryStatus.MANUFACTURED && battery.status !== BatteryStatus.ACTIVE) {
+            return `Dealer change is locked for ${battery.status} batteries.`;
+        }
+
+        return null;
+    }, [activeAsset]);
+
+    const canEditDealer = !dealerEditLockReason;
+    const originalSoldDate = activeAsset?.sale?.warrantyStartDate || activeAsset?.battery.actualSaleDate || activeAsset?.battery.activationDate || '';
+    const soldDateChanged = originalSoldDate !== formData.soldDate;
+
     const getChanges = () => {
         const changes: { field: string, old: string, new: string }[] = [];
         if (!activeAsset) return changes;
@@ -263,7 +293,7 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         // Check Dealer
         const currentDealer = dealers.find(d => d.id === activeAsset.battery.dealerId)?.name || 'None';
         const newDealer = dealers.find(d => d.id === formData.dealerId)?.name || 'None';
-        if (activeAsset.battery.dealerId !== formData.dealerId) {
+        if (canEditDealer && activeAsset.battery.dealerId !== formData.dealerId) {
             changes.push({ field: 'Assigned Dealer', old: currentDealer, new: newDealer });
         }
 
@@ -273,24 +303,71 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         }
 
         // Check Sale Date
-        const oldDate = activeAsset.sale?.warrantyStartDate || activeAsset.battery.actualSaleDate || activeAsset.battery.activationDate || '';
-        if (oldDate !== formData.soldDate) {
-            changes.push({ field: 'Sale/Warranty Date', old: oldDate, new: formData.soldDate });
+        if (soldDateChanged) {
+            changes.push({ field: 'Sale/Warranty Date', old: originalSoldDate || '(empty)', new: formData.soldDate || '(empty)' });
         }
 
         // Check Replacements Fields (if applicable)
         if (activeAsset.replacement) {
             if (activeAsset.replacement.settlementType !== formData.settlementMethod) {
-                changes.push({ field: 'Settlement Method', old: activeAsset.replacement.settlementType, new: formData.settlementMethod });
+                changes.push({ field: 'Settlement Method', old: activeAsset.replacement.settlementType || 'Pending', new: formData.settlementMethod });
             }
-            // Add other replacement checks if needed...
+            if ((activeAsset.replacement.paidInAccount || false) !== formData.paidInAccount) {
+                changes.push({ field: 'Paid In Account', old: activeAsset.replacement.paidInAccount ? 'Yes' : 'No', new: formData.paidInAccount ? 'Yes' : 'No' });
+            }
+            if ((activeAsset.replacement.replenishmentBatteryId || '') !== formData.replenishmentBatteryId) {
+                changes.push({ field: 'Replenishment Unit', old: activeAsset.replacement.replenishmentBatteryId || '(empty)', new: formData.replenishmentBatteryId || '(empty)' });
+            }
+            if ((activeAsset.replacement.warrantyCardStatus || 'RECEIVED') !== formData.warrantyCardStatus) {
+                changes.push({ field: 'Warranty Card Status', old: activeAsset.replacement.warrantyCardStatus || 'RECEIVED', new: formData.warrantyCardStatus });
+            }
+            if ((activeAsset.replacement.reason || '') !== formData.reason) {
+                changes.push({ field: 'Replacement Reason', old: activeAsset.replacement.reason || '(empty)', new: formData.reason || '(empty)' });
+            }
+            if ((activeAsset.replacement.settlementDate || '') !== formData.settlementDate) {
+                changes.push({ field: 'Settlement Date', old: activeAsset.replacement.settlementDate || '(empty)', new: formData.settlementDate || '(empty)' });
+            }
         }
 
         return changes;
     };
 
     const handleSaveClick = () => {
+        if (!activeAsset) return;
+
+        if (!canEditDealer && activeAsset.battery.dealerId !== formData.dealerId) {
+            alert(dealerEditLockReason);
+            setFormData(prev => ({ ...prev, dealerId: activeAsset.battery.dealerId || '' }));
+            return;
+        }
+
+        if (soldDateChanged && !formData.soldDate) {
+            alert('Sale/Warranty date is required.');
+            return;
+        }
+
+        if (activeAsset.replacement) {
+            const requiresSettlementDate =
+                formData.settlementMethod === 'STOCK' ||
+                formData.settlementMethod === 'DIRECT' ||
+                (formData.settlementMethod === 'CREDIT' && formData.paidInAccount);
+
+            if (requiresSettlementDate && !formData.settlementDate) {
+                alert('Settlement date is required before marking this settlement as resolved.');
+                return;
+            }
+
+            if (formData.settlementMethod === 'STOCK' && !formData.replenishmentBatteryId.trim()) {
+                alert('Replenishment Unit ID is required for stock settlement.');
+                return;
+            }
+        }
+
         const changes = getChanges();
+        if (changes.length === 0) {
+            alert('No valid changes detected.');
+            return;
+        }
         setPendingChanges(changes);
         setShowEditConfirm(true);
     };
@@ -302,12 +379,12 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                 await Database.updateBatteryDetails(
                     batteryId,
                     batteryId, // ID unchanged
-                    formData.dealerId,
+                    canEditDealer ? formData.dealerId : (activeAsset.battery.dealerId || ''),
                     formData.model
                 );
             }
 
-            if (formData.soldDate && activeAsset?.battery) {
+            if (soldDateChanged && formData.soldDate && activeAsset?.battery) {
                 await Database.correctSaleDate(
                     batteryId,
                     formData.soldDate,
@@ -445,9 +522,9 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                         </div>
                         <p className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest mb-2">Current Battery (Editing)</p>
                         <p className="text-3xl font-black mono text-emerald-600 break-all">{batteryId}</p>
-                        <div className="mt-2 text-[10px] font-bold text-emerald-700/60 uppercase">
-                            Status: {activeAsset?.battery.status}
-                        </div>
+                                <div className="mt-2 text-[10px] font-bold text-emerald-700/60 uppercase">
+                                    Status: {activeAsset?.battery.status}
+                                </div>
                     </div>
                 </div>
 
@@ -460,7 +537,7 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Assigned Dealer</label>
                             <div ref={dealerDropdownRef} className="relative">
-                                <div className={`rounded-xl border bg-slate-50 transition-all overflow-hidden ${showDealerDropdown ? 'border-blue-400 ring-4 ring-blue-500/10 bg-white shadow-lg' : 'border-slate-200 hover:border-slate-300'}`}>
+                                <div className={`rounded-xl border bg-slate-50 transition-all overflow-hidden ${canEditDealer && showDealerDropdown ? 'border-blue-400 ring-4 ring-blue-500/10 bg-white shadow-lg' : 'border-slate-200'} ${canEditDealer ? 'hover:border-slate-300' : 'opacity-75'}`}>
                                     <div className="flex items-center gap-3 px-4 pt-3">
                                         <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-blue-600 shrink-0">
                                             <Store size={16} />
@@ -473,7 +550,9 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                                         </div>
                                         <button
                                             type="button"
+                                            disabled={!canEditDealer}
                                             onClick={() => {
+                                                if (!canEditDealer) return;
                                                 setShowDealerDropdown(prev => {
                                                     const next = !prev;
                                                     if (next) {
@@ -484,7 +563,7 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                                                     return next;
                                                 });
                                             }}
-                                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
+                                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all disabled:cursor-not-allowed disabled:opacity-50"
                                         >
                                             <ChevronDown size={16} className={`transition-transform ${showDealerDropdown ? 'rotate-180' : ''}`} />
                                         </button>
@@ -494,15 +573,17 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                                         <Search className="absolute left-7 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                                         <input
                                             value={dealerQuery}
-                                            onFocus={() => setShowDealerDropdown(true)}
+                                            readOnly={!canEditDealer}
+                                            onFocus={() => canEditDealer && setShowDealerDropdown(true)}
                                             onChange={(e) => {
+                                                if (!canEditDealer) return;
                                                 setDealerQuery(e.target.value);
                                                 setShowDealerDropdown(true);
                                             }}
-                                            placeholder="Search dealer..."
-                                            className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-9 py-2.5 text-[13px] font-bold uppercase tracking-wide text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5"
+                                            placeholder={canEditDealer ? "Search dealer..." : "Dealer locked for this battery"}
+                                            className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-9 py-2.5 text-[13px] font-bold uppercase tracking-wide text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 read-only:bg-slate-100 read-only:text-slate-500"
                                         />
-                                        {selectedDealer && (
+                                        {selectedDealer && canEditDealer && (
                                             <button
                                                 type="button"
                                                 onClick={() => {
@@ -562,7 +643,12 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                                     </div>
                                 )}
                             </div>
-                            {formData.dealerId !== originalDealerId && (
+                            {dealerEditLockReason ? (
+                                <p className="text-[10px] font-bold text-slate-500 px-2">
+                                    <AlertTriangle size={10} className="inline mr-1" />
+                                    {dealerEditLockReason}
+                                </p>
+                            ) : formData.dealerId !== originalDealerId && (
                                 <p className="text-[10px] font-bold text-amber-600 px-2 animate-pulse">
                                     <AlertTriangle size={10} className="inline mr-1" />
                                     Changing dealer will update ownership for this unit and its history steps.
@@ -609,7 +695,7 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                             />
                             <p className="text-[10px] text-amber-800 font-bold mt-2 flex items-center gap-2">
                                 <AlertCircle size={12} />
-                                changing this date will recalculate warranty expiry for this and all future units.
+                                Only changed dates are recalculated for this battery chain.
                             </p>
                         </div>
                     </div>

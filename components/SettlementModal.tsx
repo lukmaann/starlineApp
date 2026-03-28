@@ -53,7 +53,7 @@ export const SettlementModal: React.FC<SettlementModalProps> = ({ isOpen, onClos
     }, [isOpen]);
 
     const handleResolve = async () => {
-        if (!target) return;
+        if (!target || isSubmitting) return;
 
         if (resolutionMode === 'STOCK' && !newSerial.trim()) {
             window.dispatchEvent(new CustomEvent('app-notify', {
@@ -62,8 +62,7 @@ export const SettlementModal: React.FC<SettlementModalProps> = ({ isOpen, onClos
             return;
         }
 
-        // Start 3-Second Processing Animation
-        onClose(); // Close modal immediately
+        setIsSubmitting(true);
         setProcessingState({ isActive: true, progress: 0, stage: 'PROCESSING' });
 
         const startTime = Date.now();
@@ -107,6 +106,7 @@ export const SettlementModal: React.FC<SettlementModalProps> = ({ isOpen, onClos
                 detail: { message: 'Settlement resolved successfully', type: 'success' }
             }));
 
+            onClose();
             onSuccess(); // Start data reload
 
         } catch (error: any) {

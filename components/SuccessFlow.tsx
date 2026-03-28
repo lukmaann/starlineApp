@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle, Printer, ArrowRight, CheckCircle2 } from 'lucide-react';
 
 interface SuccessFlowProps {
@@ -22,9 +23,10 @@ export const SuccessFlow: React.FC<SuccessFlowProps> = ({
 }) => {
     if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 z-[200] bg-slate-900/10 backdrop-blur-[2px] flex items-center justify-center p-6 animate-in fade-in duration-300 print:hidden">
-            <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-500">
+    return createPortal(
+        <div className="fixed inset-0 z-[5000] overflow-hidden flex items-center justify-center p-6 animate-in fade-in duration-300 print:hidden">
+            <div className="absolute -inset-2 bg-slate-900/10 backdrop-blur-[2px]" />
+            <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-500">
                 {/* Success Header Strip */}
                 <div className="h-1.5 w-full bg-emerald-500" />
 
@@ -79,6 +81,7 @@ export const SuccessFlow: React.FC<SuccessFlowProps> = ({
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };

@@ -520,6 +520,29 @@ ipcMain.handle('db-update-battery-details', (event, currentId, newId, dealerId, 
 
     // Use synchronous transaction for atomicity
     const updateTransaction = db.transaction(() => {
+      const currentBattery = db.prepare(`
+        SELECT id, status, dealerId, previousBatteryId, nextBatteryId
+        FROM batteries
+        WHERE id = ?
+      `).get(currentId);
+      if (!currentBattery) throw new Error('Battery not found');
+
+      const saleCount = db.prepare('SELECT COUNT(*) as count FROM sales WHERE batteryId = ?').get(currentId)?.count || 0;
+      const replacementCount = db.prepare(
+        'SELECT COUNT(*) as count FROM replacements WHERE oldBatteryId = ? OR newBatteryId = ?'
+      ).get(currentId, currentId)?.count || 0;
+
+      const dealerIsChanging = currentBattery.dealerId !== dealerId;
+      if (dealerIsChanging) {
+        const dealerLockedStatuses = ['RETURNED', 'RETURNED_PENDING'];
+        const hasLifecycleLinks = !!currentBattery.previousBatteryId || !!currentBattery.nextBatteryId || replacementCount > 0;
+        const hasCommercialHistory = saleCount > 0;
+
+        if (dealerLockedStatuses.includes(currentBattery.status) || hasLifecycleLinks || hasCommercialHistory) {
+          throw new Error('Dealer cannot be changed for returned, sold, or replacement-linked batteries.');
+        }
+      }
+
       // 1. Check New ID
       if (newId !== currentId) {
         const check = db.prepare('SELECT id FROM batteries WHERE id = ?').get(newId);
