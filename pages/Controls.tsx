@@ -4,7 +4,7 @@ import {
   Shield, Key, User as UserIcon, Save, Loader2, Lock, ArrowRight,
   ShieldCheck, ShieldAlert, AlertTriangle, Fingerprint, Layers,
   Box, FileSignature, Settings2, ClipboardCheck, ChevronLeft,
-  ChevronRight, CheckCircle2, Plus, Edit2, Trash2, Info, X, RefreshCw, Activity, Sliders,
+  ChevronRight, ChevronDown, CheckCircle2, Plus, Edit2, Trash2, Info, X, RefreshCw, Activity, Sliders,
   KeyRound, Tag
 } from 'lucide-react';
 import { Database } from '../db';
@@ -39,6 +39,10 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
   // "Model Registry" is now the default tab as requested
   const [currentTab, setCurrentTab] = useState<'models' | 'data' | 'access' | 'history' | 'prices'>('models');
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState('45');
+  const [isSavingSessionTimeout, setIsSavingSessionTimeout] = useState(false);
+  const [showUserManagementPage, setShowUserManagementPage] = useState(false);
+  const [showDangerZonePage, setShowDangerZonePage] = useState(false);
 
   // Access Control State (Legacy - kept for backward compatibility if needed by other components, but mostly replaced by UserManagement)
   const [formData, setFormData] = useState({
@@ -130,9 +134,28 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
     const loadConfig = async () => {
       const user = await Database.getConfig('starline_admin_user');
       if (user) setFormData(prev => ({ ...prev, username: user }));
+      const timeoutMinutes = await Database.getConfig('starline_session_timeout_minutes');
+      const normalizedTimeout = timeoutMinutes || '45';
+      setSessionTimeoutMinutes(normalizedTimeout);
+      AuthSession.setSessionTimeoutMinutes(parseInt(normalizedTimeout, 10));
     };
     loadConfig();
   }, [active]);
+
+  const handleSaveSessionTimeout = async () => {
+    setIsSavingSessionTimeout(true);
+    try {
+      const normalized = parseInt(sessionTimeoutMinutes, 10) || 45;
+      await Database.setConfig('starline_session_timeout_minutes', normalized.toString());
+      AuthSession.setSessionTimeoutMinutes(normalized);
+      await Database.logActivity('SESSION_TIMEOUT_UPDATE', `Updated app auto-logout timer to ${normalized} minutes`, { minutes: normalized });
+      notify('Session timeout updated');
+    } catch (e: any) {
+      notify(e?.message || 'Failed to update session timeout', 'error');
+    } finally {
+      setIsSavingSessionTimeout(false);
+    }
+  };
 
   const handleOpenModelWizard = (m?: BatteryModel) => {
     if (m) {
@@ -289,8 +312,339 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
     );
   }
 
+  if (showUserManagementPage) {
+    return (
+      <div className="max-w-7xl mx-auto space-y-6 pb-20 text-slate-900">
+        <div className="flex flex-col gap-4 px-4 pt-4">
+          <div className="space-y-3">
+            <button
+              onClick={() => setShowUserManagementPage(false)}
+              className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 w-fit"
+            >
+              <ChevronLeft size={16} />
+              Back
+            </button>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">User Management</h1>
+              <p className="mt-1 text-sm text-slate-500">View assigned users and assign new users from one dedicated page.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4">
+          <UserManagement />
+        </div>
+      </div>
+    );
+  }
+
+  if (showDangerZonePage) {
+    return (
+      <div className="max-w-7xl mx-auto space-y-6 pb-20 text-slate-900">
+        <div className="flex flex-col gap-4 px-4 pt-4">
+          <div className="space-y-3">
+            <button
+              onClick={() => setShowDangerZonePage(false)}
+              className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 w-fit"
+            >
+              <ChevronLeft size={16} />
+              Back
+            </button>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">Danger Zone</h1>
+              <p className="mt-1 text-sm text-slate-500">Permanent removal tools are grouped here on a separate page.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4">
+          <div className="space-y-3">
+            <div className="rounded-3xl border border-rose-100 bg-rose-50/40 p-2">
+              <div className="grid grid-cols-1 gap-6 rounded-[22px] border border-rose-100 bg-white p-6 shadow-sm lg:grid-cols-2">
+                <div className="rounded-2xl border border-rose-100 bg-white p-5 shadow-sm lg:col-span-2">
+                  <div className="mb-4">
+                    <h5 className="font-bold text-slate-900 text-sm">Delete Battery Record</h5>
+                    <p className="mt-1 text-sm text-slate-500">Permanently remove a battery and all its history from the database.</p>
+                  </div>
+
+                  <div className="mb-4 flex gap-3">
+                    <input
+                      placeholder="Scan battery serial number"
+                      className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium uppercase outline-none focus:border-rose-500"
+                      value={replacementSearchId}
+                      onChange={e => setReplacementSearchId(e.target.value.toUpperCase())}
+                      onKeyDown={async e => {
+                        if (e.key === 'Enter' && replacementSearchId) {
+                          setIsSearchingReplacement(true);
+                          setFoundReplacement(null);
+                          const res = await Database.searchBattery(replacementSearchId);
+                          setFoundReplacement(res);
+                          if (!res) notify('No battery record found for this ID', 'error');
+                          setIsSearchingReplacement(false);
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!replacementSearchId) return;
+                        setIsSearchingReplacement(true);
+                        setFoundReplacement(null);
+                        const res = await Database.searchBattery(replacementSearchId);
+                        setFoundReplacement(res);
+                        if (!res) notify('No battery record found for this ID', 'error');
+                        setIsSearchingReplacement(false);
+                      }}
+                      disabled={isSearchingReplacement}
+                      className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-black shadow-sm"
+                    >
+                      {isSearchingReplacement ? <Loader2 size={14} className="animate-spin" /> : 'Find'}
+                    </button>
+                  </div>
+
+                  {foundReplacement && foundReplacement.battery && (
+                    <div className="mb-4 rounded-xl border border-rose-100 bg-rose-50 p-4">
+                      <div className="mb-4 grid grid-cols-2 gap-4 text-xs lg:grid-cols-3">
+                        <div><p className="font-medium text-slate-500">Battery ID</p><p className="font-mono font-semibold text-slate-900">{foundReplacement.battery.id}</p></div>
+                        <div><p className="font-medium text-slate-500">Model</p><p className="font-mono font-semibold text-slate-900">{foundReplacement.battery.model}</p></div>
+                        <div>
+                          <p className="font-medium text-slate-500">Status</p>
+                          <p className={`font-mono font-semibold ${(foundReplacement.battery.warrantyExpiry && new Date() > new Date(foundReplacement.battery.warrantyExpiry))
+                            ? 'text-rose-600'
+                            : 'text-slate-900'
+                            }`}>
+                            {(foundReplacement.battery.warrantyExpiry && new Date() > new Date(foundReplacement.battery.warrantyExpiry))
+                              ? 'EXPIRED'
+                              : foundReplacement.battery.status}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-500">Assigned dealer</p>
+                          <p className="font-semibold text-slate-900">
+                            {dealers.find(d => d.id === foundReplacement.battery.dealerId)?.name || foundReplacement.battery.dealerId || 'N/A'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-500">Sent to dealer</p>
+                          <p className="font-mono font-semibold text-slate-900">
+                            {foundReplacement.battery.manufactureDate ? foundReplacement.battery.manufactureDate.split('-').reverse().join('/') : 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {foundReplacement.sale && (
+                        <div className="mb-4 rounded-lg border border-rose-100 bg-white/60 p-3">
+                          <p className="mb-2 text-[11px] font-semibold text-slate-500">Sale record detected</p>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div><span className="text-slate-500">To:</span> <span className="font-semibold">{foundReplacement.sale.customerName}</span></div>
+                            <div><span className="text-slate-500">Date:</span> <span className="font-semibold font-mono">{foundReplacement.sale.saleDate ? foundReplacement.sale.saleDate.split('-').reverse().join('/') : 'N/A'}</span></div>
+                          </div>
+                        </div>
+                      )}
+
+                      {foundReplacement.replacements && foundReplacement.replacements.some(r => r.oldBatteryId === foundReplacement.battery.id) && (
+                        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                          <p className="mb-2 flex items-center gap-1 text-[11px] font-semibold text-amber-800"><AlertTriangle size={12} /> Lineage warning</p>
+                          <p className="text-xs text-amber-900">
+                            This battery was replaced by <span className="font-bold font-mono">{foundReplacement.replacements.find(r => r.oldBatteryId === foundReplacement.battery.id)?.newBatteryId}</span>.
+                            Deleting this record will break the link and reset the replacement unit to a standalone <b>ACTIVE</b> status.
+                          </p>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={async () => {
+                          if (window.confirm(`CRITICAL: Are you sure you want to PERMANENTLY DELETE battery ${foundReplacement.battery.id}?\n\nThis will remove:\n- The Battery Record\n- Associated Sales\n- Associated Replacements\n\nThis action cannot be undone.`)) {
+                            setIsActionLoading(true);
+                            try {
+                              await Database.deleteBatteryRecord(foundReplacement.battery.id);
+                              await Database.logActivity('BATTERY_DELETE', `Deleted battery record ${foundReplacement.battery.id}`, { batteryId: foundReplacement.battery.id, reason: 'Manual deletion from Danger Zone' });
+                              notify('Battery record permanently deleted', 'success');
+                              setFoundReplacement(null);
+                              setReplacementSearchId('');
+                            } catch (e: any) {
+                              notify(`Deletion Failed: ${e.message}`, 'error');
+                            } finally {
+                              setIsActionLoading(false);
+                            }
+                          }
+                        }}
+                        disabled={isActionLoading}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 py-2.5 text-sm font-medium text-white transition-all hover:bg-rose-700 shadow-sm"
+                      >
+                        {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                        Permanently delete battery
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-rose-100 bg-white p-5 shadow-sm">
+                  <div className="mb-4">
+                    <h5 className="text-sm font-semibold text-slate-900">Remove dealer</h5>
+                    <p className="mt-1 text-sm text-slate-500">Delete a dealer and their records permanently.</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <select className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium outline-none focus:border-rose-500" value={deletingDealer?.id || ''} onChange={e => { setDeletingDealer(dealers.find(d => d.id === e.target.value) as any); setModelDeleteConfirmName(''); }}>
+                      <option value="">Select dealer</option>
+                      {dealers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+
+                    {deletingDealer && (
+                      <input
+                        placeholder={`Type "${deletingDealer.name}"`}
+                        className="w-full rounded-xl border border-rose-200 bg-white px-3 py-2.5 text-sm font-medium text-rose-600 outline-none placeholder:font-normal placeholder:text-rose-300 focus:border-rose-500"
+                        value={modelDeleteConfirmName}
+                        onChange={e => setModelDeleteConfirmName(e.target.value)}
+                      />
+                    )}
+
+                    <button
+                      disabled={!deletingDealer || modelDeleteConfirmName !== deletingDealer.name || isActionLoading}
+                      onClick={async () => {
+                        if (deletingDealer) {
+                          setIsActionLoading(true);
+                          const dealerToDelete = deletingDealer;
+                          scheduleUndoableAction({
+                            label: `Dealer ${dealerToDelete.name} queued for deletion`,
+                            description: 'Undo within 5 seconds to cancel dealer removal.',
+                            onCommit: async () => {
+                              await Database.deleteDealer(dealerToDelete.id);
+                              await Database.logActivity('PARTNER_DELETE', `Deleted dealer ${dealerToDelete.name}`, { dealerId: dealerToDelete.id, name: dealerToDelete.name });
+                              await loadModelData();
+                            },
+                            onSuccess: () => notify('Dealer removed successfully', 'success'),
+                            onError: () => notify('Failed to remove dealer', 'error'),
+                          });
+                          setDeletingDealer(null);
+                          setModelDeleteConfirmName('');
+                          setIsActionLoading(false);
+                        }
+                      }}
+                      className="w-full rounded-xl border border-rose-200 bg-white py-2.5 text-sm font-medium text-rose-600 transition-all hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isActionLoading ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Delete dealer'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-rose-100 bg-white p-5 shadow-sm">
+                  <div className="mb-4">
+                    <h5 className="text-sm font-semibold text-slate-900">Remove factory worker</h5>
+                    <p className="mt-1 text-sm text-slate-500">Delete a worker profile and their login access.</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <select className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium uppercase outline-none focus:border-rose-500" value={deletingWorker?.id || ''} onChange={e => { setDeletingWorker(workers.find(w => w.id === e.target.value) || null); setModelDeleteConfirmName(''); }}>
+                      <option value="">Select worker</option>
+                      {workers.map(w => <option key={w.id} value={w.id}>{w.full_name} ({w.enrollment_no})</option>)}
+                    </select>
+
+                    {deletingWorker && (
+                      <input
+                        placeholder={`Type "${deletingWorker.full_name}"`}
+                        className="w-full rounded-xl border border-rose-200 bg-white px-3 py-2.5 text-sm font-medium uppercase text-rose-600 outline-none placeholder:font-normal placeholder:text-rose-300 focus:border-rose-500"
+                        value={modelDeleteConfirmName}
+                        onChange={e => setModelDeleteConfirmName(e.target.value)}
+                      />
+                    )}
+
+                    <button
+                      disabled={!deletingWorker || modelDeleteConfirmName.trim().toUpperCase() !== deletingWorker.full_name.toUpperCase() || isActionLoading}
+                      onClick={async () => {
+                        if (deletingWorker) {
+                          setIsActionLoading(true);
+                          try {
+                            const workerToDelete = deletingWorker;
+                            scheduleUndoableAction({
+                              label: `Worker ${workerToDelete.full_name} queued for deletion`,
+                              description: 'Undo within 5 seconds to keep this worker profile.',
+                              onCommit: async () => {
+                                await Database.deleteFactoryWorker(workerToDelete.id);
+                                await Database.logActivity('WORKER_DELETE', `Deleted factory worker ${workerToDelete.full_name}`, { workerId: workerToDelete.id, name: workerToDelete.full_name });
+                                const updatedWorkers = await Database.getFactoryWorkers();
+                                setWorkers(updatedWorkers);
+                              },
+                              onSuccess: () => notify('Worker removed successfully', 'success'),
+                              onError: () => notify('Failed to remove worker', 'error'),
+                            });
+                            setDeletingWorker(null);
+                            setModelDeleteConfirmName('');
+                          } catch (e) {
+                            notify('Failed to remove worker', 'error');
+                          } finally {
+                            setIsActionLoading(false);
+                          }
+                        }
+                      }}
+                      className="w-full rounded-xl border border-rose-200 bg-white py-2.5 text-sm font-medium text-rose-600 transition-all hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isActionLoading ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Delete worker'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col justify-between rounded-2xl border border-rose-100 bg-white p-5 shadow-sm">
+                  <div className="mb-4">
+                    <h5 className="text-sm font-semibold text-slate-900">Factory reset</h5>
+                    <p className="mt-1 text-sm text-slate-500">Wipe all data and restore system defaults.</p>
+
+                    {!hasBackedUp && (
+                      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                        <p className="mb-2 flex items-center gap-1 text-[11px] font-semibold text-amber-800">
+                          <AlertTriangle size={12} /> Backup required
+                        </p>
+                        <button
+                          onClick={async () => {
+                            setIsActionLoading(true);
+                            try {
+                              const result = await window.electronAPI?.db?.backup();
+                              if (result?.success) {
+                                setHasBackedUp(true);
+                                notify(`Backup saved to: ${result.path}`, 'success');
+                              } else {
+                                throw new Error(result?.error || 'Backup failed');
+                              }
+                            } catch (e: any) {
+                              notify(`Backup Failed: ${e.message}`, 'error');
+                            } finally {
+                              setIsActionLoading(false);
+                            }
+                          }}
+                          className="w-full rounded-md bg-amber-100 py-2 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-200"
+                        >
+                          Save database backup
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    disabled={!hasBackedUp}
+                    onClick={async () => {
+                      if (window.confirm('CRITICAL WARNING: You are about to wipe ALL application data.\n\nAre you absolutely sure?')) {
+                        if (window.confirm('Final Confirmation: This action is irreversible. All records will be lost.\n\nProceed with Factory Reset?')) {
+                          await Database.resetDatabase();
+                          notify('System reset complete. Reloading...', 'success');
+                          setTimeout(() => window.location.reload(), 1500);
+                        }
+                      }
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 py-2.5 text-sm font-medium text-white transition-all hover:bg-rose-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Trash2 size={14} /> Reset application
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-300 pb-20 text-slate-900">
+    <div className="max-w-7xl mx-auto space-y-8 pb-20 text-slate-900">
       {/* Header & Tabs */}
       <div className="flex flex-col md:flex-row items-center justify-between gap-4 px-4 pt-4">
         <div>
@@ -768,302 +1122,95 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
 
       {/* --- ACCESS CONTROL TAB --- */}
       {currentTab === 'access' && (
-        <div className="max-w-4xl mx-auto animate-in slide-in-from-right-4 duration-300 space-y-8">
-          <UserManagement />
+        <div className="mx-auto max-w-5xl space-y-6">
+          <div className="space-y-3">
+            <div className="px-1">
+              <h2 className="text-sm font-semibold text-slate-900">Access management</h2>
+              <p className="mt-1 text-sm text-slate-500">Manage session rules, user accounts, and role-based access in a cleaner layout.</p>
+            </div>
 
-          {/* DANGER ZONE */}
-          <div className="p-8 bg-slate-50 border-t border-slate-200">
-            <h4 className="text-sm font-bold text-rose-700 mb-6 flex items-center gap-2">
-              <AlertTriangle size={16} />
-              Danger Zone
-            </h4>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Delete Battery Record */}
-              <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm col-span-1 lg:col-span-2">
-                <div className="mb-4">
-                  <h5 className="font-bold text-slate-900 text-sm">Delete Battery Record</h5>
-                  <p className="text-xs text-slate-500 mt-1">Permanently remove a battery and all its history (Sales, Replacements) from the database.</p>
-                </div>
-
-                <div className="flex gap-3 mb-4">
-                  <input
-                    placeholder="Scan Battery Serial Number..."
-                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold uppercase outline-none focus:border-rose-500"
-                    value={replacementSearchId}
-                    onChange={e => setReplacementSearchId(e.target.value.toUpperCase())}
-                    onKeyDown={async e => {
-                      if (e.key === 'Enter' && replacementSearchId) {
-                        setIsSearchingReplacement(true);
-                        setFoundReplacement(null);
-                        // Search for battery full details
-                        const res = await Database.searchBattery(replacementSearchId);
-                        setFoundReplacement(res);
-                        if (!res) notify('No battery record found for this ID', 'error');
-                        setIsSearchingReplacement(false);
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={async () => {
-                      if (!replacementSearchId) return;
-                      setIsSearchingReplacement(true);
-                      setFoundReplacement(null);
-                      const res = await Database.searchBattery(replacementSearchId);
-                      setFoundReplacement(res);
-                      if (!res) notify('No battery record found for this ID', 'error');
-                      setIsSearchingReplacement(false);
-                    }}
-                    disabled={isSearchingReplacement}
-                    className="px-4 py-2 bg-slate-900 text-white font-bold rounded-lg text-xs hover:bg-black transition-all shadow-sm flex items-center gap-2"
-                  >
-                    {isSearchingReplacement ? <Loader2 size={14} className="animate-spin" /> : 'Find'}
-                  </button>
-                </div>
-
-                {foundReplacement && foundReplacement.battery && (
-                  <div className="bg-rose-50 border border-rose-100 rounded-lg p-4 mb-4">
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 text-xs mb-4">
-                      <div><p className="font-bold text-slate-400 uppercase">Battery ID</p><p className="font-mono font-bold text-slate-900">{foundReplacement.battery.id}</p></div>
-                      <div><p className="font-bold text-slate-400 uppercase">Model</p><p className="font-mono font-bold text-slate-900">{foundReplacement.battery.model}</p></div>
-                      <div>
-                        <p className="font-bold text-slate-400 uppercase">Status</p>
-                        <p className={`font-mono font-bold ${(foundReplacement.battery.warrantyExpiry && new Date() > new Date(foundReplacement.battery.warrantyExpiry))
-                          ? 'text-rose-600'
-                          : 'text-slate-900'
-                          }`}>
-                          {(foundReplacement.battery.warrantyExpiry && new Date() > new Date(foundReplacement.battery.warrantyExpiry))
-                            ? 'EXPIRED'
-                            : foundReplacement.battery.status}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="font-bold text-slate-400 uppercase">Assigned Dealer</p>
-                        <p className="font-bold text-slate-900">
-                          {dealers.find(d => d.id === foundReplacement.battery.dealerId)?.name || foundReplacement.battery.dealerId || 'N/A'}
-                        </p>
-                      </div>
-                      {/* <div>
-                            <p className="font-bold text-slate-400 uppercase">Manufacture Date</p>
-                            <p className="font-mono font-bold text-slate-900">{foundReplacement.battery.manufactureDate ? foundReplacement.battery.manufactureDate.split('-').reverse().join('/') : 'N/A'}</p>
-                          </div> */}
-                      <div>
-                        <p className="font-bold text-slate-400 uppercase">Sent to Dealer</p>
-                        <p className="font-mono font-bold text-slate-900">
-                          {/* Sent date is typically manufacture date or explicitly tracked if we had a dispatch log. Using manuf date as proxy or activation if available */}
-                          {foundReplacement.battery.manufactureDate ? foundReplacement.battery.manufactureDate.split('-').reverse().join('/') : 'N/A'}
-                        </p>
-                      </div>
+            <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-2">
+              <div className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                      <Lock size={17} />
                     </div>
-
-                    {foundReplacement.sale && (
-                      <div className="mb-4 p-3 bg-white/50 rounded-lg border border-rose-100">
-                        <p className="font-bold text-slate-400 uppercase text-[10px] mb-2">Sale Record Detected</p>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div><span className="text-slate-500">To:</span> <span className="font-bold">{foundReplacement.sale.customerName}</span></div>
-                          <div><span className="text-slate-500">Date:</span> <span className="font-bold font-mono">{foundReplacement.sale.saleDate ? foundReplacement.sale.saleDate.split('-').reverse().join('/') : 'N/A'}</span></div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Lineage Warning */}
-                    {foundReplacement.replacements && foundReplacement.replacements.some(r => r.oldBatteryId === foundReplacement.battery.id) && (
-                      <div className="mb-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                        <p className="font-bold text-amber-800 uppercase text-[10px] mb-2 flex items-center gap-1"><AlertTriangle size={12} /> Lineage Warning</p>
-                        <p className="text-xs text-amber-900">
-                          This battery was replaced by <span className="font-bold font-mono">{foundReplacement.replacements.find(r => r.oldBatteryId === foundReplacement.battery.id)?.newBatteryId}</span>.
-                          Deleting this record will break the link and reset the replacement unit to a standalone <b>ACTIVE</b> status.
-                        </p>
-                      </div>
-                    )}
-
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">Session settings</h3>
+                      <p className="mt-1 text-sm text-slate-500">Choose when the app logs out automatically.</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div className="relative">
+                      <select
+                        className="min-w-[220px] appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-medium text-slate-900 outline-none transition-all focus:border-slate-400 focus:bg-white"
+                        value={sessionTimeoutMinutes}
+                        onChange={(e) => setSessionTimeoutMinutes(e.target.value)}
+                      >
+                        {[5, 10, 15, 20, 30, 45, 60, 90, 120].map((minutes) => (
+                          <option key={minutes} value={minutes}>
+                            {minutes} minutes
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={16} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    </div>
                     <button
-                      onClick={async () => {
-                        if (window.confirm(`CRITICAL: Are you sure you want to PERMANENTLY DELETE battery ${foundReplacement.battery.id}?\n\nThis will remove:\n- The Battery Record\n- Associated Sales\n- Associated Replacements\n\nThis action cannot be undone.`)) {
-                          setIsActionLoading(true);
-                          try {
-                            await Database.deleteBatteryRecord(foundReplacement.battery.id);
-                            await Database.logActivity('BATTERY_DELETE', `Deleted battery record ${foundReplacement.battery.id}`, { batteryId: foundReplacement.battery.id, reason: 'Manual deletion from Danger Zone' });
-                            notify('Battery record permanently deleted', 'success');
-                            setFoundReplacement(null);
-                            setReplacementSearchId('');
-                          } catch (e: any) {
-                            notify(`Deletion Failed: ${e.message}`, 'error');
-                          } finally {
-                            setIsActionLoading(false);
-                          }
-                        }
-                      }}
-                      disabled={isActionLoading}
-                      className="w-full py-2 bg-rose-600 text-white font-bold rounded-lg text-xs hover:bg-rose-700 transition-all shadow-sm flex items-center justify-center gap-2"
+                      onClick={handleSaveSessionTimeout}
+                      disabled={isSavingSessionTimeout}
+                      className="flex h-12 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 text-sm font-medium text-white transition-all hover:bg-black active:scale-95 disabled:opacity-50"
                     >
-                      {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                      Permanently Delete Battery
+                      {isSavingSessionTimeout ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                      Save
                     </button>
                   </div>
-                )}
-              </div>
-
-              {/* Dealer Deletion */}
-              <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm">
-                <div className="mb-4">
-                  <h5 className="font-bold text-slate-900 text-sm">Remove Dealer</h5>
-                  <p className="text-xs text-slate-500 mt-1">Permanently delete a dealer and their records.</p>
                 </div>
+              </div>
+            </div>
+          </div>
 
-                <div className="space-y-3">
-                  <select className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-rose-500" value={deletingDealer?.id || ''} onChange={e => { setDeletingDealer(dealers.find(d => d.id === e.target.value) as any); setModelDeleteConfirmName(''); }}>
-                    <option value="">Select Dealer...</option>
-                    {dealers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-
-                  {deletingDealer && (
-                    <input
-                      placeholder={`Type "${deletingDealer.name}"`}
-                      className="w-full px-3 py-2 bg-white border border-rose-200 text-rose-600 rounded-lg text-sm font-bold focus:border-rose-500 outline-none placeholder:text-rose-200 placeholder:font-normal"
-                      value={modelDeleteConfirmName}
-                      onChange={e => setModelDeleteConfirmName(e.target.value)}
-                    />
-                  )}
-
-                  <button
-                    disabled={!deletingDealer || modelDeleteConfirmName !== deletingDealer.name || isActionLoading}
-                    onClick={async () => {
-                      if (deletingDealer) {
-                        setIsActionLoading(true);
-                        const dealerToDelete = deletingDealer;
-                        scheduleUndoableAction({
-                          label: `Dealer ${dealerToDelete.name} queued for deletion`,
-                          description: 'Undo within 5 seconds to cancel dealer removal.',
-                          onCommit: async () => {
-                            await Database.deleteDealer(dealerToDelete.id);
-                            await Database.logActivity('PARTNER_DELETE', `Deleted dealer ${dealerToDelete.name}`, { dealerId: dealerToDelete.id, name: dealerToDelete.name });
-                            await loadModelData();
-                          },
-                          onSuccess: () => notify('Dealer removed successfully', 'success'),
-                          onError: () => notify('Failed to remove dealer', 'error'),
-                        });
-                        setDeletingDealer(null);
-                        setModelDeleteConfirmName('');
-                        setIsActionLoading(false);
-                      }
-                    }}
-                    className="w-full py-2 bg-white border border-rose-200 text-rose-600 font-bold rounded-lg text-xs hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                  >
-                    {isActionLoading ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Delete Dealer'}
-                  </button>
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                  <Shield size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">User management</h3>
+                  <p className="mt-1 text-sm text-slate-500">View assigned users, update access, and add new user accounts.</p>
                 </div>
               </div>
 
-              {/* Factory Worker Deletion */}
-              <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm">
-                <div className="mb-4">
-                  <h5 className="font-bold text-slate-900 text-sm">Remove Factory Worker</h5>
-                  <p className="text-xs text-slate-500 mt-1">Permanently delete a factory worker profile and their login access.</p>
+              <button
+                onClick={() => setShowUserManagementPage(true)}
+                className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white transition-all hover:bg-black active:scale-95"
+              >
+                Open user management
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-rose-100 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-700">
+                  <AlertTriangle size={20} />
                 </div>
-
-                <div className="space-y-3">
-                  <select className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-rose-500 uppercase" value={deletingWorker?.id || ''} onChange={e => { setDeletingWorker(workers.find(w => w.id === e.target.value) || null); setModelDeleteConfirmName(''); }}>
-                    <option value="">Select Worker...</option>
-                    {workers.map(w => <option key={w.id} value={w.id}>{w.full_name} ({w.enrollment_no})</option>)}
-                  </select>
-
-                  {deletingWorker && (
-                    <input
-                      placeholder={`Type "${deletingWorker.full_name}"`}
-                      className="w-full px-3 py-2 bg-white border border-rose-200 text-rose-600 rounded-lg text-sm font-bold focus:border-rose-500 outline-none placeholder:text-rose-200 placeholder:font-normal uppercase"
-                      value={modelDeleteConfirmName}
-                      onChange={e => setModelDeleteConfirmName(e.target.value)}
-                    />
-                  )}
-
-                  <button
-                    disabled={!deletingWorker || modelDeleteConfirmName.trim().toUpperCase() !== deletingWorker.full_name.toUpperCase() || isActionLoading}
-                    onClick={async () => {
-                      if (deletingWorker) {
-                        setIsActionLoading(true);
-                        try {
-                          const workerToDelete = deletingWorker;
-                          scheduleUndoableAction({
-                            label: `Worker ${workerToDelete.full_name} queued for deletion`,
-                            description: 'Undo within 5 seconds to keep this worker profile.',
-                            onCommit: async () => {
-                              await Database.deleteFactoryWorker(workerToDelete.id);
-                              await Database.logActivity('WORKER_DELETE', `Deleted factory worker ${workerToDelete.full_name}`, { workerId: workerToDelete.id, name: workerToDelete.full_name });
-                              const updatedWorkers = await Database.getFactoryWorkers();
-                              setWorkers(updatedWorkers);
-                            },
-                            onSuccess: () => notify('Worker removed successfully', 'success'),
-                            onError: () => notify('Failed to remove worker', 'error'),
-                          });
-                          setDeletingWorker(null);
-                          setModelDeleteConfirmName('');
-                        } catch (e) {
-                          notify('Failed to remove worker', 'error');
-                        } finally {
-                          setIsActionLoading(false);
-                        }
-                      }
-                    }}
-                    className="w-full py-2 bg-white border border-rose-200 text-rose-600 font-bold rounded-lg text-xs hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                  >
-                    {isActionLoading ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Delete Worker'}
-                  </button>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">Danger zone</h3>
+                  <p className="mt-1 text-sm text-slate-500">Battery deletion, dealer removal, worker removal, and factory reset tools.</p>
                 </div>
               </div>
 
-              {/* Factory Reset */}
-              <div className="bg-white border border-rose-100 rounded-xl p-5 shadow-sm flex flex-col justify-between">
-                <div className="mb-4">
-                  <h5 className="font-bold text-slate-900 text-sm">Factory Reset</h5>
-                  <p className="text-xs text-slate-500 mt-1">Wipe all data and restore system defaults.</p>
-
-                  {!hasBackedUp && (
-                    <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                      <p className="text-[10px] font-bold text-amber-800 uppercase mb-2 flex items-center gap-1">
-                        <AlertTriangle size={12} /> Backup Required
-                      </p>
-                      <button
-                        onClick={async () => {
-                          setIsActionLoading(true);
-                          try {
-                            const result = await window.electronAPI?.db?.backup();
-                            if (result?.success) {
-                              setHasBackedUp(true);
-                              notify(`Backup saved to: ${result.path}`, 'success');
-                            } else {
-                              throw new Error(result?.error || 'Backup failed');
-                            }
-                          } catch (e: any) {
-                            notify(`Backup Failed: ${e.message}`, 'error');
-                          } finally {
-                            setIsActionLoading(false);
-                          }
-                        }}
-                        className="w-full py-2 bg-amber-100 text-amber-800 font-bold rounded-md text-[10px] hover:bg-amber-200 transition-colors uppercase tracking-wide"
-                      >
-                        Save Database Backup
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  disabled={!hasBackedUp}
-                  onClick={async () => {
-                    if (window.confirm('CRITICAL WARNING: You are about to wipe ALL application data.\n\nAre you absolutely sure?')) {
-                      if (window.confirm('Final Confirmation: This action is irreversible. All records will be lost.\n\nProceed with Factory Reset?')) {
-                        await Database.resetDatabase();
-                        notify('System reset complete. Reloading...', 'success');
-                        setTimeout(() => window.location.reload(), 1500);
-                      }
-                    }
-                  }}
-                  className="w-full py-2 bg-rose-600 text-white font-bold rounded-lg text-xs hover:bg-rose-700 transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Trash2 size={14} /> Reset Application
-                </button>
-              </div>
+              <button
+                onClick={() => setShowDangerZonePage(true)}
+                className="flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-sm font-medium text-white transition-all hover:bg-rose-700 active:scale-95"
+              >
+                Open danger zone
+                <ArrowRight size={16} />
+              </button>
             </div>
           </div>
         </div>

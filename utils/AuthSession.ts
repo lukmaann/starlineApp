@@ -2,11 +2,24 @@ import { User } from '../types';
 
 const SESSION_KEY = 'starline_auth_session';
 const USER_KEY = 'starline_auth_user';
-const SESSION_DURATION_MS = 45 * 60 * 1000; // 45 minutes
-const WARNING_THRESHOLD_MS = 5 * 60 * 1000; // Show warning immediately (at 5 minutes remaining)
+const SESSION_TIMEOUT_KEY = 'starline_session_timeout_minutes';
+const DEFAULT_SESSION_TIMEOUT_MINUTES = 45;
 const CHECK_INTERVAL_MS = 10 * 1000; // Check every 10 seconds for smoother countdown
 
 let autoLockTimer: NodeJS.Timeout | null = null;
+
+const getSessionTimeoutMinutes = (): number => {
+    const stored = localStorage.getItem(SESSION_TIMEOUT_KEY);
+    const parsed = stored ? parseInt(stored, 10) : DEFAULT_SESSION_TIMEOUT_MINUTES;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_SESSION_TIMEOUT_MINUTES;
+};
+
+const getSessionDurationMs = (): number => getSessionTimeoutMinutes() * 60 * 1000;
+
+const getWarningThresholdMs = (): number => {
+    const duration = getSessionDurationMs();
+    return Math.min(5 * 60 * 1000, Math.max(60 * 1000, Math.floor(duration / 3)));
+};
 
 /**
  * Starts the auto-lock timer that checks session validity every minute.
@@ -67,7 +80,7 @@ export const AuthSession = {
         const lastTime = parseInt(lastSession, 10);
         const now = Date.now();
 
-        return now - lastTime < SESSION_DURATION_MS;
+        return now - lastTime < getSessionDurationMs();
     },
 
     /**
@@ -78,7 +91,7 @@ export const AuthSession = {
         const lastSession = localStorage.getItem(SESSION_KEY);
         if (!lastSession) return 0;
         const lastTime = parseInt(lastSession, 10);
-        const remaining = SESSION_DURATION_MS - (Date.now() - lastTime);
+        const remaining = getSessionDurationMs() - (Date.now() - lastTime);
         return Math.max(0, Math.floor(remaining / 1000));
     },
 
@@ -86,7 +99,17 @@ export const AuthSession = {
      * Returns the warning threshold in seconds (show warning below this value).
      */
     getWarningThresholdSeconds: (): number => {
-        return Math.floor(WARNING_THRESHOLD_MS / 1000);
+        return Math.floor(getWarningThresholdMs() / 1000);
+    },
+
+    getSessionTimeoutMinutes,
+
+    setSessionTimeoutMinutes: (minutes: number) => {
+        const normalized = Number.isFinite(minutes) && minutes > 0 ? Math.floor(minutes) : DEFAULT_SESSION_TIMEOUT_MINUTES;
+        localStorage.setItem(SESSION_TIMEOUT_KEY, normalized.toString());
+        if (AuthSession.isValid()) {
+            startAutoLockTimer();
+        }
     },
 
     /**

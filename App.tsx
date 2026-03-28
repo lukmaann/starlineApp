@@ -113,6 +113,8 @@ const App: React.FC = () => {
               setUser(authUser);
             }
             await Database.init();
+            const configuredSessionTimeout = await Database.getConfig('starline_session_timeout_minutes');
+            AuthSession.setSessionTimeoutMinutes(configuredSessionTimeout ? parseInt(configuredSessionTimeout, 10) : 45);
             AuthSession.initialize();
           } else {
             // Config invalid or drive missing - show selector
@@ -485,7 +487,7 @@ const App: React.FC = () => {
       {showHelp && <ShortcutsModal onClose={() => setShowHelp(false)} />}
 
       <Dialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
-        <DialogContent className="sm:max-w-md p-6 border-0 bg-white rounded-2xl shadow-xl">
+        <DialogContent className="sm:max-w-md p-6 border-0 bg-white rounded-2xl shadow-xl data-[state=open]:slide-in-from-top-[50%] data-[state=closed]:slide-out-to-top-[50%]">
           <div className="flex flex-col items-center text-center space-y-4">
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-600 mb-2 shadow-sm">
               <LogOut size={32} />
@@ -522,7 +524,7 @@ const App: React.FC = () => {
           setKeepAliveError('');
         }
       }}>
-        <DialogContent className="sm:max-w-md p-6 border-0 bg-white rounded-2xl shadow-xl">
+        <DialogContent className="sm:max-w-md p-6 border-0 bg-white rounded-2xl shadow-xl data-[state=open]:slide-in-from-top-[50%] data-[state=closed]:slide-out-to-top-[50%]">
           <div className="flex flex-col items-center text-center space-y-4">
             <div className="w-16 h-16 bg-blue-50 border border-blue-100 rounded-full flex items-center justify-center mb-2 shadow-sm">
               <KeyRound size={32} className="text-blue-600" />

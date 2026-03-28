@@ -24,6 +24,7 @@ export const DealerWizard: React.FC<DealerWizardProps> = ({
     const [step, setStep] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const [nameTouched, setNameTouched] = useState(false);
 
     const [formData, setFormData] = useState({
         name: '',
@@ -53,8 +54,13 @@ export const DealerWizard: React.FC<DealerWizardProps> = ({
     const handleNext = () => {
         setError('');
         if (step === 0) {
+            setNameTouched(true);
             if (!formData.name || !formData.contact) {
                 setError('Name and Contact are required');
+                return;
+            }
+            if (formData.name.trim().length > 35) {
+                setError('Dealer name must be 35 characters or less');
                 return;
             }
             const isDuplicate = dealers.some(d =>
@@ -91,6 +97,7 @@ export const DealerWizard: React.FC<DealerWizardProps> = ({
         { title: 'Location', icon: MapPin },
         { title: 'Confirm', icon: CheckCircle2 }
     ];
+    const isNameTooLong = formData.name.trim().length > 35;
 
     return (
         <div className="max-w-2xl mx-auto py-12 px-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -133,10 +140,23 @@ export const DealerWizard: React.FC<DealerWizardProps> = ({
                                 <input
                                     autoFocus
                                     placeholder="e.g. STARLINE BATTERIES"
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md font-bold text-slate-900 outline-none focus:bg-white focus:border-slate-900 transition-all uppercase placeholder:text-slate-300"
+                                    className={`w-full px-4 py-3 rounded-md font-bold text-slate-900 outline-none transition-all uppercase placeholder:text-slate-300 ${
+                                        isNameTooLong && nameTouched
+                                            ? 'bg-rose-50 border border-rose-400 text-rose-700 focus:bg-white focus:border-rose-500'
+                                            : 'bg-slate-50 border border-slate-200 focus:bg-white focus:border-slate-900'
+                                    }`}
                                     value={formData.name}
                                     onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                    onBlur={() => setNameTouched(true)}
                                 />
+                                <div className="flex items-center justify-between">
+                                    <span className={`text-[10px] font-medium ${isNameTooLong && nameTouched ? 'text-rose-600' : 'text-slate-400'}`}>
+                                        {isNameTooLong && nameTouched ? 'Dealer name must be 35 characters or less' : 'Maximum 35 characters'}
+                                    </span>
+                                    <span className={`text-[10px] font-medium ${isNameTooLong && nameTouched ? 'text-rose-600' : 'text-slate-400'}`}>
+                                        {formData.name.length}/35
+                                    </span>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
