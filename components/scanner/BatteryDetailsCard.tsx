@@ -248,7 +248,7 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                                             <span>Create report</span>
                                         </button>
                                     </SheetTrigger>
-                                    <SheetContent className="w-full sm:max-w-[50vw] p-0">
+                                    <SheetContent className="w-full sm:max-w-[50vw] p-0 border-l border-slate-200 bg-slate-50 shadow-[0_18px_40px_-14px_rgba(15,23,42,0.18)] data-[state=open]:animate-none data-[state=closed]:animate-none data-[state=open]:duration-0 data-[state=closed]:duration-0">
                                         <BatteryReportSheet
                                             battery={activeAsset.battery}
                                             lineage={activeAsset.lineage}

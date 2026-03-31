@@ -13,7 +13,7 @@ import Batches from './pages/Batches';
 import ManufacturingHub from './factory_operations/ManufacturingHub';
 import GlobalAnalytics from './components/GlobalAnalytics';
 import { Database } from './db';
-import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi, LogOut, KeyRound, Loader2, CheckCircle2 } from 'lucide-react';
+import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi, Lock, KeyRound, Loader2, CheckCircle2 } from 'lucide-react';
 import { Toaster } from './components/ui/sonner';
 import { Dialog, DialogContent, DialogTitle } from './components/ui/dialog';
 import { toast } from "sonner";
@@ -54,9 +54,9 @@ const App: React.FC = () => {
   const [pendingSearch, setPendingSearch] = useState<string | null>(null);
   const [pendingDealerTarget, setPendingDealerTarget] = useState<PendingDealerTarget | null>(null);
   const [pendingDealerProfileId, setPendingDealerProfileId] = useState<string | null>(null);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isDbReady, setIsDbReady] = useState(false);
   const [sessionCountdown, setSessionCountdown] = useState<number | null>(null);
+  const [sessionRemainingSeconds, setSessionRemainingSeconds] = useState(0);
   const [showKeepAliveAuth, setShowKeepAliveAuth] = useState(false);
   const [keepAlivePassword, setKeepAlivePassword] = useState('');
   const [keepAliveError, setKeepAliveError] = useState('');
@@ -153,6 +153,7 @@ const App: React.FC = () => {
     const countdownTick = setInterval(() => {
       if (AuthSession.isValid()) {
         const secs = AuthSession.getSecondsUntilExpiry();
+        setSessionRemainingSeconds(secs > 0 ? secs : 0);
         const threshold = AuthSession.getWarningThresholdSeconds();
         setSessionCountdown(secs <= threshold ? secs : null);
       } else {
@@ -182,7 +183,8 @@ const App: React.FC = () => {
   }, [showDbNotification]);
 
   const handleLogoutClick = () => {
-    setShowLogoutConfirm(true);
+    AuthSession.clearSession();
+    window.location.reload();
   };
 
   const handleKeepAliveAttempt = async (e: React.FormEvent) => {
@@ -445,13 +447,18 @@ const App: React.FC = () => {
               </div>
             )}
             <div className="w-px h-6 bg-slate-200 mx-1" />
-            <button
-              onClick={handleLogoutClick}
-              className="flex items-center justify-center p-2 rounded-full transition-all active:scale-95 text-rose-600 hover:bg-rose-50 active:bg-rose-100"
-              title="Logout"
-            >
-              <LogOut size={20} strokeWidth={2} />
-            </button>
+            <div className="flex flex-col items-center justify-center group relative">
+              <button
+                onClick={handleLogoutClick}
+                className="flex items-center justify-center p-2 pb-0.5 rounded-full transition-all active:scale-95 text-rose-600 hover:bg-rose-50 active:bg-rose-100"
+                title="Logout"
+              >
+                <Lock size={20} strokeWidth={2} />
+              </button>
+              <span className={`text-[9px] font-bold mt-[-2px] tabular-nums transition-colors select-none ${sessionRemainingSeconds <= 300 ? 'text-rose-500 animate-pulse' : 'text-slate-400 group-hover:text-rose-600'}`}>
+                {String(Math.floor(sessionRemainingSeconds / 60)).padStart(2, '0')}:{String(sessionRemainingSeconds % 60).padStart(2, '0')}
+              </span>
+            </div>
           </div>
         </header>
 
@@ -485,37 +492,6 @@ const App: React.FC = () => {
       </div >
 
       {showHelp && <ShortcutsModal onClose={() => setShowHelp(false)} />}
-
-      <Dialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
-        <DialogContent className="sm:max-w-md p-6 border-0 bg-white rounded-2xl shadow-xl data-[state=open]:slide-in-from-top-[50%] data-[state=closed]:slide-out-to-top-[50%]">
-          <div className="flex flex-col items-center text-center space-y-4">
-            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-600 mb-2 shadow-sm">
-              <LogOut size={32} />
-            </div>
-            <DialogTitle className="text-xl font-bold text-slate-900 tracking-tight">End Session</DialogTitle>
-            <p className="text-sm text-slate-500 max-w-[280px]">
-              Are you sure you want to log out? You will need to re-enter your credentials to access the system.
-            </p>
-            <div className="flex gap-3 w-full mt-6 pt-2">
-              <button
-                onClick={() => setShowLogoutConfirm(false)}
-                className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors tracking-wide"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  AuthSession.clearSession();
-                  window.location.reload();
-                }}
-                className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-rose-600 text-white hover:bg-rose-700 shadow-md shadow-rose-200 transition-colors tracking-wide"
-              >
-                Log Out
-              </button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={showKeepAliveAuth} onOpenChange={(open) => {
         setShowKeepAliveAuth(open);

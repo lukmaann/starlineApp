@@ -33,12 +33,12 @@ const BatteryReportTemplate: React.FC<{
 
     // Conditional classes based on mode
     const containerClasses = mode === 'print'
-        ? "bg-white w-full max-w-[210mm] relative overflow-visible flex flex-col print-container" // Print: Visible overflow, natural height
-        : "bg-white w-full h-full relative overflow-y-auto flex flex-col"; // View: Full width/height, scrollable
+        ? "bg-white w-full max-w-[210mm] relative overflow-visible flex flex-col print-container"
+        : "bg-white w-full h-full relative overflow-x-hidden overflow-y-auto flex flex-col";
 
     const headerClasses = mode === 'print'
-        ? "bg-slate-900 text-white p-6 border-b-4 border-amber-500 relative shrink-0 print-header"
-        : "bg-slate-900 text-white p-6 border-b-4 border-amber-500 relative shrink-0";
+        ? "bg-slate-900 text-white px-8 py-7 border-b border-slate-800 relative shrink-0 print-header"
+        : "bg-slate-900 text-white px-8 py-7 border-b border-slate-800 relative shrink-0 overflow-hidden";
 
     const decorClasses = mode === 'print' ? "print-no-decor hidden" : "absolute";
 
@@ -46,102 +46,98 @@ const BatteryReportTemplate: React.FC<{
         <div id={mode === 'print' ? 'report-printable' : undefined} className={containerClasses}>
             {/* Header */}
             <div className={headerClasses}>
-                <div className="flex justify-between items-center relative z-10">
+                <div className="relative z-10 flex items-start justify-between gap-6">
                     <div className="flex items-center gap-4">
-                        <div className="p-2 bg-amber-500 rounded-lg text-slate-900 shadow-lg shadow-amber-500/20">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-blue-300">
                             <Zap size={24} fill="currentColor" />
                         </div>
                         <div>
-                            <h1 className="text-xl font-black uppercase tracking-tighter leading-none">Starline Batteries</h1>
-                            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mt-1">Battery History Report</p>
+                            <h1 className="text-xl font-black uppercase tracking-tight leading-none">Starline Batteries</h1>
+                            <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Battery History Report</p>
                         </div>
                     </div>
 
-                    <div className="text-right">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Serial Number</p>
-                        <p className="text-2xl font-black mono text-emerald-400 tracking-tight leading-none">{battery.id}</p>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-right">
+                        <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Serial Number</p>
+                        <p className="text-2xl font-black mono text-blue-300 tracking-tight leading-none">{battery.id}</p>
                     </div>
                 </div>
 
-                {/* Abstract Background Decoration */}
-                <div className={`${decorClasses} -right-6 -top-10 w-32 h-32 bg-white/5 rounded-full blur-2xl`}></div>
-                <div className={`${decorClasses} -left-6 -bottom-10 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl`}></div>
+                <div className={`${decorClasses} -right-10 -top-12 h-32 w-32 rounded-full bg-white/5 blur-3xl`}></div>
             </div>
 
 
             {/* Content Body */}
-            <div className="p-8 flex-1">
+            <div className="flex-1 p-8">
 
                 {/* Report Meta */}
-                <div className="flex justify-between items-end border-b border-slate-100 pb-6 mb-8">
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-2">
-                        <div>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">Model Specification</p>
-                            <p className="font-bold text-slate-900">{battery.model} ({battery.capacity})</p>
+                <div className="mb-8 overflow-hidden rounded-xl border border-slate-300 bg-white">
+                    <div className="grid grid-cols-1 divide-y divide-slate-200 text-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                        <div className="px-4 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Battery model</p>
+                            <p className="mt-1.5 font-semibold text-slate-900">{battery.model}</p>
                         </div>
-                        <div>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">Generated On</p>
-                            <p className="font-bold text-slate-900">{reportDate}</p>
+                        <div className="px-4 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Capacity</p>
+                            <p className="mt-1.5 font-semibold text-slate-900">{battery.capacity}</p>
                         </div>
-                    </div>
-                    <div className={`px-3 py-1.5 rounded-lg border flex items-center gap-2 ${isExpired ? 'bg-rose-50 border-rose-100 text-rose-700' : 'bg-emerald-50 border-emerald-100 text-emerald-700'}`}>
-                        {isExpired ? <AlertTriangle size={14} /> : <ShieldCheck size={14} />}
-                        <span className="text-[10px] font-black uppercase tracking-wider">
-                            {isExpired ? 'Warranty Expired' : 'Active Warranty'}
-                        </span>
+                        <div className="px-4 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Current status</p>
+                            <p className={`mt-1.5 font-semibold ${isExpired ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                {isExpired ? 'Expired' : (battery.status || 'Active')}
+                            </p>
+                        </div>
                     </div>
                 </div>
 
 
                 {/* Timeline */}
-                <div className="relative border-l-2 border-slate-200 ml-2 space-y-8 pl-8">
+                <div className="relative ml-2 space-y-7 border-l-2 border-slate-300 pl-8">
 
                     {/* Step 1: Dispatched to Dealer */}
                     <div className="relative print-break-avoid break-inside-avoid">
-                        <div className="absolute -left-[41px] top-1 p-1 bg-white border-4 border-slate-200 rounded-full text-slate-400">
+                        <div className="absolute -left-[41px] top-1 rounded-full border-4 border-slate-300 bg-white p-1 text-slate-500">
                             <Store size={14} />
                         </div>
-                        <div className="mb-1">
-                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Sent to Shop</h4>
+                        <div className="mb-3 flex items-center justify-between pr-2">
+                            <h4 className="text-sm font-semibold text-slate-900">Sent to shop</h4>
+                            <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">Dispatch</span>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                            <div>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase">Date</p>
-                                <p className="font-bold text-slate-800 text-xs">{formatDate(originalBattery?.manufactureDate)}</p>
-                            </div>
-                            <div>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase">Shop Name</p>
-                                <p className="font-bold text-slate-800 text-xs truncate">{dealers.find(d => d.id === originalBattery?.dealerId)?.name || 'Unknown'}</p>
+                        <div className="overflow-hidden rounded-xl border border-slate-300 bg-white">
+                            <div className="grid grid-cols-1 divide-y divide-slate-100 text-sm sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+                                <div className="px-4 py-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Date</p>
+                                    <p className="mt-1.5 font-semibold text-slate-900">{formatDate(originalBattery?.manufactureDate)}</p>
+                                </div>
+                                <div className="px-4 py-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Shop</p>
+                                    <p className="mt-1.5 truncate font-semibold text-slate-900">{dealers.find(d => d.id === originalBattery?.dealerId)?.name || 'Unknown'}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     {/* Step 2: Sold to Customer */}
                     <div className="relative print-break-avoid break-inside-avoid">
-                        <div className="absolute -left-[41px] top-1 p-1 bg-white border-4 border-blue-100 rounded-full text-blue-500">
+                        <div className="absolute -left-[41px] top-1 rounded-full border-4 border-blue-200 bg-white p-1 text-blue-500">
                             <User size={14} />
                         </div>
-                        <div className="mb-1">
-                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Sold to Customer</h4>
+                        <div className="mb-3 flex items-center justify-between pr-2">
+                            <h4 className="text-sm font-semibold text-slate-900">Sold to customer</h4>
+                            <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-700">Sale</span>
                         </div>
 
-                        <div className="bg-blue-50/30 p-3 rounded-lg border border-blue-100">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <p className="text-[9px] font-bold text-blue-400 uppercase">Sale Date</p>
-                                    <p className="font-bold text-slate-900 text-sm">{formatDate(effectiveSaleDate)}</p>
+                        <div className="overflow-hidden rounded-xl border border-blue-200 bg-white">
+                            <div className="grid grid-cols-1 divide-y divide-slate-100 text-sm sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+                                <div className="px-4 py-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Sale date</p>
+                                    <p className="mt-1.5 font-semibold text-slate-900">{formatDate(effectiveSaleDate)}</p>
                                 </div>
-                                {/* {battery.customerName && (
-                                    <div>
-                                        <p className="text-[9px] font-bold text-blue-400 uppercase">Customer Name</p>
-                                        <p className="font-bold text-slate-700 uppercase text-xs truncate">{battery.customerName}</p>
-                                    </div>
-                                )} */}
-                            </div>
-                            <div className="mt-3 pt-2 border-t border-blue-100 flex justify-between items-center text-red-600/70">
-                                <p className="text-[9px] font-bold uppercase">Expiry Date</p>
-                                <p className="font-mono font-bold text-xs">{formatDate(battery.warrantyExpiry)}</p>
+                                <div className="px-4 py-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Expiry date</p>
+                                    <p className="mt-1.5 font-semibold text-rose-600">{formatDate(battery.warrantyExpiry)}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -211,30 +207,36 @@ const BatteryReportTemplate: React.FC<{
 
                         return sessions.map((session, sidx) => (
                             <div key={sidx} className="relative print-break-avoid break-inside-avoid">
-                                <div className={`absolute -left-[41px] top-1 p-1 bg-white border-4 rounded-full ${session.status === 'FAULTY' ? 'border-rose-100 text-rose-500' :
-                                    session.status === 'GOOD' ? 'border-emerald-100 text-emerald-500' :
-                                        'border-amber-100 text-amber-500 animate-pulse'
+                                <div className={`absolute -left-[41px] top-1 rounded-full border-4 bg-white p-1 ${session.status === 'FAULTY' ? 'border-rose-200 text-rose-500' :
+                                    session.status === 'GOOD' ? 'border-emerald-200 text-emerald-500' :
+                                        'border-amber-200 text-amber-500 animate-pulse'
                                     }`}>
                                     <ShieldCheck size={14} />
                                 </div>
-                                <div className="mb-1 flex justify-between items-center pr-4">
-                                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                                <div className="mb-3 flex items-center justify-between pr-2">
+                                    <h4 className="text-sm font-semibold text-slate-900">
                                         Technical Assessment {sessions.length > 1 ? `#${sidx + 1}` : ''}
                                     </h4>
+                                    <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${session.status === 'FAULTY' ? 'border-rose-200 bg-rose-50 text-rose-700' :
+                                        session.status === 'GOOD' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                                            'border-amber-200 bg-amber-50 text-amber-700'
+                                        }`}>
+                                        {session.status === 'IN_PROGRESS' ? 'Checking' : session.status}
+                                    </span>
                                 </div>
 
-                                <div className={`p-3 rounded-lg border space-y-3 ${session.status === 'FAULTY' ? 'bg-rose-50/30 border-rose-100' :
-                                    session.status === 'GOOD' ? 'bg-emerald-50/30 border-emerald-100' :
-                                        'bg-amber-50/30 border-amber-100'
+                                    <div className={`space-y-3 rounded-xl border bg-white px-4 py-4 ${session.status === 'FAULTY' ? 'border-rose-200' :
+                                    session.status === 'GOOD' ? 'border-emerald-200 bg-emerald-50/30' :
+                                        'border-amber-200'
                                     }`}>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                                         <div>
-                                            <p className="text-[9px] font-bold text-slate-400 uppercase">Unit Serial</p>
-                                            <p className="font-mono font-bold text-slate-800 text-xs">{session.batteryId}</p>
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Unit serial</p>
+                                            <p className="mt-1.5 font-mono text-xs font-semibold text-slate-800">{session.batteryId}</p>
                                         </div>
                                         <div>
-                                            <p className="text-[9px] font-bold text-slate-400 uppercase">Outcome</p>
-                                            <p className={`font-black uppercase text-[10px] tracking-wider ${session.status === 'FAULTY' ? 'text-rose-600' :
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Outcome</p>
+                                            <p className={`mt-1.5 text-xs font-semibold uppercase tracking-[0.14em] ${session.status === 'FAULTY' ? 'text-rose-600' :
                                                 session.status === 'GOOD' ? 'text-emerald-600' :
                                                     'text-amber-600'
                                                 }`}>
@@ -242,27 +244,27 @@ const BatteryReportTemplate: React.FC<{
                                             </p>
                                         </div>
                                         <div>
-                                            <p className="text-[9px] font-bold text-slate-400 uppercase">Started On</p>
-                                            <p className="font-bold text-slate-800 text-xs">{formatDate(session.startDate) || 'N/A'}</p>
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Started on</p>
+                                            <p className="mt-1.5 text-xs font-semibold text-slate-800">{formatDate(session.startDate) || 'N/A'}</p>
                                         </div>
                                     </div>
 
                                     {(session.completionDate || session.returnDate) && (
-                                        <div className={`mt-2 pt-2 border-t flex justify-between items-center ${session.status === 'FAULTY' ? 'border-rose-100' : 'border-emerald-100'}`}>
-                                            <p className="text-[9px] font-bold uppercase text-slate-400">
+                                        <div className={`mt-1 flex items-center justify-between border-t pt-3 ${session.status === 'FAULTY' ? 'border-rose-200' : 'border-slate-200'}`}>
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
                                                 {session.status === 'GOOD' ? 'Returned to Shop' : 'Verification Date'}
                                             </p>
-                                            <p className="font-bold text-slate-800 text-xs">
+                                            <p className="text-xs font-semibold text-slate-800">
                                                 {formatDate(session.status === 'GOOD' ? session.returnDate : session.completionDate)}
                                             </p>
                                         </div>
                                     )}
 
                                     {session.notes && (
-                                        <div className="mt-2 p-2 bg-white/50 rounded border border-slate-100/50">
-                                            <p className="text-[8px] font-black text-slate-400 uppercase mb-1 tracking-widest">Technician Notes</p>
-                                            <p className="text-[10px] text-slate-600 font-medium italic leading-relaxed">
-                                                "{session.notes}"
+                                        <div className="mt-2 rounded-lg border border-slate-300 bg-slate-50 p-3">
+                                            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Technician notes</p>
+                                            <p className="text-xs font-medium leading-relaxed text-slate-600">
+                                                {session.notes}
                                             </p>
                                         </div>
                                     )}
@@ -274,48 +276,48 @@ const BatteryReportTemplate: React.FC<{
                     {/* Step 4: Replacements (if any) */}
                     {replacements.map((rep, idx) => (
                         <div key={rep.id} className="relative print-break-avoid break-inside-avoid">
-                            <div className="absolute -left-[41px] top-1 p-1 bg-white border-4 border-amber-100 rounded-full text-amber-500">
+                            <div className="absolute -left-[41px] top-1 rounded-full border-4 border-amber-200 bg-white p-1 text-amber-500">
                                 <ArrowRightLeft size={14} />
                             </div>
-                            <div className="mb-1">
-                                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Exchange #{idx + 1}</h4>
+                            <div className="mb-3 pr-2">
+                                <h4 className="text-sm font-semibold text-slate-900">Exchange #{idx + 1}</h4>
                             </div>
 
-                            <div className="bg-amber-50/30 p-3 rounded-lg border border-amber-100 space-y-3">
-                                <div className="flex justify-between items-start mb-3">
+                            <div className="space-y-3 rounded-xl border border-amber-200 bg-white px-4 py-4">
+                                <div className="mb-1 flex items-start justify-between">
                                     <div>
-                                        <p className="text-[9px] font-bold text-amber-500 uppercase">Exchange Date</p>
-                                        <p className="font-bold text-slate-900 text-xs">{formatDate(rep.replacementDate)}</p>
+                                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Exchange date</p>
+                                        <p className="mt-1.5 text-xs font-semibold text-slate-900">{formatDate(rep.replacementDate)}</p>
                                     </div>
                                     <div className="text-right flex flex-col items-end gap-1">
-                                        <span className="text-[10px] font-bold text-amber-700 uppercase">{rep.reason}</span>
+                                        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-700">{rep.reason}</span>
                                         {rep.settlementType === 'DIRECT' ? (
-                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-white text-slate-900 uppercase tracking-wider border border-slate-300 shadow-sm">
+                                            <span className="rounded-full border border-slate-300 bg-slate-50 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-700">
                                                 GIVEN BY FACTORY
                                             </span>
                                         ) : (
-                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-white text-amber-700 uppercase tracking-wider border border-amber-200 shadow-sm">
+                                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-amber-700">
                                                 GIVEN BY DEALER
                                             </span>
                                         )}
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-4 bg-white p-3 rounded-lg border border-amber-100/60 shadow-sm">
+                                <div className="flex items-center gap-4 rounded-xl border border-slate-300 bg-slate-50 px-4 py-4">
                                     <div className="flex flex-col items-center">
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase">OLD BATTERY</span>
-                                        <span className="font-mono text-lg text-rose-500 font-bold decoration-2 opacity-75">{rep.oldBatteryId}</span>
+                                        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Old battery</span>
+                                        <span className="font-mono text-base font-semibold text-rose-500">{rep.oldBatteryId}</span>
                                     </div>
                                     <div className="flex-1 flex justify-center">
                                         <ArrowRightLeft size={20} className="text-slate-300" />
                                     </div>
                                     <div className="flex flex-col items-center">
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase">NEW BATTERY</span>
-                                        <span className="font-mono text-lg text-emerald-600 font-black tracking-tight">{rep.newBatteryId}</span>
+                                        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">New battery</span>
+                                        <span className="font-mono text-base font-semibold tracking-tight text-emerald-600">{rep.newBatteryId}</span>
                                     </div>
                                 </div>
-                                <div className="mt-4 pt-3 border-t border-amber-200/50 bg-white/50 rounded-lg p-2">
-                                    <p className="text-[9px] font-black text-amber-600 uppercase mb-2">Exchange Info</p>
+                                <div className="mt-2 rounded-lg border border-slate-300 bg-slate-50 p-3">
+                                    <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Exchange info</p>
 
                                     {rep.settlementType === 'DIRECT' ? (
                                         <div className="flex items-center gap-2 text-emerald-700">
@@ -350,10 +352,10 @@ const BatteryReportTemplate: React.FC<{
 
                 {/* Footer Note */}
                 <div className="mt-auto pt-16 text-center">
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">
                         Starline Batteries
                     </p>
-                    <div className="h-1 w-8 bg-slate-200 mx-auto mt-2 rounded-full"></div>
+                    <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-slate-200"></div>
                 </div>
             </div>
         </div>
@@ -383,7 +385,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
     };
 
     return (
-        <div className="flex flex-col h-full bg-slate-100 font-sans relative">
+        <div className="relative flex h-full flex-col bg-slate-50 font-sans">
             <style>
                 {`
                     @media print {
@@ -464,7 +466,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
             </style>
 
             {/* View Mode (Interactive, inside Sheet) */}
-            <div className="flex-1 overflow-hidden flex flex-col relative h-full">
+            <div className="relative flex h-full flex-1 flex-col overflow-hidden rounded-none">
                 <BatteryReportTemplate
                     mode="view"
                     battery={battery}
@@ -498,7 +500,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
 
             {/* Floating Action Button */}
             <div className="absolute bottom-6 right-6 z-20 print:hidden">
-                <Button onClick={handlePrint} className="h-14 w-14 rounded-full bg-slate-900 text-white hover:bg-black shadow-xl shadow-slate-900/20 active:scale-95 transition-all flex items-center justify-center">
+                <Button onClick={handlePrint} className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-white shadow-xl shadow-slate-900/20 transition-all hover:bg-black active:scale-95">
                     <Printer size={24} />
                 </Button>
             </div>

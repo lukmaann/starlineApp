@@ -562,6 +562,18 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
                               onCommit: async () => {
                                 await Database.deleteFactoryWorker(workerToDelete.id);
                                 await Database.logActivity('WORKER_DELETE', `Deleted factory worker ${workerToDelete.full_name}`, { workerId: workerToDelete.id, name: workerToDelete.full_name });
+                                
+                                // Revoke system access by deleting associated login user
+                                const users = await Database.getUsers();
+                                const linkedUser = users.find(u => 
+                                  u.username.toLowerCase() === workerToDelete.enrollment_no.toLowerCase() || 
+                                  u.username.toLowerCase() === workerToDelete.full_name.toLowerCase()
+                                );
+                                if (linkedUser) {
+                                  await Database.deleteUser(linkedUser.id);
+                                  await Database.logActivity('ACCESS_REVOKED', `System access revoked for deleted worker ${workerToDelete.full_name}`, { userId: linkedUser.id, username: linkedUser.username });
+                                }
+                                
                                 const updatedWorkers = await Database.getFactoryWorkers();
                                 setWorkers(updatedWorkers);
                               },
