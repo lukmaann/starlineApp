@@ -45,9 +45,10 @@ const checkAndAutoLock = () => {
         const lastSession = localStorage.getItem(SESSION_KEY);
         // Only auto-lock if there was a session (don't refresh on initial load)
         if (lastSession) {
-            AuthSession.clearSession();
-            // Refresh the app to show lock screen
-            window.location.reload();
+            // Instead of fully clearing the session and wiping React state via reload,
+            // dispatch an event. The App component will catch this and display
+            // a strict re-login modal.
+            window.dispatchEvent(new CustomEvent('session-expired'));
         }
     }
 };

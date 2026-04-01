@@ -61,7 +61,7 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
         activeAsset.battery.status !== BatteryStatus.RETURNED &&
         activeAsset.battery.status !== BatteryStatus.RETURNED_PENDING;
     const dealerRecord = dealers.find(d => d.id === activeAsset.battery.dealerId);
-    const dealerName = isAdmin ? (dealerRecord?.name || 'Central') : 'Hidden';
+    const dealerName = dealerRecord?.name || 'Central';
     const expiryDate = activeAsset.battery.warrantyExpiry ? new Date(activeAsset.battery.warrantyExpiry) : null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -339,16 +339,18 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                                     </div>
                                     <div>
                                         <p className="text-sm font-semibold text-slate-700">Dealer</p>
-                                        <p className="text-xs text-slate-500">{isAdmin ? 'Tap to open partner profile' : 'Visible to admin only'}</p>
+                                        <p className="text-xs text-slate-500">{isAdmin ? 'Tap to open partner profile' : 'Assigned partner'}</p>
                                     </div>
                                 </div>
 
                                 <p className="mt-4 truncate text-[1.35rem] font-bold tracking-tight text-slate-900">{dealerName}</p>
 
-                                <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
-                                    <MapPin size={14} className="shrink-0 text-slate-400" />
-                                    <span className="truncate">{dealerRecord?.location || 'Dealer record available in directory'}</span>
-                                </div>
+                                {isAdmin && (
+                                    <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
+                                        <MapPin size={14} className="shrink-0 text-slate-400" />
+                                        <span className="truncate">{dealerRecord?.location || 'Dealer record available in directory'}</span>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="flex flex-col items-end gap-3">

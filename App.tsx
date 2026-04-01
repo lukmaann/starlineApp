@@ -58,6 +58,7 @@ const App: React.FC = () => {
   const [sessionCountdown, setSessionCountdown] = useState<number | null>(null);
   const [sessionRemainingSeconds, setSessionRemainingSeconds] = useState(0);
   const [showKeepAliveAuth, setShowKeepAliveAuth] = useState(false);
+  const [isSessionExpiredLock, setIsSessionExpiredLock] = useState(false);
   const [keepAlivePassword, setKeepAlivePassword] = useState('');
   const [keepAliveError, setKeepAliveError] = useState('');
   const [isKeepAliveLoading, setIsKeepAliveLoading] = useState(false);
@@ -138,8 +139,11 @@ const App: React.FC = () => {
     };
 
     const handleDbSynced = () => showToast('Database Synced');
+    const handleSessionExpired = () => setIsSessionExpiredLock(true);
+
     window.addEventListener('app-notify' as any, handleNotify);
     window.addEventListener('db-synced' as any, handleDbSynced);
+    window.addEventListener('session-expired' as any, handleSessionExpired);
 
     const handleAppRefresh = () => {
       setIsRefreshing(true);
@@ -164,6 +168,7 @@ const App: React.FC = () => {
     return () => {
       window.removeEventListener('app-notify' as any, handleNotify);
       window.removeEventListener('db-synced' as any, handleDbSynced);
+      window.removeEventListener('session-expired' as any, handleSessionExpired);
       window.removeEventListener('app-refresh' as any, handleAppRefresh);
       clearInterval(countdownTick);
     };
@@ -193,14 +198,19 @@ const App: React.FC = () => {
     setKeepAliveError('');
 
     try {
-      const adminPass = await Database.getConfig('starline_admin_pass') || 'starline@2025';
+      if (!user?.username) {
+         throw new Error('No active user found');
+      }
 
-      if (keepAlivePassword === adminPass) {
+      const authUser = await Database.authenticateUser(user.username, keepAlivePassword);
+
+      if (authUser) {
         AuthSession.refreshSession();
         setSessionCountdown(null);
         setKeepAlivePassword('');
         setShowKeepAliveAuth(false);
-        toast.success('Session Extended');
+        setIsSessionExpiredLock(false);
+        toast.success('Session Restored');
       } else {
         setKeepAliveError('Incorrect Password');
         setKeepAlivePassword('');
@@ -318,6 +328,7 @@ const App: React.FC = () => {
 
           setDbNotificationData({ isSSD, path: config.path || 'Internal Storage' });
           setShowDbNotification(true);
+          setTimeout(() => setShowDbNotification(false), 3000);
         } catch (e) {
           // ignore parsing error
         }
@@ -388,28 +399,37 @@ const App: React.FC = () => {
                   </div>
 
                   {showDbNotification && dbNotificationData && (
-                    <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-72 animate-in slide-in-from-top-2 fade-in duration-300">
-                      <div className={`rounded-2xl border p-4 shadow-[0_20px_40px_-20px_rgba(15,23,42,0.25)] ${dbNotificationData.isSSD ? 'border-purple-200 bg-gradient-to-br from-purple-50 via-white to-fuchsia-50' : 'border-blue-200 bg-gradient-to-br from-blue-50 via-white to-cyan-50'}`}>
-                        <div className="flex items-start gap-3">
-                          <div className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${dbNotificationData.isSSD ? 'bg-purple-600 text-white shadow-lg shadow-purple-200' : 'bg-blue-600 text-white shadow-lg shadow-blue-200'}`}>
-                            <CheckCircle2 size={18} />
+                    <div className="absolute right-0 top-[calc(100%+16px)] z-50 w-80 animate-in slide-in-from-top-4 fade-in duration-500">
+                      <style>{`
+                        @keyframes shrinkX {
+                          from { transform: scaleX(1); }
+                          to { transform: scaleX(0); }
+                        }
+                      `}</style>
+                      <div className={`relative overflow-hidden rounded-2xl border p-5 shadow-2xl backdrop-blur-xl ${dbNotificationData.isSSD ? 'border-purple-200/60 bg-white/95 shadow-purple-900/10' : 'border-blue-200/60 bg-white/95 shadow-blue-900/10'}`}>
+                        <div className="flex items-start gap-4">
+                          <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${dbNotificationData.isSSD ? 'from-purple-500 to-fuchsia-600 shadow-lg shadow-purple-500/30' : 'from-blue-500 to-cyan-600 shadow-lg shadow-blue-500/30'} text-white`}>
+                            <DatabaseIcon size={20} className="drop-shadow-sm" />
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-bold text-slate-900">Storage connected</p>
-                            <p className={`mt-1 text-xs font-semibold ${dbNotificationData.isSSD ? 'text-purple-700' : 'text-blue-700'}`}>
-                              {dbNotificationData.isSSD ? 'External SSD is currently active.' : 'Internal storage is currently active.'}
+                          <div className="min-w-0 flex-1 pt-0.5">
+                            <h4 className="text-base font-black text-slate-900 tracking-tight">System Storage</h4>
+                            <p className={`mt-1 text-[13px] font-bold ${dbNotificationData.isSSD ? 'text-purple-600' : 'text-blue-600'}`}>
+                              {dbNotificationData.isSSD ? 'SSD Active' : 'Internal Active'}
                             </p>
-                            <p className="mt-2 truncate text-[11px] font-medium text-slate-500">
+                            <p className="mt-1.5 truncate text-[11px] font-bold text-slate-500 bg-slate-100 rounded-md py-1 px-2 border border-slate-200">
                               {dbNotificationData.path}
                             </p>
                           </div>
                           <button
                             onClick={() => setShowDbNotification(false)}
-                            className="rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
                             aria-label="Close storage notification"
                           >
-                            <span className="block text-sm leading-none">x</span>
+                            <span className="block text-sm font-bold leading-none mt-[-2px]">x</span>
                           </button>
+                        </div>
+                        <div className="absolute bottom-0 left-0 h-[3px] bg-slate-100 w-full overflow-hidden">
+                          <div className={`h-full w-full origin-left bg-gradient-to-r ${dbNotificationData.isSSD ? 'from-purple-500 to-fuchsia-500' : 'from-blue-500 to-cyan-500'}`} style={{ animation: 'shrinkX 3s linear forwards' }} />
                         </div>
                       </div>
                     </div>
@@ -447,18 +467,18 @@ const App: React.FC = () => {
               </div>
             )}
             <div className="w-px h-6 bg-slate-200 mx-1" />
-            <div className="flex flex-col items-center justify-center group relative">
-              <button
-                onClick={handleLogoutClick}
-                className="flex items-center justify-center p-2 pb-0.5 rounded-full transition-all active:scale-95 text-rose-600 hover:bg-rose-50 active:bg-rose-100"
-                title="Logout"
-              >
+            <button 
+              onClick={handleLogoutClick}
+              className="flex flex-col items-center justify-center group relative p-1.5 -m-1.5 rounded-xl transition-all hover:bg-rose-50 active:bg-rose-100 cursor-pointer"
+              title="Click to Logout"
+            >
+              <div className="flex items-center justify-center text-rose-600 transition-transform group-active:scale-95">
                 <Lock size={20} strokeWidth={2} />
-              </button>
-              <span className={`text-[9px] font-bold mt-[-2px] tabular-nums transition-colors select-none ${sessionRemainingSeconds <= 300 ? 'text-rose-500 animate-pulse' : 'text-slate-400 group-hover:text-rose-600'}`}>
+              </div>
+              <span className={`text-[9px] font-bold tabular-nums transition-colors select-none ${sessionRemainingSeconds <= 300 ? 'text-rose-500 animate-pulse' : 'text-slate-400 group-hover:text-rose-600'}`}>
                 {String(Math.floor(sessionRemainingSeconds / 60)).padStart(2, '0')}:{String(sessionRemainingSeconds % 60).padStart(2, '0')}
               </span>
-            </div>
+            </button>
           </div>
         </header>
 
@@ -493,21 +513,35 @@ const App: React.FC = () => {
 
       {showHelp && <ShortcutsModal onClose={() => setShowHelp(false)} />}
 
-      <Dialog open={showKeepAliveAuth} onOpenChange={(open) => {
-        setShowKeepAliveAuth(open);
-        if (!open) {
-          setKeepAlivePassword('');
-          setKeepAliveError('');
-        }
-      }}>
-        <DialogContent className="sm:max-w-md p-6 border-0 bg-white rounded-2xl shadow-xl data-[state=open]:slide-in-from-top-[50%] data-[state=closed]:slide-out-to-top-[50%]">
-          <div className="flex flex-col items-center text-center space-y-4">
-            <div className="w-16 h-16 bg-blue-50 border border-blue-100 rounded-full flex items-center justify-center mb-2 shadow-sm">
-              <KeyRound size={32} className="text-blue-600" />
+      <Dialog 
+        open={showKeepAliveAuth || isSessionExpiredLock} 
+        onOpenChange={(open) => {
+          if (!open && isSessionExpiredLock) {
+             handleLogoutClick();
+             return;
+          }
+          setShowKeepAliveAuth(open);
+          if (!open) {
+            setKeepAlivePassword('');
+            setKeepAliveError('');
+          }
+        }}
+      >
+        <DialogContent 
+           className="sm:max-w-md p-6 border-0 bg-white rounded-2xl shadow-xl data-[state=open]:slide-in-from-top-[50%] data-[state=closed]:slide-out-to-top-[50%]"
+        >
+          {isSessionExpiredLock && (
+            <div className="absolute -top-4 -right-4 bg-rose-500 text-white rounded-full p-3 shadow-lg flex items-center gap-2 pr-5 animate-in zoom-in-50">
+               <Lock size={16} /><span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">Session Locked</span>
             </div>
-            <DialogTitle className="text-xl font-bold text-slate-900 tracking-tight">Verify Access</DialogTitle>
+          )}
+          <div className="flex flex-col items-center text-center space-y-4">
+            <div className={`w-16 h-16 flex items-center justify-center mb-2 shadow-sm rounded-full ${isSessionExpiredLock ? 'bg-rose-50 border border-rose-100 text-rose-600' : 'bg-blue-50 border border-blue-100 text-blue-600'}`}>
+              <KeyRound size={32} />
+            </div>
+            <DialogTitle className="text-xl font-bold text-slate-900 tracking-tight">{isSessionExpiredLock ? 'Session Expired' : 'Verify Access'}</DialogTitle>
             <p className="text-sm text-slate-500 max-w-[280px]">
-              Please enter the administrator access key to extend your session.
+              Please enter your password for <b className="text-slate-700">{user?.username}</b> to {isSessionExpiredLock ? 'resume' : 'extend'} your session. Or <button type="button" onClick={handleLogoutClick} className="text-blue-600 font-bold hover:underline ml-1">Log Out</button>.
             </p>
 
             <form onSubmit={handleKeepAliveAttempt} className="w-full mt-4 space-y-4">
@@ -516,7 +550,7 @@ const App: React.FC = () => {
                 <input
                   type="password"
                   autoFocus
-                  placeholder="Access Key"
+                  placeholder="Your Password"
                   required
                   className={`w-full pl-12 pr-4 py-3.5 bg-white border rounded-xl text-sm font-bold outline-none transition-all placeholder:text-slate-300
                             ${keepAliveError
