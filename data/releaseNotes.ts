@@ -9,6 +9,19 @@ export interface ReleaseEntry {
 
 export const releaseNotes: ReleaseEntry[] = [
   {
+    version: 'v1.0.4',
+    date: '2026-04-06',
+    title: 'Factory Operations & UI Modernization',
+    summary: 'This update brings a significant overhaul to Factory Operations and a more modern administrative interface.',
+    fixes: [
+      'Enhanced Factory Operations: Major updates to Expenses, Purchases, and Production modules.',
+      'Modern Admin UI: Standardized aesthetics for Danger Zone and User Management with premium card-based designs.',
+      'Notification System: Added audible and visual update notifications.',
+      'Session Management: Improved session handling and authentication flows.'
+    ],
+    areas: ['Factory Operations', 'UI', 'Authentication', 'Notifications']
+  },
+  {
     version: 'v1.0.2',
     date: '2026-04-06',
     title: 'Better Printing & New Features',
