@@ -44,3 +44,4 @@ scripts/system_test_*.js
 # Environment and metadata
 .env.local
 metadata.json
+starline_database.db

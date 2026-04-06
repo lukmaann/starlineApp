@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Battery, Users, Zap, ChevronLeft, ChevronRight, Barcode, ShieldCheck, Sliders, Search, History, UserCircle, Scale, BarChart3, Layers, Calculator, Factory, FileText } from 'lucide-react';
+import { Battery, Users, Zap, ChevronLeft, ChevronRight, Barcode, ShieldCheck, Sliders, Search, History, UserCircle, Scale, BarChart3, Layers, Calculator, Factory } from 'lucide-react';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { Database } from '../db';
 
@@ -166,13 +166,6 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab, userRo
               isCollapsed={isCollapsed}
             />
           ))}
-          <NavItem
-            icon={<FileText size={17} strokeWidth={activeTab === 'release-notes' ? 2 : 1.75} />}
-            label="Release Notes"
-            active={activeTab === 'release-notes'}
-            onClick={() => setActiveTab('release-notes')}
-            isCollapsed={isCollapsed}
-          />
         </div>
       </div>
 

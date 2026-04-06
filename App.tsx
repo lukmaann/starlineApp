@@ -34,6 +34,16 @@ type PendingDealerTarget = {
   isExpired: boolean;
 };
 
+type UpdateState = {
+  status: 'disabled' | 'checking' | 'available' | 'up-to-date' | 'downloading' | 'downloaded' | 'error';
+  message?: string;
+  version?: string;
+  releaseDate?: string;
+  releaseName?: string | null;
+  progress?: number;
+  updatedAt?: string;
+};
+
 const App: React.FC = () => {
   const {
     activeTab,
@@ -63,6 +73,7 @@ const App: React.FC = () => {
   const [keepAlivePassword, setKeepAlivePassword] = useState('');
   const [keepAliveError, setKeepAliveError] = useState('');
   const [isKeepAliveLoading, setIsKeepAliveLoading] = useState(false);
+  const [updateState, setUpdateState] = useState<UpdateState | null>(null);
 
   const isAdmin = user?.role === 'ADMIN';
 
@@ -154,6 +165,12 @@ const App: React.FC = () => {
     };
     window.addEventListener('app-refresh' as any, handleAppRefresh);
 
+    const handleUpdaterStatus = (event: Event) => {
+      const customEvent = event as CustomEvent<UpdateState>;
+      setUpdateState(customEvent.detail);
+    };
+    window.addEventListener('updater-status', handleUpdaterStatus as EventListener);
+
     // Countdown ticker — updates every second when session is near expiry
     const countdownTick = setInterval(() => {
       if (AuthSession.isValid()) {
@@ -171,8 +188,19 @@ const App: React.FC = () => {
       window.removeEventListener('db-synced' as any, handleDbSynced);
       window.removeEventListener('session-expired' as any, handleSessionExpired);
       window.removeEventListener('app-refresh' as any, handleAppRefresh);
+      window.removeEventListener('updater-status', handleUpdaterStatus as EventListener);
       clearInterval(countdownTick);
     };
+  }, []);
+
+  useEffect(() => {
+    if (!window.electronAPI?.updater) return;
+
+    window.electronAPI.updater.getStatus()
+      .then((status) => setUpdateState(status))
+      .catch((error) => {
+        console.error('Failed to fetch updater status', error);
+      });
   }, []);
 
   useEffect(() => {
@@ -191,6 +219,34 @@ const App: React.FC = () => {
   const handleLogoutClick = () => {
     AuthSession.clearSession();
     window.location.reload();
+  };
+
+  const handleDownloadUpdate = async () => {
+    if (!window.electronAPI?.updater) return;
+
+    const result = await window.electronAPI.updater.downloadUpdate();
+    if (!result.success) {
+      toast.error(result.message || 'Failed to start update download');
+    }
+  };
+
+  const handleCheckUpdates = async () => {
+    if (!window.electronAPI?.updater) return;
+
+    try {
+      await window.electronAPI.updater.checkForUpdates();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to check for updates');
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    if (!window.electronAPI?.updater) return;
+
+    const result = await window.electronAPI.updater.quitAndInstall();
+    if (!result.success) {
+      toast.error(result.message || 'No update is ready to install');
+    }
   };
 
   const handleKeepAliveAttempt = async (e: React.FormEvent) => {
@@ -547,6 +603,103 @@ const App: React.FC = () => {
           </div>
         </main>
       </div >
+
+      {updateState && ['available', 'downloading', 'downloaded', 'error'].includes(updateState.status) && (
+        <div className="fixed bottom-6 right-6 z-[120] w-[360px] rounded-3xl border border-slate-200 bg-white/95 shadow-[0_25px_55px_-30px_rgba(15,23,42,0.45)] backdrop-blur-md no-print overflow-hidden">
+          <div className={`h-1.5 w-full ${updateState.status === 'error' ? 'bg-rose-500' : updateState.status === 'downloaded' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+          <div className="p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">App Update</p>
+                <h3 className="mt-1 text-lg font-black tracking-tight text-slate-900">
+                  {updateState.status === 'available' && `Version ${updateState.version || 'available'}`}
+                  {updateState.status === 'downloading' && 'Downloading update'}
+                  {updateState.status === 'downloaded' && `Ready to install ${updateState.version || ''}`.trim()}
+                  {updateState.status === 'error' && 'Update check failed'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setUpdateState(null)}
+                className="text-slate-400 hover:text-slate-700 transition-colors text-sm font-black"
+                aria-label="Dismiss update notice"
+              >
+                x
+              </button>
+            </div>
+
+            <p className="mt-3 text-sm font-medium leading-6 text-slate-600">
+              {updateState.message}
+            </p>
+
+            {updateState.status === 'downloading' && (
+              <div className="mt-4">
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-blue-500 transition-all"
+                    style={{ width: `${Math.max(4, Math.min(100, updateState.progress || 0))}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                  {Math.round(updateState.progress || 0)}% complete
+                </p>
+              </div>
+            )}
+
+            <div className="mt-5 flex gap-3">
+              {updateState.status === 'available' && (
+                <>
+                  <button
+                    onClick={handleDownloadUpdate}
+                    className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white transition-colors hover:bg-black"
+                  >
+                    Download Update
+                  </button>
+                  <button
+                    onClick={handleCheckUpdates}
+                    className="rounded-2xl border border-slate-200 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition-colors hover:bg-slate-50"
+                  >
+                    Refresh
+                  </button>
+                </>
+              )}
+
+              {updateState.status === 'downloaded' && (
+                <>
+                  <button
+                    onClick={handleInstallUpdate}
+                    className="flex-1 rounded-2xl bg-emerald-600 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white transition-colors hover:bg-emerald-700"
+                  >
+                    Restart and Install
+                  </button>
+                  <button
+                    onClick={() => setUpdateState(null)}
+                    className="rounded-2xl border border-slate-200 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition-colors hover:bg-slate-50"
+                  >
+                    Later
+                  </button>
+                </>
+              )}
+
+              {updateState.status === 'error' && (
+                <>
+                  <button
+                    onClick={handleCheckUpdates}
+                    className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white transition-colors hover:bg-black"
+                  >
+                    Retry
+                  </button>
+                  <button
+                    onClick={() => setUpdateState(null)}
+                    className="rounded-2xl border border-slate-200 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition-colors hover:bg-slate-50"
+                  >
+                    Dismiss
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showHelp && <ShortcutsModal onClose={() => setShowHelp(false)} />}
 

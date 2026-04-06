@@ -2,9 +2,15 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
+const { autoUpdater } = require('electron-updater');
 
 let db;
 let win;
+let updaterConfigured = false;
+let updateStatus = {
+  status: 'disabled',
+  message: 'Auto-updates are unavailable right now.'
+};
 
 // DATABASE CONFIGURATION
 const isWin = process.platform === 'win32';
@@ -472,6 +478,123 @@ function createWindow() {
   } else {
     win.loadFile(path.join(__dirname, 'out', 'index.html'));
   }
+
+  win.webContents.on('did-finish-load', () => {
+    sendUpdateStatus();
+    if (updaterConfigured) {
+      checkForAppUpdates();
+    }
+  });
+}
+
+function sendUpdateStatus() {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('updater:status', updateStatus);
+  }
+}
+
+function setUpdateStatus(nextStatus) {
+  updateStatus = {
+    ...updateStatus,
+    ...nextStatus,
+    updatedAt: new Date().toISOString()
+  };
+  sendUpdateStatus();
+}
+
+function isUpdaterAvailable() {
+  if (!app.isPackaged) {
+    setUpdateStatus({
+      status: 'disabled',
+      message: 'Auto-updates are disabled while running in development mode.'
+    });
+    return false;
+  }
+
+  const appUpdateConfigPath = path.join(process.resourcesPath, 'app-update.yml');
+  if (!fs.existsSync(appUpdateConfigPath)) {
+    setUpdateStatus({
+      status: 'disabled',
+      message: 'This build does not have a GitHub update feed configured yet.'
+    });
+    return false;
+  }
+
+  return true;
+}
+
+async function checkForAppUpdates() {
+  if (!isUpdaterAvailable()) return null;
+
+  try {
+    return await autoUpdater.checkForUpdates();
+  } catch (error) {
+    console.error('Auto update check failed:', error);
+    setUpdateStatus({
+      status: 'error',
+      message: error.message || 'Failed to check for updates.'
+    });
+    return null;
+  }
+}
+
+function configureAutoUpdates() {
+  updaterConfigured = app.isPackaged;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    setUpdateStatus({
+      status: 'checking',
+      message: 'Checking for updates...'
+    });
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    setUpdateStatus({
+      status: 'available',
+      version: info.version,
+      releaseDate: info.releaseDate,
+      releaseName: info.releaseName || null,
+      message: `Version ${info.version} is available to download.`
+    });
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    setUpdateStatus({
+      status: 'up-to-date',
+      version: info?.version || app.getVersion(),
+      message: 'You are already on the latest version.'
+    });
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    setUpdateStatus({
+      status: 'downloading',
+      progress: progress.percent || 0,
+      bytesPerSecond: progress.bytesPerSecond || 0,
+      transferred: progress.transferred || 0,
+      total: progress.total || 0,
+      message: `Downloading update... ${Math.round(progress.percent || 0)}%`
+    });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    setUpdateStatus({
+      status: 'downloaded',
+      version: info.version,
+      releaseDate: info.releaseDate,
+      message: `Version ${info.version} is ready. Restart the app to install it.`
+    });
+  });
+
+  autoUpdater.on('error', (error) => {
+    console.error('Auto updater error:', error);
+    setUpdateStatus({
+      status: 'error',
+      message: error == null ? 'Unknown auto-update error.' : (error.message || String(error))
+    });
+  });
 }
 
 // --- IPC HANDLERS (High Performance) ---
@@ -727,9 +850,44 @@ ipcMain.handle('print-or-pdf', async (event) => {
   }
 });
 
+ipcMain.handle('updater:get-status', async () => updateStatus);
+
+ipcMain.handle('updater:check', async () => checkForAppUpdates());
+
+ipcMain.handle('updater:download', async () => {
+  if (!isUpdaterAvailable()) {
+    return { success: false, message: updateStatus.message };
+  }
+
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error) {
+    console.error('Update download failed:', error);
+    setUpdateStatus({
+      status: 'error',
+      message: error.message || 'Failed to download update.'
+    });
+    return { success: false, message: error.message || 'Failed to download update.' };
+  }
+});
+
+ipcMain.handle('updater:quit-and-install', async () => {
+  if (updateStatus.status !== 'downloaded') {
+    return { success: false, message: 'No downloaded update is ready yet.' };
+  }
+
+  setImmediate(() => {
+    autoUpdater.quitAndInstall(false, true);
+  });
+
+  return { success: true };
+});
+
 app.whenReady().then(() => {
   // Database is NOT initialized automatically anymore. 
   // Frontend will trigger it based on selection.
+  configureAutoUpdates();
   createWindow();
 });
 

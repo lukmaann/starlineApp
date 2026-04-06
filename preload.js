@@ -1,9 +1,19 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+ipcRenderer.on('updater:status', (_event, payload) => {
+  window.dispatchEvent(new CustomEvent('updater-status', { detail: payload }));
+});
+
 contextBridge.exposeInMainWorld('electronAPI', {
   // Legacy methods (save/load removed as persistence is now automatic)
   printOrPdf: () => ipcRenderer.invoke('print-or-pdf'),
+  updater: {
+    getStatus: () => ipcRenderer.invoke('updater:get-status'),
+    checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+    downloadUpdate: () => ipcRenderer.invoke('updater:download'),
+    quitAndInstall: () => ipcRenderer.invoke('updater:quit-and-install')
+  },
 
   // Enterprise Database Bridge (Async/RPC)
   db: {
