@@ -189,6 +189,42 @@ const Batches: React.FC<{ onNavigateToHub?: (id: string) => void }> = ({ onNavig
 
     return (
         <div className="max-w-[1600px] mx-auto space-y-6 animate-in fade-in duration-500 pb-20 text-slate-900">
+            <style>
+                {`
+                @media print {
+                    body > *:not(#batch-print-portal-root) {
+                        display: none !important;
+                    }
+
+                    html, body {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background-color: white !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                        height: auto !important;
+                        overflow: visible !important;
+                    }
+
+                    #batch-print-portal-root {
+                        display: block !important;
+                        position: absolute !important;
+                        top: 0 !important;
+                        left: 0 !important;
+                        width: 100% !important;
+                        min-height: 100% !important;
+                        height: auto !important;
+                        overflow: visible !important;
+                        z-index: 9999 !important;
+                        background-color: white !important;
+                    }
+                }
+
+                #batch-print-portal-root {
+                    display: none;
+                }
+                `}
+            </style>
             {/* Header */}
             <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-4">
@@ -598,14 +634,14 @@ const Batches: React.FC<{ onNavigateToHub?: (id: string) => void }> = ({ onNavig
                         { label: 'Units Registered', value: successDetails.count, primary: true },
                         { label: 'Dealer Assigned', value: successDetails.dealerName }
                     ]}
-                    onPrint={() => window.print()}
+                    onPrint={() => window.electronAPI ? window.electronAPI.printOrPdf() : window.print()}
                     onClose={() => setShowSuccess(false)}
                 />
             )}
 
             {/* Hidden Print Portal */}
             {successDetails && createPortal(
-                <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
+                <div id="batch-print-portal-root" className="bg-white">
                     <BatteryPrintTemplate
                         dealerName={successDetails.dealerName}
                         dealerId={successDetails.dealerId}

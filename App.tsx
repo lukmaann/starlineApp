@@ -12,6 +12,7 @@ import DatabaseManagement from './pages/DatabaseManagement';
 import Batches from './pages/Batches';
 import ManufacturingHub from './factory_operations/ManufacturingHub';
 import GlobalAnalytics from './components/GlobalAnalytics';
+import ReleaseNotes from './pages/ReleaseNotes';
 import { Database } from './db';
 import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi, Lock, KeyRound, Loader2, CheckCircle2 } from 'lucide-react';
 import { Toaster } from './components/ui/sonner';
@@ -288,8 +289,38 @@ const App: React.FC = () => {
       case 'backup':
         return isAdmin ? <Backup /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} onOpenDealerProfile={openDealerProfile} />;
 
+      case 'release-notes':
+        return <ReleaseNotes />;
+
       default:
         return null;
+    }
+  };
+
+  const getTabLabel = (tab: string) => {
+    switch (tab) {
+      case 'scanner':
+        return 'Hub Trace';
+      case 'dealers':
+        return 'Dealers';
+      case 'settlements':
+        return 'Settlements';
+      case 'controls':
+        return 'Settings';
+      case 'analytics':
+        return 'Analytics';
+      case 'batches':
+        return 'Batches';
+      case 'manufacturing':
+        return 'Factory Operations';
+      case 'database-management':
+        return 'Database Management';
+      case 'backup':
+        return 'Backup';
+      case 'release-notes':
+        return 'Release Notes';
+      default:
+        return tab;
     }
   };
 
@@ -369,9 +400,15 @@ const App: React.FC = () => {
               onForward={goForward}
               onClear={clearHistory}
             />
-            <span className="hover:text-slate-600 transition-colors cursor-default">Starline</span>
+            <button
+              type="button"
+              onClick={() => navigate('release-notes')}
+              className="hover:text-slate-600 transition-colors"
+            >
+              Starline
+            </button>
             <span>/</span>
-            <span className="text-slate-900 font-bold capitalize">{activeTab === 'manufacturing' ? 'Factory Operations' : activeTab}</span>
+            <span className="text-slate-900 font-bold">{getTabLabel(activeTab)}</span>
           </div>
 
           <div className="flex items-center space-x-2">

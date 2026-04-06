@@ -380,7 +380,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
         const originalTitle = document.title;
         document.title = `${battery.id}_report`;
         Database.logActivity('PRINT_REPORT', `Printed battery report for ${battery.id}`, { batteryId: battery.id });
-        window.print();
+        window.electronAPI ? window.electronAPI.printOrPdf() : window.print();
         document.title = originalTitle;
     };
 

@@ -393,7 +393,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
 
   const handlePrintReport = () => {
     Database.logActivity('PRINT_REPORT', 'Printed detailed battery report', { source: 'Scanner' });
-    window.print();
+    window.electronAPI ? window.electronAPI.printOrPdf() : window.print();
   };
 
   // Warranty Date Correction Handlers
@@ -917,6 +917,42 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10 tracking-tight">
+      <style>
+        {`
+        @media print {
+          body > *:not(#batch-print-portal-root) {
+            display: none !important;
+          }
+
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background-color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+
+          #batch-print-portal-root {
+            display: block !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            min-height: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
+            z-index: 9999 !important;
+            background-color: white !important;
+          }
+        }
+
+        #batch-print-portal-root {
+          display: none;
+        }
+        `}
+      </style>
       <ScannerHeader
         batchMode={batchMode}
         setBatchMode={setBatchMode}
@@ -1115,7 +1151,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
           { label: 'Units Processed', value: batchSuccessDetails.count, primary: true },
           { label: 'Dealer Name', value: batchSuccessDetails.dealerName }
         ]}
-        onPrint={() => window.print()}
+        onPrint={() => window.electronAPI ? window.electronAPI.printOrPdf() : window.print()}
         onClose={() => {
           setShowBatchSuccess(false);
           window.location.reload();
@@ -1124,7 +1160,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
 
       {/* Hidden Print Portal */}
       {createPortal(
-        <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
+        <div id="batch-print-portal-root" className="bg-white">
           <BatteryPrintTemplate
             dealerName={batchSuccessDetails.dealerName}
             dealerId={batchConfig.dealerId}

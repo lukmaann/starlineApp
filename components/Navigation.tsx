@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Battery, Users, Zap, ChevronLeft, ChevronRight, Barcode, ShieldCheck, Sliders, Search, History, UserCircle, Scale, BarChart3, Layers, Calculator, Factory } from 'lucide-react';
+import { Battery, Users, Zap, ChevronLeft, ChevronRight, Barcode, ShieldCheck, Sliders, Search, History, UserCircle, Scale, BarChart3, Layers, Calculator, Factory, FileText } from 'lucide-react';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { Database } from '../db';
 
@@ -132,18 +132,22 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab, userRo
         {isCollapsed ? <ChevronRight size={12} strokeWidth={2.5} /> : <ChevronLeft size={12} strokeWidth={2.5} />}
       </button>
 
-      <div className={`pt-7 pb-2 transition-all duration-300 ${isCollapsed ? 'px-3' : 'px-5'}`}>
-        <div className={`flex items-center mb-7 h-8 transition-all duration-300 ${isCollapsed ? 'justify-center' : 'space-x-2.5'}`}>
+        <div className={`pt-7 pb-2 transition-all duration-300 ${isCollapsed ? 'px-3' : 'px-5'}`}>
+        <button
+          onClick={() => setActiveTab('release-notes')}
+          className={`flex items-center mb-7 h-8 w-full rounded-xl transition-all duration-300 hover:bg-slate-50 ${isCollapsed ? 'justify-center px-0' : 'space-x-2.5 px-2'}`}
+          title="Open Release Notes"
+        >
           <div className="bg-slate-900 p-1.5 rounded-md text-white shadow-sm shrink-0 flex items-center justify-center">
             <Zap size={16} fill="currentColor" className={isCollapsed ? "opacity-90" : ""} />
           </div>
           {!isCollapsed && (
-            <div className="overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-left-2 whitespace-nowrap">
+            <div className="overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-left-2 whitespace-nowrap text-left">
               <h1 className="text-[14px] font-bold text-slate-900 tracking-tight leading-none">Starline</h1>
               <p className="text-[9px] font-medium text-slate-500 tracking-wider mt-0.5 uppercase">Enterprise</p>
             </div>
           )}
-        </div>
+        </button>
 
         <div className="space-y-0.5 mt-4">
           {!isCollapsed && (
@@ -162,6 +166,13 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab, userRo
               isCollapsed={isCollapsed}
             />
           ))}
+          <NavItem
+            icon={<FileText size={17} strokeWidth={activeTab === 'release-notes' ? 2 : 1.75} />}
+            label="Release Notes"
+            active={activeTab === 'release-notes'}
+            onClick={() => setActiveTab('release-notes')}
+            isCollapsed={isCollapsed}
+          />
         </div>
       </div>
 
