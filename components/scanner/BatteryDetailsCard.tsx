@@ -1,8 +1,9 @@
 import React from 'react';
 import {
     ShieldAlert, Calendar, Edit, FileText,
-    Activity, RefreshCw, Store, ChevronRight, MapPin, Landmark
+    Activity, RefreshCw, Store, ChevronRight, MapPin, Landmark, Copy
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { formatDate } from '../../utils';
 import { BatteryStatus, Dealer, Replacement } from '../../types';
 import { StatusDisplay } from '../StatusDisplay';
@@ -191,11 +192,24 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                                 </span>
                             </div>
 
-                            <div className="mt-5">
-                                <h1 className="text-4xl font-black tracking-tight text-slate-900 mono sm:text-[2.8rem]">{activeAsset.battery.id}</h1>
-                                <p className="mt-2 text-lg font-semibold text-slate-600">
-                                    {activeAsset.battery.model} <span className="text-slate-300">•</span> {activeAsset.battery.capacity}
-                                </p>
+                            <div className="mt-5 flex items-start justify-between group">
+                                <div>
+                                    <h1 className="text-4xl font-black tracking-tight text-slate-900 mono sm:text-[2.8rem]">{activeAsset.battery.id}</h1>
+                                    <p className="mt-2 text-lg font-semibold text-slate-600">
+                                        {activeAsset.battery.model} <span className="text-slate-300">•</span> {activeAsset.battery.capacity}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigator.clipboard.writeText(activeAsset.battery.id);
+                                        toast.success('Battery serial copied to clipboard');
+                                    }}
+                                    className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-400 hover:text-slate-900 transition-colors shadow-sm opacity-50 group-hover:opacity-100 active:scale-95"
+                                    title="Copy System ID"
+                                >
+                                    <Copy size={20} />
+                                </button>
                             </div>
 
                             <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">

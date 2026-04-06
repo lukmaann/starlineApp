@@ -11,15 +11,15 @@ export const releaseNotes: ReleaseEntry[] = [
   {
     version: 'v1.0.2',
     date: '2026-04-06',
-    title: 'Print Reliability and Release Tracking',
-    summary: 'Stabilized long batch printouts and added an in-app release notes screen reachable from the Starline brand.',
+    title: 'Better Printing & New Features',
+    summary: 'We made printing much more reliable for large orders and added this help page.',
     fixes: [
-      'Batch receipts now paginate automatically for large runs such as 100 or more batteries.',
-      'Print headers repeat on every page and the final signature section stays on the last page.',
-      'Long serial numbers, dealer names, and empty datasets now render safely instead of breaking the layout.',
-      'Scanner and batch approval flows now use the same print portal behavior for more consistent output.',
-      'Added an in-app release notes page so fix history can be reviewed by date.'
+      'Big Orders Print Better: Printing 100+ batteries at once now works perfectly across multiple pages.',
+      'Neater Receipts: Headers (titles) now show on every page, and signatures stay at the bottom.',
+      'Fixed Layout Issues: Long names and empty lists no longer mess up the screen.',
+      'Consistent Printing: Scanning and approving batches now use the same, improved printing style.',
+      'Release History: You can now see what\'s new in each update right here.'
     ],
-    areas: ['Batch Printing', 'Scanner', 'Batches', 'Release Notes']
+    areas: ['Printing', 'Scanner', 'Batches', 'Help System']
   }
 ];

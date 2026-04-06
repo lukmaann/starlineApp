@@ -14,7 +14,7 @@ import ManufacturingHub from './factory_operations/ManufacturingHub';
 import GlobalAnalytics from './components/GlobalAnalytics';
 import ReleaseNotes from './pages/ReleaseNotes';
 import { Database } from './db';
-import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi, Lock, KeyRound, Loader2, CheckCircle2 } from 'lucide-react';
+import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi, Lock, KeyRound, Loader2, CheckCircle2, Sparkles, RefreshCw, X } from 'lucide-react';
 import { Toaster } from './components/ui/sonner';
 import { Dialog, DialogContent, DialogTitle } from './components/ui/dialog';
 import { toast } from "sonner";
@@ -43,6 +43,9 @@ type UpdateState = {
   progress?: number;
   updatedAt?: string;
 };
+
+const UPDATE_READY_STATUSES: UpdateState['status'][] = ['available', 'downloading', 'downloaded', 'error'];
+const POST_INSTALL_FLAG_KEY = 'starline-pending-update-celebration';
 
 const App: React.FC = () => {
   const {
@@ -74,12 +77,17 @@ const App: React.FC = () => {
   const [keepAliveError, setKeepAliveError] = useState('');
   const [isKeepAliveLoading, setIsKeepAliveLoading] = useState(false);
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
+  const [showUpdateNotice, setShowUpdateNotice] = useState(false);
+  const [showUpdateCelebration, setShowUpdateCelebration] = useState(false);
+  const [celebrationVersion, setCelebrationVersion] = useState<string | null>(null);
 
   const isAdmin = user?.role === 'ADMIN';
 
   const [showDbNotification, setShowDbNotification] = useState(false);
   const [dbNotificationData, setDbNotificationData] = useState<{ isSSD: boolean, path: string } | null>(null);
   const storageNoticeRef = useRef<HTMLDivElement | null>(null);
+  const previousUpdateStatusRef = useRef<UpdateState['status'] | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     if (type === 'error') {
@@ -93,6 +101,44 @@ const App: React.FC = () => {
     }
 
     toast.success(message);
+  };
+
+  const playUpdateTone = (mode: 'notice' | 'celebration') => {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextCtor) return;
+
+      const context = audioContextRef.current ?? new AudioContextCtor();
+      audioContextRef.current = context;
+
+      if (context.state === 'suspended') {
+        context.resume().catch(() => undefined);
+      }
+
+      const now = context.currentTime;
+      const notes = mode === 'celebration'
+        ? [523.25, 659.25, 783.99]
+        : [523.25, 659.25];
+
+      notes.forEach((frequency, index) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+
+        oscillator.type = mode === 'celebration' ? 'triangle' : 'sine';
+        oscillator.frequency.setValueAtTime(frequency, now + index * 0.12);
+
+        gain.gain.setValueAtTime(0.0001, now + index * 0.12);
+        gain.gain.exponentialRampToValueAtTime(mode === 'celebration' ? 0.07 : 0.05, now + index * 0.12 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.12 + 0.24);
+
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(now + index * 0.12);
+        oscillator.stop(now + index * 0.12 + 0.26);
+      });
+    } catch (error) {
+      console.error('Failed to play update tone', error);
+    }
   };
 
   const triggerHubSearch = (serial: string) => {
@@ -204,6 +250,39 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!updateState) return;
+
+    const previousStatus = previousUpdateStatusRef.current;
+    const statusChanged = previousStatus !== updateState.status;
+
+    if (UPDATE_READY_STATUSES.includes(updateState.status) && (statusChanged || previousStatus === null)) {
+      setShowUpdateNotice(true);
+      if (statusChanged && (updateState.status === 'available' || updateState.status === 'downloaded' || updateState.status === 'error')) {
+        playUpdateTone('notice');
+      }
+    }
+
+    if (updateState.status === 'up-to-date') {
+      const pendingCelebration = localStorage.getItem(POST_INSTALL_FLAG_KEY);
+      if (pendingCelebration) {
+        try {
+          const parsed = JSON.parse(pendingCelebration);
+          setCelebrationVersion(parsed.version || updateState.version || null);
+        } catch {
+          setCelebrationVersion(updateState.version || null);
+        }
+        setShowUpdateCelebration(true);
+        localStorage.removeItem(POST_INSTALL_FLAG_KEY);
+        if (statusChanged) {
+          playUpdateTone('celebration');
+        }
+      }
+    }
+
+    previousUpdateStatusRef.current = updateState.status;
+  }, [updateState]);
+
+  useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
       if (!showDbNotification || !storageNoticeRef.current) return;
       const target = event.target as Node;
@@ -243,10 +322,70 @@ const App: React.FC = () => {
   const handleInstallUpdate = async () => {
     if (!window.electronAPI?.updater) return;
 
+    localStorage.setItem(POST_INSTALL_FLAG_KEY, JSON.stringify({
+      version: updateState?.version || null,
+      queuedAt: new Date().toISOString(),
+    }));
+
     const result = await window.electronAPI.updater.quitAndInstall();
     if (!result.success) {
+      localStorage.removeItem(POST_INSTALL_FLAG_KEY);
       toast.error(result.message || 'No update is ready to install');
     }
+  };
+
+  const dismissCelebration = () => {
+    setShowUpdateCelebration(false);
+    setCelebrationVersion(null);
+  };
+
+  const getUpdateAccent = (status: UpdateState['status']) => {
+    if (status === 'error') {
+      return {
+        banner: 'from-rose-500 via-rose-400 to-orange-300',
+        glow: 'shadow-rose-200/70',
+        iconWrap: 'bg-rose-50 border-rose-100 text-rose-500',
+        pill: 'bg-rose-50 text-rose-700',
+        progress: 'from-rose-500 to-orange-400',
+        button: 'linear-gradient(135deg, #be123c 0%, #ea580c 100%)',
+      };
+    }
+
+    if (status === 'downloaded') {
+      return {
+        banner: 'from-emerald-500 via-teal-400 to-sky-400',
+        glow: 'shadow-emerald-200/70',
+        iconWrap: 'bg-emerald-50 border-emerald-100 text-emerald-600',
+        pill: 'bg-emerald-50 text-emerald-700',
+        progress: 'from-emerald-500 to-sky-400',
+        button: 'linear-gradient(135deg, #047857 0%, #0f766e 100%)',
+      };
+    }
+
+    return {
+      banner: 'from-slate-900 via-slate-800 to-blue-700',
+      glow: 'shadow-slate-200/80',
+      iconWrap: 'bg-blue-50 border-blue-100 text-blue-600',
+      pill: 'bg-blue-50 text-blue-700',
+      progress: 'from-slate-900 to-blue-500',
+      button: 'linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%)',
+    };
+  };
+
+  const getUpdateHeading = (state: UpdateState) => {
+    if (state.status === 'available') return `Version ${state.version || 'available'} is ready`;
+    if (state.status === 'downloading') return 'Preparing your update';
+    if (state.status === 'downloaded') return `Version ${state.version || ''} is ready to install`.trim();
+    if (state.status === 'error') return 'We could not finish the update';
+    return 'App update';
+  };
+
+  const getUpdateSubtext = (state: UpdateState) => {
+    if (state.status === 'available') return state.message || 'A new version is available for Starline Enterprise.';
+    if (state.status === 'downloading') return state.message || 'Please keep the app open while the download finishes.';
+    if (state.status === 'downloaded') return state.message || 'Restart once and we will install the latest version for you.';
+    if (state.status === 'error') return state.message || 'Please try again in a moment.';
+    return state.message || '';
   };
 
   const handleKeepAliveAttempt = async (e: React.FormEvent) => {
@@ -604,102 +743,174 @@ const App: React.FC = () => {
         </main>
       </div >
 
-      {updateState && ['available', 'downloading', 'downloaded', 'error'].includes(updateState.status) && (
-        <div className="fixed bottom-6 right-6 z-[120] w-[360px] rounded-3xl border border-slate-200 bg-white/95 shadow-[0_25px_55px_-30px_rgba(15,23,42,0.45)] backdrop-blur-md no-print overflow-hidden">
-          <div className={`h-1.5 w-full ${updateState.status === 'error' ? 'bg-rose-500' : updateState.status === 'downloaded' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
-          <div className="p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">App Update</p>
-                <h3 className="mt-1 text-lg font-black tracking-tight text-slate-900">
-                  {updateState.status === 'available' && `Version ${updateState.version || 'available'}`}
-                  {updateState.status === 'downloading' && 'Downloading update'}
-                  {updateState.status === 'downloaded' && `Ready to install ${updateState.version || ''}`.trim()}
-                  {updateState.status === 'error' && 'Update check failed'}
-                </h3>
-              </div>
-              <button
-                onClick={() => setUpdateState(null)}
-                className="text-slate-400 hover:text-slate-700 transition-colors text-sm font-black"
-                aria-label="Dismiss update notice"
-              >
-                x
-              </button>
+      {updateState && showUpdateNotice && UPDATE_READY_STATUSES.includes(updateState.status) && (
+        <div className="fixed bottom-6 right-6 z-[120] w-[390px] max-w-[calc(100vw-1.5rem)] no-print">
+          <div
+            className={`relative overflow-hidden rounded-[28px] border border-slate-200/80 bg-white/96 backdrop-blur-md shadow-[0_28px_70px_-34px_rgba(15,23,42,0.5)] ${getUpdateAccent(updateState.status).glow}`}
+            style={{ boxShadow: '0 10px 30px -12px rgba(15,23,42,0.18), 0 26px 60px -28px rgba(15,23,42,0.24)' }}
+          >
+            <div className={`h-24 w-full bg-gradient-to-r ${getUpdateAccent(updateState.status).banner}`} />
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+              <Zap size={120} className="absolute -top-6 -left-5 text-white/10" />
+              <BatteryCharging size={88} className="absolute top-3 right-6 text-white/10" />
+              <Activity size={60} className="absolute bottom-24 right-10 text-slate-300/30" />
             </div>
 
-            <p className="mt-3 text-sm font-medium leading-6 text-slate-600">
-              {updateState.message}
-            </p>
-
-            {updateState.status === 'downloading' && (
-              <div className="mt-4">
-                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-blue-500 transition-all"
-                    style={{ width: `${Math.max(4, Math.min(100, updateState.progress || 0))}%` }}
-                  />
+            <div className="relative px-5 pb-5">
+              <div className="flex items-start justify-between gap-4 -mt-10">
+                <div className={`flex h-16 w-16 items-center justify-center rounded-[20px] border shadow-sm ${getUpdateAccent(updateState.status).iconWrap}`}>
+                  {updateState.status === 'downloaded' ? <CheckCircle2 size={28} /> : updateState.status === 'error' ? <RefreshCw size={26} /> : <Download size={26} />}
                 </div>
-                <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                  {Math.round(updateState.progress || 0)}% complete
+                <button
+                  onClick={() => setShowUpdateNotice(false)}
+                  className="mt-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-slate-400 transition-colors hover:text-slate-700"
+                  aria-label="Dismiss update notice"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="mt-4">
+                <div className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ${getUpdateAccent(updateState.status).pill}`}>
+                  Starline update
+                </div>
+                <h3 className="mt-3 text-[26px] leading-[1.05] font-black tracking-tight text-slate-900">
+                  {getUpdateHeading(updateState)}
+                </h3>
+                <p className="mt-3 text-sm font-medium leading-6 text-slate-600">
+                  {getUpdateSubtext(updateState)}
                 </p>
               </div>
-            )}
 
-            <div className="mt-5 flex gap-3">
-              {updateState.status === 'available' && (
-                <>
-                  <button
-                    onClick={handleDownloadUpdate}
-                    className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white transition-colors hover:bg-black"
-                  >
-                    Download Update
-                  </button>
-                  <button
-                    onClick={handleCheckUpdates}
-                    className="rounded-2xl border border-slate-200 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition-colors hover:bg-slate-50"
-                  >
-                    Refresh
-                  </button>
-                </>
+              {updateState.status === 'downloading' && (
+                <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+                  <div className="h-2.5 overflow-hidden rounded-full bg-white shadow-inner">
+                    <div
+                      className={`h-full rounded-full bg-gradient-to-r ${getUpdateAccent(updateState.status).progress} transition-all`}
+                      style={{ width: `${Math.max(4, Math.min(100, updateState.progress || 0))}%` }}
+                    />
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs font-semibold text-slate-500">
+                    <span>Download progress</span>
+                    <span>{Math.round(updateState.progress || 0)}%</span>
+                  </div>
+                </div>
               )}
 
-              {updateState.status === 'downloaded' && (
-                <>
-                  <button
-                    onClick={handleInstallUpdate}
-                    className="flex-1 rounded-2xl bg-emerald-600 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white transition-colors hover:bg-emerald-700"
-                  >
-                    Restart and Install
-                  </button>
-                  <button
-                    onClick={() => setUpdateState(null)}
-                    className="rounded-2xl border border-slate-200 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition-colors hover:bg-slate-50"
-                  >
-                    Later
-                  </button>
-                </>
-              )}
+              <div className="mt-5 flex gap-3">
+                {updateState.status === 'available' && (
+                  <>
+                    <button
+                      onClick={handleDownloadUpdate}
+                      className="flex-1 rounded-2xl px-4 py-3 text-sm font-bold text-white transition-all active:scale-[0.98]"
+                      style={{ background: getUpdateAccent(updateState.status).button, boxShadow: '0 8px 22px rgba(15,23,42,0.18)' }}
+                    >
+                      Download update
+                    </button>
+                    <button
+                      onClick={handleCheckUpdates}
+                      className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                    >
+                      Check again
+                    </button>
+                  </>
+                )}
 
-              {updateState.status === 'error' && (
-                <>
-                  <button
-                    onClick={handleCheckUpdates}
-                    className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white transition-colors hover:bg-black"
-                  >
-                    Retry
-                  </button>
-                  <button
-                    onClick={() => setUpdateState(null)}
-                    className="rounded-2xl border border-slate-200 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition-colors hover:bg-slate-50"
-                  >
-                    Dismiss
-                  </button>
-                </>
-              )}
+                {updateState.status === 'downloaded' && (
+                  <>
+                    <button
+                      onClick={handleInstallUpdate}
+                      className="flex-1 rounded-2xl px-4 py-3 text-sm font-bold text-white transition-all active:scale-[0.98]"
+                      style={{ background: getUpdateAccent(updateState.status).button, boxShadow: '0 8px 22px rgba(5,150,105,0.18)' }}
+                    >
+                      Restart and install
+                    </button>
+                    <button
+                      onClick={() => setShowUpdateNotice(false)}
+                      className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                    >
+                      Later
+                    </button>
+                  </>
+                )}
+
+                {updateState.status === 'error' && (
+                  <>
+                    <button
+                      onClick={handleCheckUpdates}
+                      className="flex-1 rounded-2xl px-4 py-3 text-sm font-bold text-white transition-all active:scale-[0.98]"
+                      style={{ background: getUpdateAccent(updateState.status).button, boxShadow: '0 8px 22px rgba(190,24,93,0.16)' }}
+                    >
+                      Try again
+                    </button>
+                    <button
+                      onClick={() => setShowUpdateNotice(false)}
+                      className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                    >
+                      Close
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      <Dialog open={showUpdateCelebration} onOpenChange={(open) => { if (!open) dismissCelebration(); }}>
+        <DialogContent className="sm:max-w-md p-0 border-0 bg-transparent shadow-none">
+          <div className="relative overflow-hidden rounded-[30px] bg-white" style={{ boxShadow: '0 12px 32px -10px rgba(15,23,42,0.2), 0 28px 80px -26px rgba(15,23,42,0.26)' }}>
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: 'radial-gradient(ellipse at 20% 20%, rgba(96,165,250,0.12) 0%, rgba(255,255,255,0) 45%), radial-gradient(ellipse at 80% 0%, rgba(16,185,129,0.12) 0%, rgba(255,255,255,0) 40%), radial-gradient(ellipse at 50% 100%, rgba(251,191,36,0.12) 0%, rgba(255,255,255,0) 45%)',
+              }}
+            />
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+              {[...Array(12)].map((_, index) => (
+                <span
+                  key={index}
+                  className="absolute block rounded-full animate-bounce"
+                  style={{
+                    width: `${8 + (index % 3) * 4}px`,
+                    height: `${8 + (index % 3) * 4}px`,
+                    left: `${8 + index * 7}%`,
+                    top: `${10 + (index % 4) * 14}%`,
+                    background: ['#0f172a', '#2563eb', '#10b981', '#f59e0b'][index % 4],
+                    opacity: 0.18,
+                    animationDuration: `${1.6 + (index % 4) * 0.2}s`,
+                  }}
+                />
+              ))}
+            </div>
+
+            <div className="relative p-8 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] shadow-lg" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e40af 100%)' }}>
+                <Sparkles size={28} className="text-blue-300" />
+              </div>
+              <DialogTitle className="mt-5 text-[30px] leading-none font-black tracking-tight text-slate-900">
+                You are on the latest version
+              </DialogTitle>
+              <p className="mt-3 text-sm font-medium leading-6 text-slate-600">
+                {celebrationVersion
+                  ? `Starline Enterprise ${celebrationVersion} is installed and ready to go.`
+                  : 'Starline Enterprise is updated and ready to go.'}
+              </p>
+              <div className="mt-6 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+                Update completed successfully.
+              </div>
+              <button
+                type="button"
+                onClick={dismissCelebration}
+                className="mt-6 w-full rounded-2xl py-3 text-sm font-bold text-white transition-all active:scale-[0.98]"
+                style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e40af 100%)', boxShadow: '0 8px 22px rgba(15,23,42,0.18)' }}
+              >
+                Okay
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {showHelp && <ShortcutsModal onClose={() => setShowHelp(false)} />}
 

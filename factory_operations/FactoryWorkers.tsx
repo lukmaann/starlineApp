@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Database } from '../db';
 import { FactoryWorker } from '../types';
 import { toast } from 'sonner';
-import { BadgeCheck, CheckCircle2, Eye, Pencil, Plus, Search, ShieldCheck, Trash2, UserSquare2, X, XCircle } from 'lucide-react';
+import { BadgeCheck, CheckCircle2, Eye, Pencil, Plus, Search, ShieldCheck, Trash2, UserSquare2, X, XCircle, Copy } from 'lucide-react';
 import { FactoryWorkerFormData, FactoryWorkerWizard } from './components/FactoryWorkerWizard';
 
 interface FactoryWorkersProps {
@@ -330,7 +330,22 @@ export default function FactoryWorkers({ userRole }: FactoryWorkersProps) {
 
                         <div className="flex-1 overflow-y-auto px-8 py-10">
                             <div className="text-center mb-12">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Starline Factory ID</p>
+                                <div className="flex justify-center mb-4">
+                                    <div className="flex items-center bg-slate-100 rounded-lg shadow-sm overflow-hidden group border border-slate-200">
+                                        <div className="text-slate-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest border-r border-slate-200">SYS ID: {selectedWorker.id}</div>
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigator.clipboard.writeText(selectedWorker.id);
+                                                toast.success('Worker System ID copied');
+                                            }}
+                                            className="px-3 py-1.5 bg-white text-slate-400 hover:text-slate-900 hover:bg-slate-50 transition-colors"
+                                            title="Copy System ID"
+                                        >
+                                            <Copy size={12} />
+                                        </button>
+                                    </div>
+                                </div>
                                 <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase">
                                     {selectedWorker.full_name}
                                 </h1>

@@ -3,24 +3,36 @@ import { validateName, validatePhone } from './utils/validation';
 import { getLocalDate } from './utils';
 
 declare global {
+  interface ElectronUpdaterBridge {
+    getStatus: () => Promise<any>;
+    checkForUpdates: () => Promise<any>;
+    downloadUpdate: () => Promise<{ success: boolean; message?: string }>;
+    quitAndInstall: () => Promise<{ success: boolean; message?: string }>;
+  }
+
+  interface ElectronDatabaseBridge {
+    query: (sql: string, params?: any[]) => Promise<any[]>;
+    run: (sql: string, params?: any[]) => Promise<{ changes: number; lastInsertRowid: number }>;
+    exec: (sql: string) => Promise<void>;
+    updateBatteryDetails: (currentId: string, newId: string, dealerId: string, model?: string) => Promise<void>;
+    backup: () => Promise<{ success: boolean; path: string; error?: string }>;
+    selectBackupFolder: () => Promise<string | null>;
+    backupCustom: (path: string) => Promise<{ success: boolean; path: string; error?: string }>;
+    selectRestoreFile: () => Promise<string | null>;
+    restoreDatabase: (path: string) => Promise<{ success: boolean; error?: string }>;
+    optimizeDatabase: () => Promise<{ success: boolean; error?: string }>;
+    initDatabase: (config?: { type: 'INTERNAL' | 'EXTERNAL', path?: string }) => Promise<{ success: boolean; path?: string; error?: string }>;
+    selectExternalDrive: () => Promise<string | null>;
+  }
+
+  interface ElectronAPI {
+    printOrPdf: () => Promise<string>;
+    updater?: ElectronUpdaterBridge;
+    db: ElectronDatabaseBridge;
+  }
+
   interface Window {
-    electronAPI?: {
-      printOrPdf: () => Promise<string>;
-      db: {
-        query: (sql: string, params?: any[]) => Promise<any[]>;
-        run: (sql: string, params?: any[]) => Promise<{ changes: number; lastInsertRowid: number }>;
-        exec: (sql: string) => Promise<void>;
-        updateBatteryDetails: (currentId: string, newId: string, dealerId: string, model?: string) => Promise<void>;
-        backup: () => Promise<{ success: boolean; path: string; error?: string }>;
-        selectBackupFolder: () => Promise<string | null>;
-        backupCustom: (path: string) => Promise<{ success: boolean; path: string; error?: string }>;
-        selectRestoreFile: () => Promise<string | null>;
-        restoreDatabase: (path: string) => Promise<{ success: boolean; error?: string }>;
-        optimizeDatabase: () => Promise<{ success: boolean; error?: string }>;
-        initDatabase: (config?: { type: 'INTERNAL' | 'EXTERNAL', path?: string }) => Promise<{ success: boolean; path?: string; error?: string }>;
-        selectExternalDrive: () => Promise<string | null>;
-      };
-    };
+    electronAPI?: ElectronAPI;
   }
 }
 
@@ -2901,5 +2913,84 @@ export class Database {
       }))
       .sort((a, b) => b.shortage - a.shortage)
       .slice(0, Math.max(1, limit));
+  }
+
+  // --- Factory Operations Reset Features ---
+
+  static async clearAllProductionLogs(): Promise<void> {
+    await this.run(`DELETE FROM production_logs`);
+    await this.logActivity('SYSTEM_RESET', 'Cleared all production logs', { action: 'clearAllProductionLogs' });
+  }
+
+  static async clearAllPurchases(): Promise<void> {
+    await this.run(`DELETE FROM material_purchases`);
+    await this.run(`UPDATE raw_materials SET stock = 0`);
+    await this.logActivity('SYSTEM_RESET', 'Cleared all material purchases and reset stock to zero', { action: 'clearAllPurchases' });
+  }
+
+  static async clearAllExpenses(): Promise<void> {
+    await this.run(`DELETE FROM expenses`);
+    await this.logActivity('SYSTEM_RESET', 'Cleared all expenses', { action: 'clearAllExpenses' });
+  }
+
+  static async searchUniversalRecordById(id: string): Promise<{ type: 'BATTERY' | 'DEALER' | 'WORKER' | 'USER' | 'PRODUCTION' | 'PURCHASE' | 'EXPENSE', data: any } | null> {
+    const idTrimmed = id.trim();
+
+    const battery = await this.query(`SELECT * FROM batteries WHERE id = ?`, [idTrimmed]);
+    if (battery.length > 0) return { type: 'BATTERY', data: battery[0] };
+
+    const dealer = await this.query(`SELECT * FROM dealers WHERE id = ?`, [idTrimmed]);
+    if (dealer.length > 0) return { type: 'DEALER', data: dealer[0] };
+
+    const factoryWorker = await this.query(`SELECT * FROM factory_workers WHERE id = ?`, [idTrimmed]);
+    if (factoryWorker.length > 0) return { type: 'WORKER', data: factoryWorker[0] };
+    
+    const sysUser = await this.query(`SELECT * FROM users WHERE id = ?`, [idTrimmed]);
+    if (sysUser.length > 0) return { type: 'USER', data: sysUser[0] };
+
+    const prod = await this.query(`SELECT * FROM production_logs WHERE id = ?`, [idTrimmed]);
+    if (prod.length > 0) return { type: 'PRODUCTION', data: prod[0] };
+
+    const purc = await this.query(`SELECT * FROM material_purchases WHERE id = ?`, [idTrimmed]);
+    if (purc.length > 0) return { type: 'PURCHASE', data: purc[0] };
+
+    const exp = await this.query(`SELECT * FROM expenses WHERE id = ?`, [idTrimmed]);
+    if (exp.length > 0) return { type: 'EXPENSE', data: exp[0] };
+
+    return null;
+  }
+
+  static async deleteUniversalRecord(id: string, type: string): Promise<void> {
+    const idTrimmed = id.trim();
+
+    if (type === 'BATTERY') {
+        const batteryData = await this.query(`SELECT * FROM batteries WHERE id = ?`, [idTrimmed]);
+        await this.run(`DELETE FROM batteries WHERE id = ?`, [idTrimmed]);
+        await this.logActivity('BATTERY_DELETE', `Deleted battery record ${idTrimmed}`, { batteryId: idTrimmed, reason: 'Danger Zone universal delete' });
+    } else if (type === 'DEALER') {
+        const dealer = await this.query<any>(`SELECT * FROM dealers WHERE id = ?`, [idTrimmed]);
+        const dealerName = dealer.length > 0 ? dealer[0].name : idTrimmed;
+        await this.deleteDealer(idTrimmed);
+        await this.logActivity('PARTNER_DELETE', `Deleted dealer ${dealerName}`, { dealerId: idTrimmed, name: dealerName });
+    } else if (type === 'WORKER') {
+        const worker = await this.query<any>(`SELECT * FROM factory_workers WHERE id = ?`, [idTrimmed]);
+        const workerName = worker.length > 0 ? worker[0].full_name : idTrimmed;
+        await this.deleteFactoryWorker(idTrimmed);
+        await this.logActivity('WORKER_DELETE', `Deleted factory worker ${workerName}`, { workerId: idTrimmed, name: workerName });
+    } else if (type === 'USER') {
+        await this.deleteUser(idTrimmed);
+        await this.logActivity('USER_DELETED', `Deleted system user ${idTrimmed}`, { userId: idTrimmed });
+    } else if (type === 'PRODUCTION') {
+        await this.run(`DELETE FROM production_logs WHERE id = ?`, [idTrimmed]);
+        await this.logActivity('FACTORY_LOG_DELETED', `Deleted Production specific log manually via central Danger Zone`, { logId: idTrimmed, type });
+    } else if (type === 'PURCHASE') {
+        await this.run(`DELETE FROM material_purchases WHERE id = ?`, [idTrimmed]);
+        await this.logActivity('FACTORY_LOG_DELETED', `Deleted Material purchase specific log manually via central Danger Zone`, { logId: idTrimmed, type });
+    } else if (type === 'EXPENSE') {
+        await this.run(`DELETE FROM expenses WHERE id = ?`, [idTrimmed]);
+        await this.logActivity('FACTORY_LOG_DELETED', `Deleted Expense specific log manually via central Danger Zone`, { logId: idTrimmed, type });
+    } else {
+        throw new Error('Invalid operation type');
+    }
   }
 }

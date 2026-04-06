@@ -4,7 +4,7 @@ import { Database } from '../db';
 import { Expense, FactoryWorker } from '../types';
 import { getLocalDate } from '../utils';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Check, Filter, Loader2, RefreshCw, Search, Wallet, X, FileText, ChevronRight, Calculator, IndianRupee } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Filter, Loader2, RefreshCw, Search, Wallet, X, FileText, ChevronRight, Calculator, IndianRupee, Copy } from 'lucide-react';
 
 const PAGE_SIZE = 10;
 const CATEGORIES = ['Electricity', 'Maintenance', 'Transport', 'Salaries', 'Office Supplies', 'Rent', 'Miscellaneous'];
@@ -509,9 +509,21 @@ export default function Expenses() {
                                     </p>
                                 </div>
 
-                                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">System Record ID</p>
-                                    <p className="text-xs font-mono font-bold text-slate-500">{selectedExpense.id}</p>
+                                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">System Record ID</p>
+                                        <p className="text-xs font-mono font-bold text-slate-500">{selectedExpense.id}</p>
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(selectedExpense.id);
+                                            toast.success('Record ID copied to clipboard');
+                                        }}
+                                        className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors shadow-sm"
+                                        title="Copy ID"
+                                    >
+                                        <Copy size={16} />
+                                    </button>
                                 </div>
                             </div>
                         </div>
