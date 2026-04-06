@@ -1,0 +1,6 @@
+  • electron-builder  version=24.13.3 os=25.2.0
+  • loaded configuration  file=package.json ("build" field)
+  • rebuilding native dependencies  dependencies=better-sqlite3@12.6.2 platform=win32 arch=x64
+  • install prebuilt binary  name=better-sqlite3 version=12.6.2 platform=win32 arch=x64 napi=
+  • packaging       platform=win32 arch=x64 electron=31.7.7 appOutDir=dist/win-unpacked
+  • building        target=portable file=dist/Starline Registry 1.0.0.exe archs=x64

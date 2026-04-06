@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="tile" x1="104" y1="84" x2="408" y2="428" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f172a" />
+      <stop offset="1" stop-color="#1e293b" />
+    </linearGradient>
+    <linearGradient id="bolt" x1="206" y1="150" x2="322" y2="334" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#93c5fd" />
+      <stop offset="1" stop-color="#60a5fa" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#020617" flood-opacity="0.24"/>
+    </filter>
+  </defs>
+
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="#eff6ff" />
+
+  <g filter="url(#shadow)">
+    <rect x="112" y="112" width="288" height="288" rx="92" fill="url(#tile)" />
+  </g>
+
+  <path
+    d="M288 148L208 264H264L232 364L320 240H266L288 148Z"
+    fill="url(#bolt)"
+    stroke="#60a5fa"
+    stroke-width="10"
+    stroke-linejoin="round"
+  />
+
+  <circle cx="176" cy="176" r="10" fill="#60a5fa" opacity="0.2" />
+  <circle cx="334" cy="332" r="8" fill="#93c5fd" opacity="0.18" />
+</svg>
