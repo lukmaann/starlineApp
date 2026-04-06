@@ -15,8 +15,9 @@ import {
   KeyRound, CreditCard, FileCheck, Map, ChevronDown,
   Building, Hash, Navigation, LocateFixed, Package,
   TrendingDown, AlertTriangle, FileText, Download, Printer,
-  LayoutGrid, Mail, Building as BuildingIcon, Check
+  LayoutGrid, Mail, Building as BuildingIcon, Check, Copy
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { formatDate } from '../utils';
 import { StatusDisplay } from '../components/StatusDisplay';
 import { AuthSession } from '../utils/AuthSession';
@@ -541,7 +542,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
       const originalTitle = document.title;
       document.title = `${selectedDealer.name}_${activeLogTab} _Report`;
       Database.logActivity('PRINT_REPORT', `Printed dealer report for ${selectedDealer.name}`, { dealerId: selectedDealer.id, tab: activeLogTab });
-      window.print();
+      window.electronAPI ? window.electronAPI.printOrPdf() : window.print();
       document.title = originalTitle;
     };
 
@@ -622,7 +623,20 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
               <div>
                 <h1 className="text-xl font-bold tracking-tight text-slate-900 uppercase leading-none mb-1">{selectedDealer.name}</h1>
                 <div className="flex items-center gap-2">
-                  <div className="bg-slate-900 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide shadow-sm">UID: {selectedDealer.id}</div>
+                  <div className="flex items-center bg-slate-900 rounded shadow-sm overflow-hidden group">
+                    <div className="text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide border-r border-slate-700">UID: {selectedDealer.id}</div>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(selectedDealer.id);
+                        toast.success('Dealer UID copied');
+                      }}
+                      className="px-2 py-0.5 bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                      title="Copy Dealer UID"
+                    >
+                      <Copy size={10} />
+                    </button>
+                  </div>
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">• {selectedDealer.location}</span>
                 </div>
               </div>

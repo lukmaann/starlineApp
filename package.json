@@ -1,12 +1,13 @@
 {
   "name": "starline-enterprise-registry",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "Professional hardware-driven warranty management system for Starline Batteries.",
   "main": "main.js",
   "scripts": {
     "dev": "concurrently -k \"vite\" \"wait-on tcp:3100 && ELECTRON_RUN_AS_NODE= electron .\"",
     "build": "tsc && vite build && electron-builder",
-    "release:win": "npm run build -- --win --x64 --publish always",
+    "release:mac": "export $(grep -v '^#' .env.release | xargs) && npm run build -- --mac --publish always",
+    "release:win": "export $(grep -v '^#' .env.release | xargs) && npm run build -- --win --x64 --publish always",
     "preview": "vite preview",
     "start": "ELECTRON_RUN_AS_NODE= electron .",
     "postinstall": "electron-builder install-app-deps"
@@ -71,6 +72,7 @@
     "appId": "com.starline.registry",
     "productName": "Starline Registry",
     "compression": "maximum",
+    "afterSign": "scripts/notarize.cjs",
     "publish": [
       {
         "provider": "github",
@@ -88,11 +90,21 @@
           ]
         }
       ],
-      "icon": "icon.png"
+      "icon": "icon.png",
+      "artifactName": "Starline-Registry-Setup-${version}.${ext}"
     },
     "mac": {
-      "target": "dmg",
-      "icon": "icon.png"
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "icon.png",
+      "category": "public.app-category.business",
+      "artifactName": "Starline-Registry-${version}-mac-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "asar": true,
     "asarUnpack": [

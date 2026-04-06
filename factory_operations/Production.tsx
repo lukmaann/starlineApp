@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import {
     ArrowLeft, ArrowRight, Check, Filter, Loader2, RefreshCw,
     X, ChevronRight, Factory, Layers, BookOpen, Package, Zap, FlaskConical,
-    BatteryCharging
+    BatteryCharging, Copy
 } from 'lucide-react';
 
 const PAGE_SIZE = 10;
@@ -1553,9 +1553,21 @@ export default function Production() {
                                         onClose={() => { }}
                                     />
                                 )}
-                                <div className="p-5 rounded-2xl bg-white border border-slate-100 flex justify-between items-center opacity-60">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Log ID</p>
-                                    <p className="text-xs font-mono font-bold text-slate-500">{selectedLog.id}</p>
+                                <div className="p-5 rounded-2xl bg-white border border-slate-100 flex justify-between items-center opacity-60 hover:opacity-100 transition-opacity">
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Log ID</p>
+                                        <p className="text-xs font-mono font-bold text-slate-500">{selectedLog.id}</p>
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(selectedLog.id);
+                                            toast.success('Record ID copied to clipboard');
+                                        }}
+                                        className="p-2 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors shadow-sm"
+                                        title="Copy ID"
+                                    >
+                                        <Copy size={16} />
+                                    </button>
                                 </div>
                             </div>
                         </div>
