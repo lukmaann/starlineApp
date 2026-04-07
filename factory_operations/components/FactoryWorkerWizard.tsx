@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Briefcase, Calendar, CheckCircle2, ChevronRight, Hash, Phone, ShieldPlus, User, AlertCircle, Fingerprint, BadgeCheck, X, UserSquare2, Loader2, Check, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { Switch } from '../../components/ui/switch';
 
 const getLocalDate = () => new Date().toISOString().slice(0, 10);
 
@@ -277,16 +278,14 @@ export const FactoryWorkerWizard: React.FC<FactoryWorkerWizardProps> = ({
                             {/* Touch ID Biometric Section */}
                             <div className="pt-6 border-t border-slate-100">
                                 <div className="flex items-start gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50/50">
-                                    <div className="mt-0.5">
-                                        <input
-                                            type="checkbox"
+                                    <div className="mt-1">
+                                        <Switch
                                             id="touchIdToggle"
                                             checked={useTouchId}
-                                            onChange={(e) => {
-                                                if (!e.target.checked) setCapturedCredential(null);
-                                                setUseTouchId(e.target.checked);
+                                            onCheckedChange={(checked) => {
+                                                if (!checked) setCapturedCredential(null);
+                                                setUseTouchId(checked);
                                             }}
-                                            className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
                                         />
                                     </div>
                                     <div className="flex-1">
@@ -335,15 +334,19 @@ export const FactoryWorkerWizard: React.FC<FactoryWorkerWizardProps> = ({
                                     />
                                 </div>
                                 <div className="group space-y-2 col-span-2">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Status</label>
-                                    <select
-                                        className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-base text-slate-900 outline-none focus:bg-white focus:border-slate-900 focus:ring-4 focus:ring-slate-900/5 transition-all uppercase appearance-none cursor-pointer"
-                                        value={formData.status}
-                                        onChange={(e) => setFormData({ ...formData, status: e.target.value as 'ACTIVE' | 'INACTIVE' })}
-                                    >
-                                        <option value="ACTIVE">ACTIVE</option>
-                                        <option value="INACTIVE">INACTIVE</option>
-                                    </select>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Account Status</label>
+                                    <div className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between group-focus-within:bg-white group-focus-within:border-slate-900 transition-all">
+                                        <div className="flex flex-col">
+                                            <span className={`text-sm font-black tracking-tight ${formData.status === 'ACTIVE' ? 'text-blue-600' : 'text-slate-500'}`}>
+                                                {formData.status === 'ACTIVE' ? 'ACTIVE REGISTRY' : 'INACTIVE / ARCHIVED'}
+                                            </span>
+                                            <span className="text-[10px] font-bold text-slate-400">Worker is {formData.status === 'ACTIVE' ? 'authorized' : 'restricted'}</span>
+                                        </div>
+                                        <Switch
+                                            checked={formData.status === 'ACTIVE'}
+                                            onCheckedChange={(checked) => setFormData({ ...formData, status: checked ? 'ACTIVE' : 'INACTIVE' })}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                             <div className="space-y-2">

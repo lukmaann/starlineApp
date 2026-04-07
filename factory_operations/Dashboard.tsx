@@ -423,8 +423,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     }, [availableCalculatorModels, selectedAssemblyModel]);
 
     return (
-        <div className="max-w-[1600px] mx-auto space-y-6 animate-in fade-in duration-500 pb-20 text-slate-900">
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col md:flex-row items-center gap-4">
+        <div className="max-w-[1600px] mx-auto space-y-4 animate-in fade-in duration-500 pb-10 text-slate-900">
+            <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex flex-col md:flex-row items-center gap-3">
                 <div ref={viewMenuRef} className="w-full md:w-auto relative">
                     <button
                         type="button"
@@ -557,44 +557,44 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 </div>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden min-h-[760px] flex flex-col">
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden min-h-[680px] flex flex-col">
                 <div className="flex-1 overflow-x-auto">
                     {isLoading ? (
-                        <div className="py-24 flex flex-col items-center justify-center opacity-40">
-                            <Loader2 size={48} className="mb-4 text-slate-300 animate-spin" />
-                            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Loading data</p>
+                        <div className="py-20 flex flex-col items-center justify-center opacity-40">
+                            <Loader2 size={40} className="mb-4 text-slate-300 animate-spin" />
+                            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Loading data</p>
                         </div>
                     ) : view === 'summary' ? (
-                        <div className="p-6 md:p-8 space-y-8">
+                        <div className="p-4 md:p-6 space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                                 {summaryBars.map((card) => (
                                     <div key={card.id} className="bg-white border border-slate-200 rounded-xl p-5">
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{card.label}</p>
-                                                <p className="mt-3 text-3xl font-black tracking-tight text-slate-900">{card.currentDisplay}</p>
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{card.label}</p>
+                                                <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900">{card.currentDisplay}</p>
                                             </div>
-                                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${card.current >= card.previous ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-rose-50 text-rose-600 border border-rose-200'}`}>
+                                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${card.current >= card.previous ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-rose-50 text-rose-600 border border-rose-200'}`}>
                                                 {card.delta}
                                             </span>
                                         </div>
-                                        <p className="mt-2 text-xs font-semibold text-slate-500">{card.note}</p>
-                                        <div className="mt-5 space-y-3">
+                                        <p className="mt-1.5 text-xs font-medium text-slate-500">{card.note}</p>
+                                        <div className="mt-4 space-y-2.5">
                                             <div>
-                                                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
                                                     <span>{selectedMonthLabel}</span>
                                                     <span>{card.currentDisplay}</span>
                                                 </div>
-                                                <div className="mt-2 h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
                                                     <div className="h-full rounded-full bg-slate-900" style={{ width: card.currentWidth }} />
                                                 </div>
                                             </div>
                                             <div>
-                                                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
                                                     <span>{monthShort(-1)}</span>
                                                     <span>{card.previousDisplay}</span>
                                                 </div>
-                                                <div className="mt-2 h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
                                                     <div className="h-full rounded-full bg-slate-300" style={{ width: card.previousWidth }} />
                                                 </div>
                                             </div>
@@ -605,10 +605,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
                             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                                 <div className="border border-slate-200 rounded-xl overflow-hidden">
-                                    <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Yearly Production vs Dispatch</p>
+                                    <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Yearly Production vs Dispatch</p>
                                     </div>
-                                    <div className="p-6 h-[320px]">
+                                    <div className="p-5 h-[280px]">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={stats?.monthlyOverview ?? []}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -624,10 +624,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                                 </div>
 
                                 <div className="border border-slate-200 rounded-xl overflow-hidden">
-                                    <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Yearly Expense Split</p>
+                                    <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Yearly Expense Split</p>
                                     </div>
-                                    <div className="p-6 h-[320px]">
+                                    <div className="p-5 h-[280px]">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <LineChart data={stats?.monthlyOverview ?? []}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -645,10 +645,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
                             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                                 <div className="border border-slate-200 rounded-xl overflow-hidden">
-                                    <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{selectedMonthLabel} Assembly Mix</p>
+                                    <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{selectedMonthLabel} Assembly Mix</p>
                                     </div>
-                                    <div className="p-6 h-[320px]">
+                                    <div className="p-5 h-[280px]">
                                         {stats?.selectedMonthModelMix?.length ? (
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <PieChart>
@@ -667,10 +667,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                                 </div>
 
                                 <div className="border border-slate-200 rounded-xl overflow-hidden">
-                                    <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{selectedMonthLabel} Stage Mix</p>
+                                    <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{selectedMonthLabel} Stage Mix</p>
                                     </div>
-                                    <div className="p-6 h-[320px]">
+                                    <div className="p-5 h-[280px]">
                                         {stats?.selectedMonthStageMix?.length ? (
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <PieChart>
@@ -691,10 +691,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
                             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                                 <div className="border border-slate-200 rounded-xl overflow-hidden">
-                                    <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Top Battery Models In {selectedMonthLabel}</p>
+                                    <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Top Battery Models In {selectedMonthLabel}</p>
                                     </div>
-                                    <div className="p-6 space-y-4">
+                                    <div className="p-5 space-y-3">
                                         {topModels.length > 0 ? topModels.map((row) => (
                                             <div key={row.model} className="space-y-2">
                                                 <div className="flex items-center justify-between gap-4">
@@ -712,10 +712,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                                 </div>
 
                                 <div className="border border-slate-200 rounded-xl overflow-hidden">
-                                    <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Expense Breakdown In {selectedMonthLabel}</p>
+                                    <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Expense Breakdown In {selectedMonthLabel}</p>
                                     </div>
-                                    <div className="p-6 space-y-4">
+                                    <div className="p-5 space-y-3">
                                         {expenseBreakdown.length > 0 ? expenseBreakdown.map((row) => (
                                             <div key={row.category} className="space-y-2">
                                                 <div className="flex items-center justify-between gap-4">
@@ -736,8 +736,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                             <div className="border border-slate-200 rounded-xl overflow-hidden">
                                 <table className="w-full text-left">
                                     <thead>
-                                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-wider">
-                                            <th className="px-6 py-4 whitespace-nowrap pl-8">Factory Snapshot</th>
+                                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+                                            <th className="px-5 py-3 whitespace-nowrap pl-8">Factory Snapshot</th>
                                             <th className="px-6 py-4 whitespace-nowrap text-right">{selectedMonthLabel}</th>
                                             <th className="px-6 py-4 whitespace-nowrap text-right">{previousMonthName}</th>
                                             <th className="px-6 py-4 whitespace-nowrap text-right pr-8">Change</th>

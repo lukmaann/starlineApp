@@ -71,14 +71,18 @@ const DealerAnalytics: React.FC<DealerAnalyticsProps> = ({ dealer, onBack }) => 
         { name: 'Network Avg', value: Math.round(advancedData?.benchmark?.networkAvg || 0) }
     ], [advancedData]);
 
+    const handleLoadingComplete = React.useCallback(() => {
+        setLoading(false);
+    }, []);
+
     // Unified Loader Logic: Confined to component workspace
     if (loading) {
         return (
             <AnalyticsLoader
                 title="Intelligence Report"
                 subtitle={dealer.name}
-                duration={4000}
-                onComplete={() => setLoading(false)}
+                duration={1500}
+                onComplete={handleLoadingComplete}
             />
         );
     }

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -9,7 +9,7 @@ import {
     Trophy, Medal, Globe, ChevronDown, ListFilter,
     ArrowUpRight, ArrowDownRight, LayoutGrid, List,
     Search, RefreshCw, Scale, History, Layers,
-    Lock, KeyRound, Loader2
+    Lock, KeyRound, Loader2, Check, type LucideIcon
 } from 'lucide-react';
 import { Database } from '../db';
 import { Dealer } from '../types';
@@ -26,6 +26,8 @@ const GlobalAnalytics: React.FC = () => {
     const [lockPassword, setLockPassword] = useState('');
     const [lockError, setLockError] = useState('');
     const [isUnlocking, setIsUnlocking] = useState(false);
+    const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
+    const viewMenuRef = useRef<HTMLDivElement | null>(null);
 
     // Filters
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -77,6 +79,16 @@ const GlobalAnalytics: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (!viewMenuRef.current?.contains(event.target as Node)) {
+                setIsViewMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    useEffect(() => {
         if (!isLocked) {
             loadData();
         }
@@ -124,6 +136,14 @@ const GlobalAnalytics: React.FC = () => {
             d.location.toLowerCase().includes(searchQuery.toLowerCase())
         );
     }, [leaderboard, searchQuery]);
+
+    const viewOptions: Array<{ id: 'METRICS' | 'LEADERBOARD'; label: string; icon: LucideIcon; iconClass: string; }> = [
+        { id: 'METRICS', label: 'Metrics Registry', icon: History, iconClass: 'text-blue-600' },
+        { id: 'LEADERBOARD', label: 'Leaderboard Snapshot', icon: Layers, iconClass: 'text-violet-600' },
+    ];
+
+    const activeView = viewOptions.find((option) => option.id === activeTab) ?? viewOptions[0];
+    const ActiveViewIcon = activeView.icon;
 
     if (isLocked) {
         return (
@@ -226,83 +246,122 @@ const GlobalAnalytics: React.FC = () => {
 
     return (
         <div className="max-w-[1600px] mx-auto space-y-6 animate-in fade-in duration-500 pb-20 text-slate-900 relative">
-            {/* Header - Matching Dealers.tsx Style */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-lg">
-                        <Globe size={24} />
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-bold text-slate-900 uppercase tracking-tight leading-none mb-1">Analytics Registry</h1>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Global Performance Ledger</p>
+            {/* Header - Matching Dashboard View Style */}
+            <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex flex-col md:flex-row items-center gap-3">
+                <div ref={viewMenuRef} className="w-full md:w-auto relative">
+                    <button
+                        type="button"
+                        onClick={() => setIsViewMenuOpen((open) => !open)}
+                        className="w-full md:min-w-[220px] flex items-center justify-between gap-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-md hover:bg-white hover:border-blue-500 transition-all"
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-md border border-slate-200 bg-white flex items-center justify-center shadow-sm">
+                                <ActiveViewIcon size={16} className={activeView.iconClass} />
+                            </div>
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-700">
+                                {activeView.label}
+                            </span>
+                        </div>
+                        <ChevronDown size={14} className={`text-slate-400 transition-transform ${isViewMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {isViewMenuOpen && (
+                        <div className="absolute left-0 top-[calc(100%+10px)] z-30 w-full md:w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-2">
+                            <div className="space-y-1">
+                                {viewOptions.map((option) => {
+                                    const OptionIcon = option.icon;
+                                    const isActive = option.id === activeTab;
+                                    return (
+                                        <button
+                                            key={option.id}
+                                            type="button"
+                                            onClick={() => {
+                                                setActiveTab(option.id);
+                                                setIsViewMenuOpen(false);
+                                            }}
+                                            className={`w-full flex items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left transition-all ${isActive ? 'bg-slate-50' : 'hover:bg-slate-50/70'}`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-md border border-slate-200 bg-white flex items-center justify-center shadow-sm">
+                                                    <OptionIcon size={16} className={option.iconClass} />
+                                                </div>
+                                                <span className="text-[10px] font-bold uppercase tracking-wide text-slate-700">
+                                                    {option.label}
+                                                </span>
+                                            </div>
+                                            {isActive ? <Check size={16} className="text-blue-600" /> : <span className="w-4" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex-1 w-full flex items-center justify-between">
+                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden md:block">
+                        Sales Analytics Trace <span className="text-slate-700 ml-2">{loading ? 'Synchronizing' : 'Operational'}</span>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <div className="bg-slate-50 p-1 rounded-lg flex items-center gap-1">
-                        <button
-                            onClick={() => setActiveTab('METRICS')}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'METRICS' ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
-                        >
-                            <History size={14} />
-                            Metrics
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('LEADERBOARD')}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'LEADERBOARD' ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
-                        >
-                            <Layers size={14} />
-                            Leaderboard
-                        </button>
-                    </div>
-                    <div className="h-8 w-px bg-slate-100"></div>
+                <div className="flex w-full md:w-auto items-center gap-2">
                     <button
                         onClick={loadData}
-                        className="p-3 bg-white border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-all hover:text-slate-900 shadow-sm active:scale-95"
+                        className="w-full md:w-auto px-5 py-3 bg-slate-900 text-white rounded-md font-bold text-[10px] uppercase tracking-[0.15em] hover:bg-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
                     >
-                        <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                        Refresh
                     </button>
                 </div>
             </div>
 
-            {/* Filter Bar - Simulating Search bar in Settlements */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col md:flex-row items-center gap-4">
+            {/* Filter Bar - Matching Dashboard Selector Style */}
+            <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex flex-col md:flex-row items-center gap-3">
                 <div className="flex-1 w-full relative group/search">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-slate-900 transition-colors" size={18} />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-blue-500 transition-colors" size={18} />
                     <input
                         placeholder={`Filter by Dealer or Location...`}
-                        className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg outline-none font-bold text-sm transition-all uppercase tracking-wide mono text-slate-900 focus:bg-white focus:border-slate-400"
+                        className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-md outline-none font-bold text-sm transition-all uppercase tracking-wide text-slate-900 focus:bg-white focus:border-blue-500"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
                 </div>
 
-                <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1 h-12">
-                    <select
-                        value={selectedYear}
-                        onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                        className="bg-transparent text-[10px] font-black uppercase outline-none px-3 cursor-pointer"
-                    >
-                        {data?.availableYears?.map((y: number) => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                    <div className="h-4 w-px bg-slate-200 mx-1"></div>
-                    <select
-                        value={selectedMonth || ''}
-                        onChange={(e) => setSelectedMonth(e.target.value ? parseInt(e.target.value) : undefined)}
-                        className="bg-transparent text-[10px] font-black uppercase outline-none px-3 cursor-pointer"
-                    >
-                        <option value="">Full Year</option>
-                        {months.map((m, i) => <option key={m} value={i + 1}>{m.substring(0, 3)}</option>)}
-                    </select>
-                    <div className="h-4 w-px bg-slate-200 mx-1"></div>
-                    <select
-                        value={selectedLocation}
-                        onChange={(e) => setSelectedLocation(e.target.value)}
-                        className="bg-transparent text-[10px] font-black uppercase outline-none px-3 cursor-pointer"
-                    >
-                        <option value="All">All Locations</option>
-                        {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
-                    </select>
+                <div className="flex flex-col md:flex-row items-center gap-2.5 w-full md:w-auto">
+                    <div className="w-full md:w-auto relative">
+                        <select
+                            value={selectedYear}
+                            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                            className="w-full px-3 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-bold uppercase outline-none focus:border-blue-500 focus:bg-white transition-all appearance-none cursor-pointer text-slate-900 tracking-wide"
+                        >
+                            {data?.availableYears?.map((y: number) => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
+
+                    <div className="w-full md:w-auto relative">
+                        <select
+                            value={selectedMonth || ''}
+                            onChange={(e) => setSelectedMonth(e.target.value ? parseInt(e.target.value) : undefined)}
+                            className="w-full px-3 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-bold uppercase outline-none focus:border-blue-500 focus:bg-white transition-all appearance-none cursor-pointer text-slate-900 tracking-wide"
+                        >
+                            <option value="">Full Year Summary</option>
+                            {months.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
+
+                    <div className="w-full md:w-auto relative">
+                        <select
+                            value={selectedLocation}
+                            onChange={(e) => setSelectedLocation(e.target.value)}
+                            className="w-full px-3 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-bold uppercase outline-none focus:border-blue-500 focus:bg-white transition-all appearance-none cursor-pointer text-slate-900 tracking-wide"
+                        >
+                            <option value="All">All Locations</option>
+                            {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
                 </div>
             </div>
 
@@ -316,46 +375,46 @@ const GlobalAnalytics: React.FC = () => {
                             { label: 'Exchanges', value: data?.kpis?.totalClaims || 0, icon: AlertCircle, color: 'rose' },
                             { label: 'Active Dealers', value: data?.kpis?.totalDealers || 0, icon: Users, color: 'blue' }
                         ].map((kpi, i) => (
-                            <div key={i} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm group hover:border-slate-300 transition-all">
+                            <div key={i} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                                 <div className="flex items-center justify-between mb-3">
-                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{kpi.label}</span>
-                                    <div className={`p-2 rounded-lg bg-${kpi.color}-50 text-${kpi.color}-600 group-hover:scale-110 transition-transform`}>
-                                        <kpi.icon size={16} />
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.12em]">{kpi.label}</span>
+                                    <div className={`p-1.5 rounded-lg bg-${kpi.color}-50 text-${kpi.color}-600`}>
+                                        <kpi.icon size={14} />
                                     </div>
                                 </div>
-                                <h3 className="text-xl font-black text-slate-900 tracking-tight leading-none">{kpi.value}</h3>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Global Aggregate</p>
+                                <h3 className="text-2xl font-bold text-slate-900 tracking-tight leading-none">{kpi.value}</h3>
+                                <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest mt-2 focus:text-slate-600">Aggregate Metrics</p>
                             </div>
                         ))}
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Global Sales Trend */}
-                        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm relative overflow-hidden">
+                        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm relative">
                             {loading && <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] z-10 flex items-center justify-center"><Activity className="text-slate-900 animate-spin" size={24} /></div>}
-                            <div className="flex justify-between items-center mb-8">
-                                <h3 className="text-[10px] font-bold text-slate-900 uppercase tracking-widest">Growth Velocity</h3>
+                            <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                                <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Growth Velocity Hub</h3>
                                 <div className="flex items-center gap-4">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-slate-900"></div>
+                                        <div className="w-2 h-2 rounded-full bg-blue-600"></div>
                                         <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Sales</span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-slate-300"></div>
+                                        <div className="w-2 h-2 rounded-full bg-rose-500"></div>
                                         <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Exchanges</span>
                                     </div>
                                 </div>
                             </div>
-                            <div className="h-[280px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div className="p-5">
+                                <ResponsiveContainer width="100%" height={280}>
                                     <AreaChart data={chartData}>
                                         <defs>
                                             <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.05} />
-                                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                                <stop offset="5%" stopColor="#2563eb" stopOpacity={0.1} />
+                                                <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
                                             </linearGradient>
                                             <linearGradient id="colorClaims" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.05} />
+                                                <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.1} />
                                                 <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
@@ -366,7 +425,7 @@ const GlobalAnalytics: React.FC = () => {
                                             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 700 }}
                                             itemStyle={{ textTransform: 'uppercase' }}
                                         />
-                                        <Area type="monotone" dataKey="sales" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
+                                        <Area type="monotone" dataKey="sales" stroke="#2563eb" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
                                         <Area type="monotone" dataKey="exchanges" stroke="#f43f5e" strokeWidth={2} strokeDasharray="4 4" fillOpacity={1} fill="url(#colorClaims)" />
                                     </AreaChart>
                                 </ResponsiveContainer>
@@ -376,18 +435,20 @@ const GlobalAnalytics: React.FC = () => {
                         {/* Top Models & Locations */}
                         <div className="space-y-6">
                             {/* Top Models */}
-                            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm overflow-hidden">
-                                <h3 className="text-[10px] font-bold text-slate-900 uppercase tracking-widest mb-6 border-b border-slate-50 pb-2">Model Throughput</h3>
-                                <div className="space-y-4">
+                            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
+                                    <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Model Throughput Mix</h3>
+                                </div>
+                                <div className="p-5 space-y-3">
                                     {data?.modelDistribution?.slice(0, 5).map((model: any, i: number) => {
-                                        const modelColors = ['bg-orange-500', 'bg-amber-500', 'bg-yellow-500', 'bg-lime-500', 'bg-emerald-500'];
+                                        const modelColors = ['bg-blue-600', 'bg-violet-600', 'bg-emerald-600', 'bg-amber-600', 'bg-rose-600'];
                                         return (
-                                            <div key={i} className="space-y-1.5">
-                                                <div className="flex justify-between items-center text-[10px] font-bold uppercase">
-                                                    <span className="text-slate-600 font-mono tracking-tighter">{model.name}</span>
-                                                    <span className="text-slate-900 font-black">{model.value}</span>
+                                            <div key={i} className="space-y-1">
+                                                <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wide">
+                                                    <span className="text-slate-600 font-mono">{model.name}</span>
+                                                    <span className="text-slate-900 font-bold">{model.value} UNITS</span>
                                                 </div>
-                                                <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
+                                                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                                                     <div
                                                         className={`h-full ${modelColors[i] || 'bg-slate-900'} rounded-full transition-all duration-1000`}
                                                         style={{ width: `${(model.value / (data.kpis.totalSales || 1)) * 100}%` }}
@@ -397,24 +458,26 @@ const GlobalAnalytics: React.FC = () => {
                                         );
                                     })}
                                     {(!data?.modelDistribution || data.modelDistribution.length === 0) && (
-                                        <div className="py-10 text-center text-[10px] font-bold text-slate-300 uppercase tracking-widest">No Data</div>
+                                        <div className="py-10 text-center text-[10px] font-bold text-slate-300 uppercase tracking-widest">No Model Data</div>
                                     )}
                                 </div>
                             </div>
 
                             {/* Top Locations */}
-                            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm overflow-hidden">
-                                <h3 className="text-[10px] font-bold text-slate-900 uppercase tracking-widest mb-6 border-b border-slate-50 pb-2">Market Heatmap</h3>
-                                <div className="space-y-4">
+                            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
+                                    <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Market Heatmap Territory</h3>
+                                </div>
+                                <div className="p-5 space-y-3">
                                     {data?.locationDistribution?.slice(0, 5).map((loc: any, i: number) => {
-                                        const locColors = ['bg-indigo-600', 'bg-blue-600', 'bg-cyan-600', 'bg-teal-600', 'bg-emerald-600'];
+                                        const locColors = ['bg-slate-900', 'bg-blue-700', 'bg-blue-600', 'bg-blue-500', 'bg-blue-400'];
                                         return (
-                                            <div key={i} className="space-y-1.5">
-                                                <div className="flex justify-between items-center text-[10px] font-bold uppercase">
-                                                    <span className="text-slate-600 font-mono tracking-tighter">{loc.name}</span>
-                                                    <span className="text-slate-900 font-black">{loc.value}</span>
+                                            <div key={i} className="space-y-1">
+                                                <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wide">
+                                                    <span className="text-slate-600 font-mono">{loc.name}</span>
+                                                    <span className="text-slate-900 font-bold">{loc.value} UNITS</span>
                                                 </div>
-                                                <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
+                                                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                                                     <div
                                                         className={`h-full ${locColors[i] || 'bg-slate-900'} rounded-full transition-all duration-1000`}
                                                         style={{ width: `${(loc.value / (data.kpis.totalSales || 1)) * 100}%` }}
@@ -424,7 +487,7 @@ const GlobalAnalytics: React.FC = () => {
                                         );
                                     })}
                                     {(!data?.locationDistribution || data.locationDistribution.length === 0) && (
-                                        <div className="py-10 text-center text-[10px] font-bold text-slate-300 uppercase tracking-widest">No Data</div>
+                                        <div className="py-10 text-center text-[10px] font-bold text-slate-300 uppercase tracking-widest">No Location Data</div>
                                     )}
                                 </div>
                             </div>
@@ -436,19 +499,22 @@ const GlobalAnalytics: React.FC = () => {
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead>
-                                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-wider">
-                                    <th className="px-6 py-4 pl-8">Rank</th>
-                                    <th className="px-6 py-4">Dealer Unit</th>
-                                    <th className="px-6 py-4 text-center">Volume (Sales)</th>
-                                    <th className="px-6 py-4 text-center">History (Exchanges)</th>
-                                    <th className="px-6 py-4 text-right pr-6">Intelligence Score</th>
+                                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[10px] font-bold uppercase tracking-[0.12em]">
+                                    <th className="px-5 py-3 pl-8">Rank</th>
+                                    <th className="px-5 py-3">Dealer Unit / Network</th>
+                                    <th className="px-5 py-3 text-center">Sales Volume</th>
+                                    <th className="px-5 py-3 text-center">Exchange Units</th>
+                                    <th className="px-5 py-3 text-right pr-8">Performance Score</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filteredLeaderboard.map((dealer, i) => (
                                     <tr
                                         key={dealer.id}
-                                        onClick={() => setSelectedDealer(dealer)}
+                                        onClick={() => {
+                                            setSelectedDealer(dealer);
+                                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                                        }}
                                         className="group hover:bg-slate-50 transition-all duration-200 cursor-pointer border-b border-slate-50 last:border-0"
                                     >
                                         <td className="px-6 py-5 pl-8">
@@ -481,17 +547,17 @@ const GlobalAnalytics: React.FC = () => {
                                                 {dealer.totalExchanges} Units
                                             </span>
                                         </td>
-                                        <td className="px-6 py-5 text-right pr-6">
-                                            <div className="flex items-center justify-end gap-3">
+                                        <td className="px-6 py-5 text-right pr-8">
+                                            <div className="flex items-center justify-end gap-4">
                                                 <div className="flex flex-col items-end">
-                                                    <span className="text-lg font-black text-slate-900 leading-none">{dealer.score}</span>
-                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Efficiency Rating</span>
+                                                    <span className="text-xl font-black text-slate-900 leading-none">{dealer.score}</span>
+                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Efficiency Rating</span>
                                                 </div>
-                                                <div className="w-1.5 h-8 bg-slate-100 rounded-full overflow-hidden flex flex-col justify-end">
+                                                <div className="w-2 h-10 bg-slate-100 rounded-full overflow-hidden flex flex-col justify-end">
                                                     <div className={`w-full transition-all duration-700 ease-out rounded-full
-                                                        ${dealer.score > 80 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' :
-                                                            dealer.score > 50 ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)]' :
-                                                                'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'}`}
+                                                        ${dealer.score > 80 ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]' :
+                                                            dealer.score > 50 ? 'bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.4)]' :
+                                                                'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.4)]'}`}
                                                         style={{ height: `${dealer.score}%` }}>
                                                     </div>
                                                 </div>

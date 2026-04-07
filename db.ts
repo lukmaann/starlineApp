@@ -2087,7 +2087,7 @@ export class Database {
     }
     const filterClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
 
-    const dealers = await this.query<any>(`SELECT id, name, location FROM dealers ${filterClause}`, params);
+    const dealers = await this.query<any>(`SELECT * FROM dealers ${filterClause}`, params);
 
     // Performance metrics for each dealer
     const leaderboard = await Promise.all(dealers.map(async (dealer: any) => {

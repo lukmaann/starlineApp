@@ -676,41 +676,35 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 pb-20 text-slate-900">
-      {/* Header & Tabs */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 px-4 pt-4">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">Controls</h1>
-        </div>
-        <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm overflow-x-auto max-w-full">
-          <button
-            onClick={() => setCurrentTab('models')}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${currentTab === 'models' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}
-          >
-            Model Registry
-          </button>
-          <button
-            onClick={() => setCurrentTab('access')}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${currentTab === 'access' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}
-          >
-            Access Control
-          </button>
-          <button
-            onClick={() => setCurrentTab('prices')}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2 ${currentTab === 'prices' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}
-          >
-            <Tag size={16} />
-            Prices
-          </button>
-          <button
-            onClick={() => setCurrentTab('history')}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2 ${currentTab === 'history' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50'}`}
-          >
-            <Activity size={16} />
-            History
-          </button>
+    <div className="flex flex-col h-full animate-in fade-in duration-300 w-full">
+      {/* Header & Tabs - Matching Manufacturing Hub Layout */}
+      <div className="px-5 pt-0 pb-0 border-b border-slate-200 bg-white shrink-0 sticky top-0 z-10">
+        <div className="flex flex-wrap gap-8">
+            {[
+              { id: 'models', label: 'Model Registry', icon: Layers },
+              { id: 'access', label: 'Access Control', icon: Shield },
+              { id: 'prices', label: 'Pricing Registry', icon: Tag },
+              { id: 'history', label: 'Activity Log', icon: Activity }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setCurrentTab(tab.id as any)}
+                className={`pb-3 pt-4 text-sm font-bold tracking-tight transition-colors relative flex items-center gap-2.5 ${
+                  currentTab === tab.id ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <tab.icon size={16} strokeWidth={currentTab === tab.id ? 2.5 : 2} />
+                {tab.label}
+                {currentTab === tab.id && (
+                  <span className="absolute bottom-0 left-0 w-full h-[3px] bg-blue-600 rounded-t-full shadow-[0_-1px_4px_rgba(37,99,235,0.3)]" />
+                )}
+              </button>
+            ))}
         </div>
       </div>
+
+      <div className="flex-1 overflow-y-auto p-8 bg-slate-50/50">
+        <div className="max-w-7xl mx-auto space-y-8">
 
       {/* --- MODEL REGISTRY TAB --- */}
       {currentTab === 'models' && (
@@ -736,7 +730,8 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
               />
               <button
                 onClick={() => handleOpenModelWizard()}
-                className="flex items-center space-x-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10 active:scale-95 whitespace-nowrap"
+                className="flex items-center space-x-2 px-5 py-2.5 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-900/10 active:scale-95 whitespace-nowrap"
+                style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e40af 100%)' }}
               >
                 <Plus size={16} /><span>Add Model</span>
               </button>
@@ -844,7 +839,8 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
                       <button
                         onClick={handleCommitModel}
                         disabled={isActionLoading}
-                        className="px-8 py-3 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/30 flex items-center gap-2"
+                        className="px-8 py-3 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-blue-500/20 flex items-center gap-2"
+                        style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e40af 100%)' }}
                       >
                         {isActionLoading ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
                         Save Model
@@ -1257,6 +1253,8 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
         <p className="text-[10px] font-medium text-slate-400">
           Developed by <span className="font-bold text-slate-600">Lukmaann</span>
         </p>
+      </div>
+        </div>
       </div>
     </div>
   );

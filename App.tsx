@@ -11,7 +11,6 @@ import DatabaseSelector from './pages/DatabaseSelector';
 import DatabaseManagement from './pages/DatabaseManagement';
 import Batches from './pages/Batches';
 import ManufacturingHub from './factory_operations/ManufacturingHub';
-import GlobalAnalytics from './components/GlobalAnalytics';
 import ReleaseNotes from './pages/ReleaseNotes';
 import { Database } from './db';
 import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi, Lock, KeyRound, Loader2, CheckCircle2, Sparkles, RefreshCw, X } from 'lucide-react';
@@ -464,9 +463,6 @@ const App: React.FC = () => {
       case 'controls':
         return isAdmin ? <Controls active={activeTab === 'controls'} /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} onOpenDealerProfile={openDealerProfile} />;
 
-      case 'analytics':
-        return isAdmin ? <GlobalAnalytics /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} onOpenDealerProfile={openDealerProfile} />;
-
       case 'batches':
         return <Batches
           onNavigateToHub={(serial) => {
@@ -502,8 +498,6 @@ const App: React.FC = () => {
         return 'Settlements';
       case 'controls':
         return 'Settings';
-      case 'analytics':
-        return 'Analytics';
       case 'batches':
         return 'Batches';
       case 'manufacturing':
@@ -737,7 +731,7 @@ const App: React.FC = () => {
             </div>
           )}
           {isAdmin && <BackupReminderBanner activeTab={activeTab} onOpenBackup={() => navigate('backup')} />}
-          <div className="p-8 max-w-[1600px] mx-auto">
+          <div className={`${(activeTab === 'controls' || activeTab === 'manufacturing') ? 'p-0' : 'p-8'} max-w-[1600px] mx-auto h-full`}>
             {renderContent()}
           </div>
         </main>
