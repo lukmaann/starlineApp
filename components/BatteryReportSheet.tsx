@@ -390,8 +390,8 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                 {`
                     @media print {
                         @page {
-                            size: A4;
-                            margin: 12mm;
+                            size: auto;
+                            margin: 0;
                         }
                         
                         /* HIDE EVERYTHING ELSE */
@@ -433,6 +433,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                             height: auto !important;
                             overflow: visible !important;
                             margin: 0 auto !important;
+                            padding: 0 !important;
                         }
                         
                         /* Explicit print styles for the content */

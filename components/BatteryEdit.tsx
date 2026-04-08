@@ -259,20 +259,20 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
     const dealerEditLockReason = useMemo(() => {
         if (!activeAsset?.battery) return null;
 
-        const { battery, sale, replacement } = activeAsset;
-        const hasReplacementLinks = !!battery.previousBatteryId || !!battery.nextBatteryId || !!replacement;
-        const hasCommercialHistory = !!sale;
+        const { battery } = activeAsset;
+        const hasReplacementLinks = !!battery.previousBatteryId || !!battery.nextBatteryId;
+        const reflectsCustomerSale = !!battery.actualSaleDate && battery.actualSaleDate !== '';
 
         if (battery.status === BatteryStatus.RETURNED || battery.status === BatteryStatus.RETURNED_PENDING) {
             return 'Returned and pending-exchange batteries must keep their original dealer.';
         }
 
         if (hasReplacementLinks) {
-            return 'Dealer cannot be changed after this battery becomes part of a replacement chain.';
+            return 'Dealer cannot be changed for replacement-linked units.';
         }
 
-        if (hasCommercialHistory) {
-            return 'Dealer cannot be changed after the battery is sold or billed.';
+        if (reflectsCustomerSale) {
+            return 'Dealer cannot be changed after the unit is sold to a customer.';
         }
 
         if (battery.status !== BatteryStatus.MANUFACTURED && battery.status !== BatteryStatus.ACTIVE) {

@@ -39,8 +39,8 @@ const Reports: React.FC = () => {
   const COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#6366f1'];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-      <div className="flex justify-between items-center bg-white p-8 rounded-none border border-slate-200 shadow-sm">
+    <div className="space-y-8 animate-in fade-in duration-500 pb-20 print:space-y-4 print:pb-0">
+      <div className="flex justify-between items-center bg-white p-8 rounded-none border border-slate-200 shadow-sm print:p-4 print:border-b-4 print:border-slate-900">
         <div className="flex items-center space-x-5">
           <div className="bg-slate-900 p-4 rounded-none text-white shadow-xl shadow-slate-200">
             <FileText size={28} />

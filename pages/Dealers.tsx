@@ -587,6 +587,7 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
                 height: auto !important;
                 overflow: visible !important;
                 margin: 0 auto !important;
+                padding: 0 !important;
               }
 
               .no-print { display: none !important; }

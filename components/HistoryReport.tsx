@@ -21,13 +21,14 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ battery, lineage, replace
     const isExpired = battery.warrantyExpiry ? new Date() > new Date(battery.warrantyExpiry) : false;
 
     return (
-        <div className="hidden print:block p-10 font-serif text-slate-900 bg-white">
+        <div className="hidden print:block font-serif text-slate-900 bg-white">
             <style>{`
         @media print {
-          @page { size: A4; margin: 20mm; }
+          @page { size: A4; margin: 15mm; }
           .no-print { display: none !important; }
           .print:block { display: block !important; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 0; }
+          .print-area { padding: 0 !important; }
         }
       `}</style>
 

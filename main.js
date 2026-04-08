@@ -4,6 +4,24 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 const { autoUpdater } = require('electron-updater');
 
+// HARDEN CONSOLE (Prevents crash if stdout/stderr pipe is broken, especially on Mac)
+const wrapConsole = (method) => {
+    const original = console[method];
+    console[method] = (...args) => {
+        try {
+            if (original) original.apply(console, args);
+        } catch (e) {
+            if (e && e.code === 'EPIPE') return;
+            // For other errors, we don't want to swallow them unless they are stream related
+        }
+    };
+};
+['log', 'error', 'warn', 'info'].forEach(wrapConsole);
+
+// Supplemental event-based listeners
+process.stdout.on('error', (err) => { if (err && err.code === 'EPIPE') return; });
+process.stderr.on('error', (err) => { if (err && err.code === 'EPIPE') return; });
+
 let db;
 let win;
 let updaterConfigured = false;
@@ -443,9 +461,13 @@ function initDatabase(config) {
 }
 
 function closeDatabase() {
-  if (db && db.open) {
-    console.log('Closing current database connection...');
-    db.close();
+  try {
+    if (db && db.open) {
+      db.close();
+    }
+  } catch (err) {
+    // Silently ignore closure errors during refresh/restart
+  } finally {
     db = null;
   }
 }
@@ -644,7 +666,7 @@ ipcMain.handle('db-update-battery-details', (event, currentId, newId, dealerId, 
     // Use synchronous transaction for atomicity
     const updateTransaction = db.transaction(() => {
       const currentBattery = db.prepare(`
-        SELECT id, status, dealerId, previousBatteryId, nextBatteryId
+        SELECT id, status, dealerId, previousBatteryId, nextBatteryId, actualSaleDate
         FROM batteries
         WHERE id = ?
       `).get(currentId);
@@ -658,11 +680,11 @@ ipcMain.handle('db-update-battery-details', (event, currentId, newId, dealerId, 
       const dealerIsChanging = currentBattery.dealerId !== dealerId;
       if (dealerIsChanging) {
         const dealerLockedStatuses = ['RETURNED', 'RETURNED_PENDING'];
-        const hasLifecycleLinks = !!currentBattery.previousBatteryId || !!currentBattery.nextBatteryId || replacementCount > 0;
-        const hasCommercialHistory = saleCount > 0;
+        const hasLifecycleLinks = !!currentBattery.previousBatteryId || !!currentBattery.nextBatteryId;
+        const reflectsCustomerSale = !!currentBattery.actualSaleDate && currentBattery.actualSaleDate !== '';
 
-        if (dealerLockedStatuses.includes(currentBattery.status) || hasLifecycleLinks || hasCommercialHistory) {
-          throw new Error('Dealer cannot be changed for returned, sold, or replacement-linked batteries.');
+        if (dealerLockedStatuses.includes(currentBattery.status) || hasLifecycleLinks || reflectsCustomerSale) {
+          throw new Error('Dealer cannot be changed for replacement-linked or customer-sold units.');
         }
       }
 
@@ -836,17 +858,54 @@ ipcMain.handle('select-external-drive', async () => {
 });
 
 ipcMain.handle('print-or-pdf', async (event) => {
-  const window = BrowserWindow.fromWebContents(event.sender);
-  if (!window) return;
+  const senderWin = BrowserWindow.fromWebContents(event.sender);
+  if (!senderWin) return 'no_window';
 
-  // Simple print implementation
-  const printers = await window.webContents.getPrintersAsync();
-  if (printers.length > 0) {
-    window.webContents.print({ silent: false, printBackground: true });
-    return 'printed';
-  } else {
-    // PDF Fallback logic omitted for brevity, adding if requested
-    return 'no_printers';
+  try {
+    // 1. SAFE PRINTER ENUMERATION
+    let printers = [];
+    try {
+      if (senderWin.webContents.getPrintersAsync) {
+        printers = await senderWin.webContents.getPrintersAsync();
+      } else {
+        printers = senderWin.webContents.getPrinters();
+      }
+    } catch (enumError) {
+      console.error('[Print] Printer enumeration failed:', enumError);
+    }
+
+    // 2. TRIGGER PRINT DIALOG IF PRINTERS EXIST
+    if (printers && printers.length > 0) {
+      senderWin.webContents.print({ silent: false, printBackground: true });
+      return 'printed';
+    }
+
+    // 3. PDF FALLBACK
+    const result = await dialog.showSaveDialog(senderWin, {
+      title: 'Save Report as PDF',
+      defaultPath: path.join(app.getPath('downloads'), `StarlineReport_${new Date().toISOString().slice(0, 10)}.pdf`),
+      filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+    });
+
+    if (!result.canceled && result.filePath) {
+      const data = await senderWin.webContents.printToPDF({
+        printBackground: true,
+        displayHeaderFooter: false,
+        margins: {
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0
+        }
+      });
+      fs.writeFileSync(result.filePath, data);
+      return 'downloaded';
+    }
+
+    return 'cancelled';
+  } catch (err) {
+    console.error('[Print] Critical Handler Error:', err);
+    return 'error';
   }
 });
 

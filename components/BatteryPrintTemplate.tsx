@@ -147,7 +147,7 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
         <div id="battery-printable" className="w-full max-w-[210mm] mx-auto bg-white p-8 font-sans text-black">
             <style>{`
         @media print {
-          @page { size: A4; margin: 15mm; }
+          @page { size: auto; margin: 0; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .no-print { display: none !important; }
           .page-break { page-break-before: always; }
@@ -158,9 +158,10 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
             height: auto !important;
             overflow: visible !important;
             margin: 0 auto !important;
+            padding: 0 !important;
           }
           .print-page {
-            min-height: calc(297mm - 30mm);
+            min-height: calc(297mm - 35mm);
             display: flex;
             flex-direction: column;
           }
@@ -215,10 +216,6 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
                                     </div>
                                 )}
                                 <div className="text-right">
-                                    <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Page</div>
-                                    <div className="text-sm font-black text-slate-900">{pageIndex + 1} / {totalPages}</div>
-                                </div>
-                                <div className="text-right">
                                     <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total Units</div>
                                     <div className="text-xl font-black text-slate-900">{normalizedData.length}</div>
                                 </div>
@@ -257,14 +254,12 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
                                 </div>
                             ) : (
                                 <div className="mt-auto pt-6 border-t border-gray-200 flex justify-between items-center text-[8px] font-bold uppercase tracking-[0.18em] text-gray-400">
-                                    <span>Continued on next page</span>
                                     <span>Starline Enterprise</span>
                                 </div>
                             )
                         ) : (
                             <div className="mt-auto pt-2 border-t-2 border-black flex justify-between items-end text-[8px] font-bold uppercase text-gray-400">
                                 <span>Computer Generated Record</span>
-                                <span>Page {pageIndex + 1} of {totalPages}</span>
                             </div>
                         )}
                     </section>
