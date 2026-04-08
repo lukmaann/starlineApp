@@ -9,6 +9,18 @@ export interface ReleaseEntry {
 
 export const releaseNotes: ReleaseEntry[] = [
   {
+    version: 'v1.0.6',
+    date: '2026-04-08',
+    title: 'Print & Inventory Management Refinement',
+    summary: 'This update resolves critical printing layout issues and introduces flexible dealer re-assignment logic.',
+    fixes: [
+      'Professional PDF Support: Removed page counters and forced clean margins for professional document output.',
+      'Dealer Re-assignment: Enabled moving unsold stock between dealers while maintaining integrity for sold/replacement units.',
+      'Process Stability: Hardened the application against Mac-specific EPIPE crashes during high-volume logging.'
+    ],
+    areas: ['Printing', 'Scanner', 'Inventory', 'Stability']
+  },
+  {
     version: 'v1.0.4',
     date: '2026-04-06',
     title: 'Factory Operations & UI Modernization',
