@@ -62,7 +62,7 @@ const HistoryReport: React.FC<HistoryReportProps> = ({ battery, lineage, replace
                     <p>
                         <strong>2. SALE & ACTIVATION</strong><br />
                         The unit was procured by <strong>{battery.customerName || 'an unregistered customer'}</strong> {battery.customerPhone ? `(Contact: ${battery.customerPhone})` : ''} from our authorized dealer, <strong>{getDealerName(battery.dealerId)}</strong> based in {getDealterLocation(battery.dealerId)}.
-                        The transaction was recorded on <strong>{formatDate(saleDate || originalBattery?.activationDate)}</strong>, marking the official commencement of the warranty protection period.
+                        The transaction was recorded on <strong>{formatDate(saleDate || battery.actualSaleDate || (battery.previousBatteryId ? battery.activationDate : originalBattery?.activationDate))}</strong>, marking the official commencement of the warranty protection period.
                     </p>
 
                     {replacements.length > 0 ? (

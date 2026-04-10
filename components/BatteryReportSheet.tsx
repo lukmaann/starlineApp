@@ -1,8 +1,9 @@
-
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { Battery, Replacement, Dealer, BatteryStatus } from '../types';
 import { Database } from '../db';
+import { AuthSession } from '../utils/AuthSession';
+import { WarrantyCalculator } from '../utils/warrantyCalculator';
 import { formatDate } from '../utils';
 import { Printer, Calendar, ShieldCheck, History, Store, User, Zap, AlertTriangle, ArrowRightLeft, CheckCircle2, CreditCard } from 'lucide-react';
 import { Button } from './ui/button';
@@ -30,6 +31,17 @@ const BatteryReportTemplate: React.FC<{
     effectiveSaleDate?: string;
     mode: 'view' | 'print';
 }> = ({ battery, lineage, replacements, activityLogs, dealers, reportDate, isExpired, originalBattery, effectiveSaleDate, mode }) => {
+    // Centralized Warranty Logic
+    const warrantyResult = React.useMemo(() => WarrantyCalculator.calculate(battery), [battery]);
+    const lifecycleStartDate = warrantyResult.effectiveStartDate;
+    const lifecycleExpiryDate = warrantyResult.effectiveExpiryDate;
+
+    // Derived flags for UI
+    const isReplacement = !!battery.previousBatteryId;
+    const sentToShopDate = (isReplacement && originalBattery && originalBattery.id !== battery.id) 
+        ? originalBattery.activationDate 
+        : battery.activationDate;
+    const showSoldToCustomer = !!battery.activationDate && !!effectiveSaleDate;
 
     // Conditional classes based on mode
     const containerClasses = mode === 'print'
@@ -108,7 +120,7 @@ const BatteryReportTemplate: React.FC<{
                             <div className="grid grid-cols-1 divide-y divide-slate-100 text-sm sm:grid-cols-2 sm:divide-x sm:divide-y-0">
                                 <div className="px-4 py-3">
                                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Date</p>
-                                    <p className="mt-1.5 font-semibold text-slate-900">{formatDate(originalBattery?.manufactureDate)}</p>
+                                    <p className="mt-1.5 font-semibold text-slate-900">{formatDate(sentToShopDate)}</p>
                                 </div>
                                 <div className="px-4 py-3">
                                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Shop</p>
@@ -118,29 +130,28 @@ const BatteryReportTemplate: React.FC<{
                         </div>
                     </div>
 
-                    {/* Step 2: Sold to Customer */}
-                    <div className="relative print-break-avoid break-inside-avoid">
-                        <div className="absolute -left-[41px] top-1 rounded-full border-4 border-blue-200 bg-white p-1 text-blue-500">
-                            <User size={14} />
-                        </div>
-                        <div className="mb-3 flex items-center justify-between pr-2">
-                            <h4 className="text-sm font-semibold text-slate-900">Sold to customer</h4>
-                            <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-700">Sale</span>
-                        </div>
 
-                        <div className="overflow-hidden rounded-xl border border-blue-200 bg-white">
-                            <div className="grid grid-cols-1 divide-y divide-slate-100 text-sm sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-                                <div className="px-4 py-3">
-                                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Sale date</p>
-                                    <p className="mt-1.5 font-semibold text-slate-900">{formatDate(effectiveSaleDate)}</p>
-                                </div>
-                                <div className="px-4 py-3">
-                                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Expiry date</p>
-                                    <p className="mt-1.5 font-semibold text-rose-600">{formatDate(battery.warrantyExpiry)}</p>
+
+                    {showSoldToCustomer && (
+                        <div className="relative print-break-avoid break-inside-avoid">
+                            <div className="absolute -left-[41px] top-1 rounded-full border-4 border-blue-200 bg-white p-1 text-blue-500">
+                                <User size={14} />
+                            </div>
+                            <div className="mb-3 flex items-center justify-between pr-2">
+                                <h4 className="text-sm font-semibold text-slate-900">Sold to customer</h4>
+                                <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-700">Sale</span>
+                            </div>
+
+                            <div className="overflow-hidden rounded-xl border border-blue-200 bg-white">
+                                <div className="grid grid-cols-1 divide-y divide-slate-100 text-sm sm:grid-cols-1 sm:divide-x-0 sm:divide-y-0">
+                                    <div className="px-4 py-3">
+                                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Sale date</p>
+                                        <p className="mt-1.5 font-semibold text-slate-900">{formatDate(effectiveSaleDate)}</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Technical Inspections (Multiple Sessions) */}
                     {(() => {
@@ -365,8 +376,9 @@ const BatteryReportTemplate: React.FC<{
 
 const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineage, replacements, dealers, saleDate, onPrint }) => {
     const isExpired = battery.warrantyExpiry ? new Date() > new Date(battery.warrantyExpiry) : false;
+    const isReplacement = !!battery.previousBatteryId;
     const originalBattery = lineage.find(b => b.status === BatteryStatus.MANUFACTURED) || lineage[0];
-    const effectiveSaleDate = battery.actualSaleDate || originalBattery?.actualSaleDate || saleDate || originalBattery?.activationDate;
+    const effectiveSaleDate = battery.actualSaleDate || originalBattery?.actualSaleDate || (saleDate !== 'STOCK' ? saleDate : null);
     const reportDate = formatDate(new Date());
 
     // Sort replacements topologically based on lineage order (A -> B -> C)

@@ -891,12 +891,8 @@ ipcMain.handle('print-or-pdf', async (event) => {
       const data = await senderWin.webContents.printToPDF({
         printBackground: true,
         displayHeaderFooter: false,
-        margins: {
-          top: 0,
-          bottom: 0,
-          left: 0,
-          right: 0
-        }
+        preferCSSPageSize: true,
+        pageSize: 'A4'
       });
       fs.writeFileSync(result.filePath, data);
       return 'downloaded';

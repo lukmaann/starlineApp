@@ -21,9 +21,9 @@ export class WarrantyCalculator {
         const today = new Date();
 
         // Determine which date to use for warranty calculation
-        const useActualSale = battery.actualSaleDate && battery.warrantyCalculationBase === 'ACTUAL_SALE';
-        const startDate = useActualSale ? battery.actualSaleDate! : (battery.activationDate || battery.manufactureDate);
-        const calculationBase: 'ACTIVATION' | 'ACTUAL_SALE' = useActualSale ? 'ACTUAL_SALE' : 'ACTIVATION';
+        // PRIORITY: Actual Sale Date (if present) > Activation Date (Sent to Dealer) > Manufacture Date
+        const startDate = battery.actualSaleDate || battery.activationDate || battery.manufactureDate || today.toISOString().split('T')[0];
+        const calculationBase: 'ACTIVATION' | 'ACTUAL_SALE' = battery.actualSaleDate ? 'ACTUAL_SALE' : 'ACTIVATION';
 
         // Calculate expiry date
         const warrantyMonths = battery.warrantyMonths || 24;
