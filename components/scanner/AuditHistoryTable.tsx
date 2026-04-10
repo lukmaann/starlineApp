@@ -88,7 +88,7 @@ export const AuditHistoryTable: React.FC<AuditHistoryTableProps> = ({
                                     </td>
 
                                     <td className="px-6 py-5 font-bold text-slate-500 text-xs mono whitespace-nowrap">
-                                        {formatDate(item.manufactureDate)}
+                                        {formatDate(item.activationDate)}
                                     </td>
 
                                     <td className="px-6 py-5 text-xs whitespace-nowrap">

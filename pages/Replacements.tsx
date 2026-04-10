@@ -8,6 +8,7 @@ import {
   ShieldQuestion, Loader2
 } from 'lucide-react';
 import { formatDate } from '../utils';
+import { WarrantyCalculator } from '../utils/warrantyCalculator';
 import { StatusDisplay } from '../components/StatusDisplay';
 import DealerInlineSummary from '../components/DealerInlineSummary';
 
@@ -159,9 +160,9 @@ const Replacements: React.FC = () => {
       return;
     }
 
-    const isExpired = new Date() > new Date(sourceSale.warrantyExpiry);
-    if (isExpired) {
-      setValidationResult({ battery, sale, originalSale, lineage, replacements, isValid: false, blockType: 'expired', error: `Expired on ${formatDate(sourceSale.warrantyExpiry)}.` });
+    const warrantyResult = WarrantyCalculator.calculate(battery);
+    if (warrantyResult.status === 'EXPIRED') {
+      setValidationResult({ battery, sale, originalSale, lineage, replacements, isValid: false, blockType: 'expired', error: `Expired on ${formatDate(warrantyResult.effectiveExpiryDate)}.` });
       return;
     }
 
@@ -206,13 +207,10 @@ const Replacements: React.FC = () => {
 
     const sourceSale = validationResult.originalSale || validationResult.sale;
 
-    // Calculate new expiry based on soldDate
+    // Calculate new expiry based on soldDate using centralized utility
     let finalExpiry = validationResult.originalSale?.warrantyExpiry || validationResult.sale?.warrantyExpiry;
     if (formData.soldDate) {
-      const months = validationResult.battery.warrantyMonths || 24;
-      const newExp = new Date(formData.soldDate);
-      newExp.setMonth(newExp.getMonth() + months);
-      finalExpiry = newExp.toISOString().split('T')[0];
+      finalExpiry = WarrantyCalculator.calculateCorrectedExpiry(validationResult.battery, formData.soldDate);
     }
 
     await Database.addReplacement(replacement, {

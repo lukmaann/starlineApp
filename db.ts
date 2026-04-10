@@ -1009,6 +1009,107 @@ export class Database {
     }
   }
 
+  static async updateBatterySentToShopDate(id: string, sentToShopDate: string): Promise<void> {
+    const battery = await this.getBattery(id);
+    if (!battery) throw new Error('Battery not found');
+
+    const params: any[] = [sentToShopDate];
+    let sql = `UPDATE batteries SET activationDate = ?`;
+
+    // ✅ VALIDATE: activationDate must be >= manufactureDate
+    if (battery.manufactureDate && sentToShopDate < battery.manufactureDate) {
+      throw new Error(`Invalid Date: Sent to Shop date (${sentToShopDate}) cannot be before Manufactured date (${battery.manufactureDate})`);
+    }
+
+    // ✅ FORCE CONSISTENCY: actualSaleDate must be >= activationDate
+    if (battery.actualSaleDate && battery.actualSaleDate < sentToShopDate) {
+      sql += `, actualSaleDate = ?`;
+      params.push(sentToShopDate);
+      
+      // Recalculate expiry since actualSaleDate changed
+      sql += `, warrantyExpiry = date(?, '+' || warrantyMonths || ' months')`;
+      params.push(sentToShopDate);
+    } else if (!battery.actualSaleDate) {
+      // Normal activation expiry calculation
+      sql += `, warrantyExpiry = date(?, '+' || warrantyMonths || ' months')`;
+      params.push(sentToShopDate);
+    }
+
+    sql += ` WHERE id = ?`;
+    params.push(id);
+
+    await this.run(sql, params);
+
+    // ✅ SYNC STOCK SALES: Update associated auto-generated stock sales to match
+    await this.run(
+      `UPDATE sales SET saleDate = ?, warrantyStartDate = ?, 
+       warrantyExpiry = date(?, '+' || (SELECT warrantyMonths FROM batteries WHERE id = sales.batteryId) || ' months')
+       WHERE batteryId = ? AND customerPhone = 'STOCK'`,
+      [sentToShopDate, sentToShopDate, sentToShopDate, id]
+    );
+
+    // ✅ SYNC REPLACEMENTS: If this battery is a replacement unit, update the audit trail date
+    await this.run(
+      `UPDATE replacements SET replacementDate = ? WHERE newBatteryId = ?`,
+      [sentToShopDate, id]
+    );
+  }
+
+  static async moveBatteryToDealer(id: string, dealerId: string, sentToShopDate: string): Promise<void> {
+    const battery = await this.getBattery(id);
+    if (!battery) throw new Error('Battery not found');
+
+    const hasLifecycleLinks = !!battery.previousBatteryId || !!battery.nextBatteryId;
+
+    // Allow move even if actualSaleDate exists (to fix dealer assignment mistakes)
+    // but still block if it's already part of a replacement chain
+    if (
+      battery.status === BatteryStatus.RETURNED ||
+      battery.status === BatteryStatus.RETURNED_PENDING ||
+      hasLifecycleLinks ||
+      (battery.status !== BatteryStatus.MANUFACTURED && battery.status !== BatteryStatus.ACTIVE)
+    ) {
+      throw new Error('This battery is not eligible to move to another dealer.');
+    }
+
+    const params: any[] = [dealerId, sentToShopDate];
+    let sql = `UPDATE batteries SET dealerId = ?, activationDate = ?`;
+
+    // ✅ VALIDATE: activationDate must be >= manufactureDate
+    if (battery.manufactureDate && sentToShopDate < battery.manufactureDate) {
+      throw new Error(`Invalid Date: Sent to Shop date (${sentToShopDate}) cannot be before Manufactured date (${battery.manufactureDate})`);
+    }
+
+    // ✅ FORCE CONSISTENCY: actualSaleDate must be >= activationDate
+    if (battery.actualSaleDate && battery.actualSaleDate < sentToShopDate) {
+      sql += `, actualSaleDate = ?`;
+      params.push(sentToShopDate);
+    }
+
+    // Always reset expiry based on the new activation/sale date when moving dealers
+    sql += `, warrantyExpiry = date(?, '+' || warrantyMonths || ' months')`;
+    params.push(sentToShopDate);
+
+    sql += ` WHERE id = ?`;
+    params.push(id);
+
+    await this.run(sql, params);
+
+    // ✅ SYNC STOCK SALES: Update associated auto-generated stock sales to match
+    await this.run(
+      `UPDATE sales SET dealerId = ?, saleDate = ?, warrantyStartDate = ?, 
+       warrantyExpiry = date(?, '+' || (SELECT warrantyMonths FROM batteries WHERE id = sales.batteryId) || ' months')
+       WHERE batteryId = ? AND customerPhone = 'STOCK'`,
+      [dealerId, sentToShopDate, sentToShopDate, sentToShopDate, id]
+    );
+
+    // ✅ SYNC REPLACEMENTS: Keep the audit trail in sync if this unit was a replacement
+    await this.run(
+      `UPDATE replacements SET replacementDate = ?, dealerId = ? WHERE newBatteryId = ?`,
+      [sentToShopDate, dealerId, id]
+    );
+  }
+
   static async registerSale(id: string, date: string, customerName: string, customerPhone: string): Promise<void> {
     // ✅ Bug #9: Validate customer data
     const nameValidation = validateName(customerName);
@@ -1024,13 +1125,26 @@ export class Database {
     const battery = await this.getBattery(id);
     if (!battery) throw new Error('Battery not found');
 
+    // ✅ VALIDATE: Sale date cannot be before Manufactured Date
+    if (battery.manufactureDate && date < battery.manufactureDate) {
+      throw new Error(`Invalid Date: Sale date (${date}) cannot be before Manufactured date (${battery.manufactureDate})`);
+    }
+
+    // ✅ VALIDATE: Sale date cannot be before Dispatch Date
+    if (battery.activationDate && date < battery.activationDate) {
+      throw new Error(`Invalid Date: Sale date (${date}) cannot be before Sent to Shop date (${battery.activationDate})`);
+    }
+
     const expiryDate = new Date(date);
     expiryDate.setMonth(expiryDate.getMonth() + (battery.warrantyMonths || 0));
 
     await this.run(
       `UPDATE batteries SET
     status = 'ACTIVE',
-      activationDate = ?,
+      activationDate = NULL,
+      actualSaleDate = ?,
+      actualSaleDateSource = 'MANUAL_OVERRIDE',
+      warrantyCalculationBase = 'ACTUAL_SALE',
       customerName = ?,
       customerPhone = ?,
       warrantyExpiry = ?
@@ -1146,14 +1260,15 @@ export class Database {
         newExpiry.setMonth(newExpiry.getMonth() + months);
         const newExpiryStr = newExpiry.toISOString().split('T')[0];
 
+        // ✅ FIX: Use actualSaleDate for customer sales to avoid overwriting dispatch (activationDate)
         await this.run(
-          `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ?, activationDate = ?, warrantyExpiry = ? WHERE id = ? `,
+          `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ?, actualSaleDate = ?, warrantyExpiry = ? WHERE id = ? `,
           [rep.newBatteryId, meta.correctedOriginalSaleDate, newExpiryStr, rep.oldBatteryId]
         );
       } else {
         await this.run(
-          `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ?, activationDate = ? WHERE id = ? `,
-          [rep.newBatteryId, rep.replacementDate, rep.oldBatteryId]
+          `UPDATE batteries SET status = 'RETURNED', nextBatteryId = ? WHERE id = ? `,
+          [rep.newBatteryId, rep.oldBatteryId]
         );
       }
 
@@ -1572,11 +1687,10 @@ export class Database {
       this.query<any>(`
     SELECT
     r.*,
-      COALESCE(s.warrantyStartDate, b.actualSaleDate, b.activationDate) as soldDate,
+      COALESCE((SELECT saleDate FROM sales sd WHERE sd.batteryId = r.oldBatteryId AND sd.customerPhone != 'STOCK' LIMIT 1), b.actualSaleDate) as soldDate,
       b.manufactureDate as sentDate,
       b.model as batteryModel
         FROM replacements r
-        LEFT JOIN sales s ON s.batteryId = r.oldBatteryId
         LEFT JOIN batteries b ON b.id = r.oldBatteryId
         ${where}
         ORDER BY r.rowid DESC
@@ -1727,6 +1841,11 @@ export class Database {
     newExpiry.setMonth(newExpiry.getMonth() + warrantyMonths);
     const newExpiryStr = newExpiry.toISOString().split('T')[0];
 
+    // ✅ VALIDATE: actualSaleDate must be >= manufactureDate
+    if (battery.manufactureDate && actualSaleDate < battery.manufactureDate) {
+      throw new Error(`Invalid Date: Corrected sale date (${actualSaleDate}) cannot be before Manufactured date (${battery.manufactureDate})`);
+    }
+
     // ✅ Bug #6: Check if we're in grace period
     const today = new Date();
     const originalExpiry = new Date(battery.warrantyExpiry || '');
@@ -1742,10 +1861,9 @@ export class Database {
       actualSaleDateProof = ?,
       warrantyCalculationBase = 'ACTUAL_SALE',
       warrantyExpiry = ?,
-      activationDate = ?,
       gracePeriodUsed = ?
         WHERE id = ? `,
-      [actualSaleDate, source, proofPath || null, newExpiryStr, actualSaleDate,
+      [actualSaleDate, source, proofPath || null, newExpiryStr,
         isInGracePeriod ? 1 : 0, batteryId]
     );
 
@@ -1781,11 +1899,9 @@ export class Database {
           `UPDATE batteries SET
     warrantyExpiry = ?,
       actualSaleDate = ?,
-      warrantyCalculationBase = 'ACTUAL_SALE',
-      activationDate = ?
+      warrantyCalculationBase = 'ACTUAL_SALE'
         WHERE id = ? `,
-          [newReplacementExpiry.toISOString().split('T')[0], actualSaleDate,
-          replacementRecord[0].replacementDate, currentBatteryId]
+          [newReplacementExpiry.toISOString().split('T')[0], actualSaleDate, currentBatteryId]
         );
       }
 

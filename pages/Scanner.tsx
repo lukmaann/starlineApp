@@ -86,7 +86,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   const [isReplacing, setIsReplacing] = useState(false);
   const [replacementStep, setReplacementStep] = useState(1);
   const [isConfirmingReplacement, setIsConfirmingReplacement] = useState(false);
-  const [pendingAction, setPendingAction] = useState<'EXCHANGE' | 'EDIT' | null>(null);
+  const [pendingAction, setPendingAction] = useState<'EXCHANGE' | 'EDIT' | 'MOVE' | null>(null);
   const [replacementData, setReplacementData] = useState({
     newBatteryId: '',
     dealerId: dealers[0]?.id || '',
@@ -102,6 +102,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
 
   const [pendingReturnDate, setPendingReturnDate] = useState(getLocalDate());
   const [showReturnDatePicker, setShowReturnDatePicker] = useState(false);
+  const [showMoveDealer, setShowMoveDealer] = useState(false);
+  const [moveDealerData, setMoveDealerData] = useState({ dealerId: '', sentToShopDate: getLocalDate() });
 
   // Warranty Date Correction State
   const [showDateCorrection, setShowDateCorrection] = useState(false);
@@ -356,11 +358,9 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       const data = await Database.searchBattery(cleanId);
       if (data && data.battery) {
         setActiveAsset(data);
-        // Default soldDate to when battery was dispatched to dealer (activationDate)
-        // not when it was sold to customer (warrantyStartDate)
         setReplacementData(prev => ({
           ...prev,
-          soldDate: data.battery.actualSaleDate || data.battery.activationDate || '',
+          soldDate: data.battery.actualSaleDate || '',
           warrantyCardStatus: data.battery.warrantyCardStatus || 'RECEIVED'
         }));
         notify(`${cleanId} traced successfully`);
@@ -489,6 +489,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
 
       if (pendingAction === 'EDIT') {
         setShowEdit(true);
+      } else if (pendingAction === 'MOVE') {
+        setShowMoveDealer(true);
       } else {
         setIsReplacing(true);
         setReplacementStep(1);
@@ -631,6 +633,55 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     }
 
     setIsConfirmingReplacement(true);
+  };
+
+  useEffect(() => {
+    if (!activeAsset?.battery) return;
+
+    setMoveDealerData({
+      dealerId: activeAsset.battery.dealerId || dealers[0]?.id || '',
+      sentToShopDate: activeAsset.battery.activationDate || activeAsset.battery.manufactureDate || getLocalDate()
+    });
+  }, [activeAsset?.battery?.id, activeAsset?.battery?.dealerId, activeAsset?.battery?.activationDate, activeAsset?.battery?.manufactureDate, dealers]);
+
+  const handleMoveDealerSave = async () => {
+    if (!activeAsset?.battery) return;
+
+    if (!moveDealerData.dealerId) {
+      notify('Please select a dealer', 'error');
+      return;
+    }
+
+    if (!moveDealerData.sentToShopDate) {
+      notify('Please select sent to shop date', 'error');
+      return;
+    }
+
+    try {
+      await Database.moveBatteryToDealer(
+        activeAsset.battery.id,
+        moveDealerData.dealerId,
+        moveDealerData.sentToShopDate
+      );
+
+      await Database.logActivity(
+        'BATTERY_MOVE_DEALER',
+        `Moved ${activeAsset.battery.id} to another dealer`,
+        {
+          batteryId: activeAsset.battery.id,
+          previousDealerId: activeAsset.battery.dealerId || null,
+          newDealerId: moveDealerData.dealerId,
+          sentToShopDate: moveDealerData.sentToShopDate
+        }
+      );
+
+      notify('Battery moved to other dealer', 'success');
+      setShowMoveDealer(false);
+      handleSearch(activeAsset.battery.id);
+    } catch (error) {
+      console.error(error);
+      notify(error instanceof Error ? error.message : 'Failed to move battery', 'error');
+    }
   };
 
   const executeReplacement = async () => {
@@ -1012,6 +1063,171 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
             document.body
           )}
 
+          {showMoveDealer && createPortal(
+            <div
+              className="fixed inset-0 z-[120] overflow-y-auto p-4"
+              style={{
+                background: 'radial-gradient(ellipse at 60% 20%, rgba(239,246,255,0.72) 0%, rgba(15,23,42,0.42) 55%, rgba(15,23,42,0.58) 100%)'
+              }}
+            >
+              <div className="mx-auto my-6 w-full max-w-[760px] animate-in zoom-in-95 fade-in duration-300">
+                <div className="mb-6 flex flex-col items-center">
+                  <div
+                    className="mb-4 flex h-14 w-14 items-center justify-center rounded-[18px] shadow-lg"
+                    style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e40af 100%)' }}
+                  >
+                    <Store size={22} className="text-blue-300" />
+                  </div>
+                  <h3 className="text-2xl font-black tracking-tight text-slate-900">Move to other dealer</h3>
+                  <p className="mt-1.5 text-center text-sm font-medium text-slate-500">
+                    Update dealer ownership and sent-to-shop date for this battery.
+                  </p>
+                </div>
+
+                <div
+                  className="max-h-[calc(100vh-4rem)] overflow-y-auto rounded-2xl bg-white p-6"
+                  style={{ boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 20px 40px -8px rgba(0,0,0,0.08)' }}
+                >
+                  <div className="mb-5 rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3">
+                    <p className="text-[10px] font-bold text-slate-400">Battery</p>
+                    <p className="mt-1.5 text-lg font-black text-slate-900 mono">{activeAsset.battery.id}</p>
+                    <p className="text-xs font-medium text-slate-500">{activeAsset.battery.model}</p>
+                  </div>
+
+                  <div className="mb-6 rounded-2xl border border-slate-100 bg-gradient-to-br from-slate-50 to-blue-50/60 p-5">
+                    <p className="text-[10px] font-bold text-slate-400">Transfer preview</p>
+                    <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-center">
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+                        <p className="text-[10px] font-bold text-slate-400">Old dealer</p>
+                        <p className="mt-2 text-base font-black text-slate-900">
+                          {dealers.find((dealer) => dealer.id === activeAsset.battery.dealerId)?.name || 'Central'}
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-slate-500">
+                          {dealers.find((dealer) => dealer.id === activeAsset.battery.dealerId)?.location || 'No location available'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-center">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg">
+                          <ArrowRight size={18} />
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-blue-200 bg-white px-4 py-4">
+                        <p className="text-[10px] font-bold text-blue-500">New dealer</p>
+                        <p className="mt-2 text-base font-black text-slate-900">
+                          {dealers.find((dealer) => dealer.id === moveDealerData.dealerId)?.name || 'Select a dealer'}
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-slate-500">
+                          {dealers.find((dealer) => dealer.id === moveDealerData.dealerId)?.location || 'Destination details will appear here'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-600">Move to dealer</label>
+                        <select
+                          className="w-full rounded-xl bg-slate-100/80 px-4 py-3 text-sm font-medium text-slate-900 outline-none focus:bg-slate-100 focus:ring-2 focus:ring-blue-400/20 transition-all border-0"
+                          value={moveDealerData.dealerId}
+                          onChange={(e) => setMoveDealerData(prev => ({ ...prev, dealerId: e.target.value }))}
+                        >
+                          <option value="">Select dealer</option>
+                          {dealers.map((dealer) => (
+                            <option key={dealer.id} value={dealer.id}>
+                              {dealer.name} ({dealer.location})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-600">Sent to shop date</label>
+                        <input
+                          type="date"
+                          className="w-full rounded-xl bg-slate-100/80 px-4 py-3 text-sm font-medium text-slate-900 outline-none focus:bg-slate-100 focus:ring-2 focus:ring-blue-400/20 transition-all border-0"
+                          value={moveDealerData.sentToShopDate}
+                          onChange={(e) => setMoveDealerData(prev => ({ ...prev, sentToShopDate: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-5">
+                      <p className="text-[10px] font-bold text-slate-400">Selected dealer details</p>
+                      {dealers.find((dealer) => dealer.id === moveDealerData.dealerId) ? (
+                        <div className="mt-4 space-y-4">
+                          <div>
+                            <p className="text-lg font-black text-slate-900">
+                              {dealers.find((dealer) => dealer.id === moveDealerData.dealerId)?.name}
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-slate-400">
+                              {dealers.find((dealer) => dealer.id === moveDealerData.dealerId)?.id}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl bg-white px-4 py-3">
+                            <p className="text-[10px] font-bold text-slate-400">Location</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">
+                              {dealers.find((dealer) => dealer.id === moveDealerData.dealerId)?.location || 'No location'}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl bg-white px-4 py-3">
+                            <p className="text-[10px] font-bold text-slate-400">Address</p>
+                            <p className="mt-1 text-sm font-medium leading-relaxed text-slate-700">
+                              {dealers.find((dealer) => dealer.id === moveDealerData.dealerId)?.address || 'No address available'}
+                            </p>
+                          </div>
+
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-xl bg-white px-4 py-3">
+                              <p className="text-[10px] font-bold text-slate-400">Owner</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-800">
+                                {dealers.find((dealer) => dealer.id === moveDealerData.dealerId)?.ownerName || 'Not available'}
+                              </p>
+                            </div>
+                            <div className="rounded-xl bg-white px-4 py-3">
+                              <p className="text-[10px] font-bold text-slate-400">Contact</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-800">
+                                {dealers.find((dealer) => dealer.id === moveDealerData.dealerId)?.contact || 'Not available'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center">
+                          <p className="text-sm font-semibold text-slate-500">Select a dealer to review full destination details.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex gap-3">
+                    <button
+                      onClick={() => setShowMoveDealer(false)}
+                      className="px-5 py-3 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleMoveDealerSave}
+                      className="flex-1 rounded-xl py-3 text-sm font-bold text-white transition-all active:scale-[0.98]"
+                      style={{
+                        background: 'linear-gradient(135deg, #0f172a 0%, #1e40af 100%)',
+                        boxShadow: '0 4px 14px rgba(15,23,42,0.25)',
+                      }}
+                    >
+                      Move Battery
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
           <WarrantyCorrectionForm
             isExp={isExpired}
             showDateCorrection={showDateCorrection}
@@ -1057,6 +1273,14 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
                 dealerName: dealers.find(d => d.id === pendingSettlement.dealerId)?.name || 'Dealer',
                 oldBatteryId: pendingSettlement.oldBatteryId
               });
+            }}
+            onMoveDealer={() => {
+              if (AuthSession.isValid()) {
+                setShowMoveDealer(true);
+              } else {
+                setPendingAction('MOVE');
+                setIsLocked(true);
+              }
             }}
           />
 

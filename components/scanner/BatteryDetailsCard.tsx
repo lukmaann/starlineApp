@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     ShieldAlert, Calendar, Edit, FileText,
-    Activity, RefreshCw, Store, ChevronRight, MapPin, Landmark, Copy
+    Activity, RefreshCw, Store, ChevronRight, MapPin, Landmark, Copy, ArrowRightLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '../../utils';
@@ -10,6 +10,7 @@ import { StatusDisplay } from '../StatusDisplay';
 import { Sheet, SheetContent, SheetTrigger } from '../ui/sheet';
 import BatteryReportSheet from '../BatteryReportSheet';
 import { AuthSession } from '../../utils/AuthSession';
+import { WarrantyCalculator } from '../../utils/warrantyCalculator';
 
 interface BatteryDetailsCardProps {
     activeAsset: any;
@@ -19,7 +20,7 @@ interface BatteryDetailsCardProps {
     isExpired: boolean;
     showEdit: boolean;
     setShowEdit: (show: boolean) => void;
-    setPendingAction: (action: 'EXCHANGE' | 'EDIT' | null) => void;
+    setPendingAction: (action: 'EXCHANGE' | 'EDIT' | 'MOVE' | null) => void;
     setIsLocked: (locked: boolean) => void;
     handleSearch: (id: string) => void;
     handlePrintReport: () => void;
@@ -32,6 +33,7 @@ interface BatteryDetailsCardProps {
     onOpenDealers?: (dealerId: string, batteryId: string, status: BatteryStatus, isExpired: boolean) => void;
     pendingSettlement?: Replacement | null;
     onSettleHere?: () => void;
+    onMoveDealer?: () => void;
 }
 
 export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
@@ -54,21 +56,37 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
     userRole,
     onOpenDealers,
     pendingSettlement,
-    onSettleHere
+    onSettleHere,
+    onMoveDealer
 }) => {
     const isExp = isExpired;
     const isAdmin = userRole === 'ADMIN';
+    
+    // Centralized Warranty Logic
+    const warrantyResult = React.useMemo(() => WarrantyCalculator.calculate(activeAsset.battery), [activeAsset.battery]);
+    const lifecycleStartDate = warrantyResult.effectiveStartDate;
+    const lifecycleExpiryDate = new Date(warrantyResult.effectiveExpiryDate);
+
     const canInspectBattery =
         activeAsset.battery.status !== BatteryStatus.RETURNED &&
         activeAsset.battery.status !== BatteryStatus.RETURNED_PENDING;
     const dealerRecord = dealers.find(d => d.id === activeAsset.battery.dealerId);
     const dealerName = dealerRecord?.name || 'Central';
-    const expiryDate = activeAsset.battery.warrantyExpiry ? new Date(activeAsset.battery.warrantyExpiry) : null;
+    const expiryDate = lifecycleExpiryDate;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const expiryCountdownDays = expiryDate
         ? Math.ceil((new Date(expiryDate.getFullYear(), expiryDate.getMonth(), expiryDate.getDate()).getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
         : null;
+    const hasLifecycleLinks = !!activeAsset.battery.previousBatteryId || !!activeAsset.battery.nextBatteryId;
+    const reflectsCustomerSale = !!activeAsset.battery.actualSaleDate && activeAsset.battery.actualSaleDate !== '';
+    const canMoveDealer =
+        isAdmin &&
+        !hasLifecycleLinks &&
+        !reflectsCustomerSale &&
+        activeAsset.battery.status !== BatteryStatus.RETURNED &&
+        activeAsset.battery.status !== BatteryStatus.RETURNED_PENDING &&
+        (activeAsset.battery.status === BatteryStatus.MANUFACTURED || activeAsset.battery.status === BatteryStatus.ACTIVE);
     const getStatusPill = () => {
         if (isExp && activeAsset.battery.status !== BatteryStatus.MANUFACTURED) return 'bg-rose-100 text-rose-700';
         switch (activeAsset.battery.status) {
@@ -269,7 +287,7 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                                             replacements={activeAsset.replacements}
                                             activityLogs={activeAsset.activityLogs}
                                             dealers={dealers}
-                                            saleDate={activeAsset.lineageSales?.find((s: any) => s.batteryId === activeAsset.battery.id)?.saleDate}
+                                            saleDate={activeAsset.lineageSales?.find((s: any) => s.batteryId === activeAsset.battery.id && s.customerPhone !== 'STOCK')?.saleDate}
                                             onPrint={handlePrintReport}
                                         />
                                     </SheetContent>
@@ -306,12 +324,12 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                         <p className="text-sm font-semibold text-slate-700">Lifecycle</p>
                         <div className="mt-4 space-y-3">
                             <div className="flex justify-between gap-4">
-                                <span className="text-sm text-slate-500">Sold on</span>
-                                <span className="mono text-sm font-semibold text-slate-900">{formatDate(activeAsset.battery.activationDate)}</span>
+                                <span className="text-sm text-slate-500">Start date</span>
+                                <span className="mono text-sm font-semibold text-slate-900">{lifecycleStartDate ? formatDate(lifecycleStartDate) : 'Not started'}</span>
                             </div>
                             <div className="flex justify-between gap-4">
-                                <span className="text-sm text-slate-500">Expiry</span>
-                                <span className="mono text-sm font-semibold text-rose-600">{formatDate(activeAsset.battery.warrantyExpiry)}</span>
+                                <span className="text-sm text-slate-500">End date</span>
+                                <span className="mono text-sm font-semibold text-rose-600">{lifecycleExpiryDate ? formatDate(lifecycleExpiryDate.toISOString().split('T')[0]) : 'Not available'}</span>
                             </div>
                             {expiryCountdownDays !== null && (
                                 <div className="rounded-xl bg-slate-50 px-4 py-3">
@@ -380,6 +398,43 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                             </div>
                         </div>
                     </button>
+                    {isAdmin && (
+                        <button
+                            type="button"
+                            disabled={!canMoveDealer}
+                            onClick={() => {
+                                if (!canMoveDealer) return;
+                                onMoveDealer?.();
+                            }}
+                            className={`w-full rounded-2xl border px-5 py-4 text-left transition-all ${
+                                canMoveDealer
+                                    ? 'border-indigo-200 bg-indigo-50 hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-100/70'
+                                    : 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                            }`}
+                        >
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${canMoveDealer ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-400'}`}>
+                                        <ArrowRightLeft size={18} />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-slate-800">Move To Other Dealer</p>
+                                        <p className="text-xs text-slate-500">
+                                            {canMoveDealer
+                                                ? 'Change dealer ownership from a separate admin flow.'
+                                                : 'Available only for eligible unsold batteries without replacement links.'}
+                                        </p>
+                                    </div>
+                                </div>
+                                {canMoveDealer && (
+                                    <div className="flex items-center gap-1 text-sm font-semibold text-indigo-700">
+                                        <span>Open</span>
+                                        <ChevronRight size={16} />
+                                    </div>
+                                )}
+                            </div>
+                        </button>
+                    )}
                 </div>
             </div>
 

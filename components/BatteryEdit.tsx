@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Database } from '../db';
 import { scheduleUndoableAction } from '../utils/undoToast';
 import { Battery, BatteryStatus, Replacement, Sale, WarrantyCardStatus } from '../types';
 import { getLocalDate, formatDate } from '../utils';
 import {
-    Save, ShieldCheck, X, Calendar, User, Phone,
+    Save, ShieldCheck, X, User, Phone,
     CreditCard, CheckCircle2, AlertCircle, Loader2,
-    Store, Barcode, ChevronDown, History, Zap, Trash2, AlertTriangle, RotateCcw, Search, MapPin, Check
+    Store, Barcode, ChevronDown, History, Zap, Trash2, AlertTriangle, RotateCcw
 } from 'lucide-react';
 
 interface BatteryEditProps {
@@ -150,20 +150,14 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
     const [showEditConfirm, setShowEditConfirm] = useState(false);
     const [pendingChanges, setPendingChanges] = useState<{ field: string, old: string, new: string }[]>([]);
 
-    const [dealers, setDealers] = useState<any[]>([]);
     const [models, setModels] = useState<any[]>([]);
-    const [originalDealerId, setOriginalDealerId] = useState('');
-    const [dealerQuery, setDealerQuery] = useState('');
-    const [showDealerDropdown, setShowDealerDropdown] = useState(false);
-    const dealerDropdownRef = useRef<HTMLDivElement>(null);
 
     const [formData, setFormData] = useState({
         // customerName: '', // REPLACED BY DEALER SELECT
         // customerPhone: '', // REMOVED
         newBatteryId: '',
         model: '',
-        dealerId: '',
-        soldDate: '',
+        sentToShopDate: '',
         // Replacement specific fields
         settlementMethod: 'CREDIT' as 'CREDIT' | 'STOCK' | 'DIRECT',
         paidInAccount: false,
@@ -177,18 +171,15 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         const loadData = async () => {
             setIsLoading(true);
             try {
-                const [data, allDealers, allModels] = await Promise.all([
+                const [data, , allModels] = await Promise.all([
                     Database.searchBattery(batteryId),
                     Database.getAll<{ id: string, name: string, location: string }>('dealers'),
                     Database.getAll<{ id: string, name: string }>('models')
                 ]);
-
-                setDealers(allDealers);
                 setModels(allModels);
 
                 if (data && data.battery) {
                     const incomingReplacement = data.replacements.find(r => r.newBatteryId === batteryId);
-                    const saleRecord = data.sale || data.originalSale;
 
                     setActiveAsset({
                         battery: data.battery,
@@ -197,14 +188,10 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                         replacement: incomingReplacement
                     });
 
-                    setOriginalDealerId(data.battery.dealerId || '');
-
                     setFormData({
                         newBatteryId: data.battery.id,
                         model: data.battery.model,
-                        dealerId: data.battery.dealerId || saleRecord?.dealerId || (allDealers.length > 0 ? allDealers[0].id : ''),
-                        soldDate: data.battery.actualSaleDate || saleRecord?.warrantyStartDate || data.battery.activationDate || '',
-
+                        sentToShopDate: data.battery.activationDate || data.battery.manufactureDate || getLocalDate(),
                         settlementMethod: (incomingReplacement?.settlementType as any) || 'CREDIT',
                         paidInAccount: incomingReplacement?.paidInAccount || false,
                         replenishmentBatteryId: incomingReplacement?.replenishmentBatteryId || '',
@@ -221,80 +208,15 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         };
         loadData();
     }, [batteryId]);
-
-    useEffect(() => {
-        const selectedDealer = dealers.find((dealer) => dealer.id === formData.dealerId);
-        setDealerQuery(selectedDealer?.name || '');
-    }, [formData.dealerId, dealers]);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (dealerDropdownRef.current && !dealerDropdownRef.current.contains(event.target as Node)) {
-                setShowDealerDropdown(false);
-                const selectedDealer = dealers.find((dealer) => dealer.id === formData.dealerId);
-                setDealerQuery(selectedDealer?.name || '');
-            }
-        };
-
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [dealers, formData.dealerId]);
-
-    const selectedDealer = useMemo(
-        () => dealers.find((dealer) => dealer.id === formData.dealerId),
-        [dealers, formData.dealerId]
-    );
-
-    const filteredDealers = useMemo(() => {
-        const query = dealerQuery.trim().toLowerCase();
-        if (!query) return dealers;
-
-        return dealers.filter((dealer) =>
-            dealer.name?.toLowerCase().includes(query) ||
-            dealer.location?.toLowerCase().includes(query) ||
-            dealer.id?.toLowerCase().includes(query)
-        );
-    }, [dealerQuery, dealers]);
-
-    const dealerEditLockReason = useMemo(() => {
-        if (!activeAsset?.battery) return null;
-
-        const { battery } = activeAsset;
-        const hasReplacementLinks = !!battery.previousBatteryId || !!battery.nextBatteryId;
-        const reflectsCustomerSale = !!battery.actualSaleDate && battery.actualSaleDate !== '';
-
-        if (battery.status === BatteryStatus.RETURNED || battery.status === BatteryStatus.RETURNED_PENDING) {
-            return 'Returned and pending-exchange batteries must keep their original dealer.';
-        }
-
-        if (hasReplacementLinks) {
-            return 'Dealer cannot be changed for replacement-linked units.';
-        }
-
-        if (reflectsCustomerSale) {
-            return 'Dealer cannot be changed after the unit is sold to a customer.';
-        }
-
-        if (battery.status !== BatteryStatus.MANUFACTURED && battery.status !== BatteryStatus.ACTIVE) {
-            return `Dealer change is locked for ${battery.status} batteries.`;
-        }
-
-        return null;
-    }, [activeAsset]);
-
-    const canEditDealer = !dealerEditLockReason;
-    const originalSoldDate = activeAsset?.sale?.warrantyStartDate || activeAsset?.battery.actualSaleDate || activeAsset?.battery.activationDate || '';
-    const soldDateChanged = originalSoldDate !== formData.soldDate;
+    const originalSentToShopDate = activeAsset?.battery.activationDate || activeAsset?.battery.manufactureDate || '';
+    const sentToShopDateChanged = originalSentToShopDate !== formData.sentToShopDate;
 
     const getChanges = () => {
         const changes: { field: string, old: string, new: string }[] = [];
         if (!activeAsset) return changes;
 
-        // Check Dealer
-        const currentDealer = dealers.find(d => d.id === activeAsset.battery.dealerId)?.name || 'None';
-        const newDealer = dealers.find(d => d.id === formData.dealerId)?.name || 'None';
-        if (canEditDealer && activeAsset.battery.dealerId !== formData.dealerId) {
-            changes.push({ field: 'Assigned Dealer', old: currentDealer, new: newDealer });
+        if (sentToShopDateChanged) {
+            changes.push({ field: 'Sent To Shop Date', old: originalSentToShopDate || '(empty)', new: formData.sentToShopDate || '(empty)' });
         }
 
         // Check Model
@@ -303,10 +225,6 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         }
 
         // Check Sale Date
-        if (soldDateChanged) {
-            changes.push({ field: 'Sale/Warranty Date', old: originalSoldDate || '(empty)', new: formData.soldDate || '(empty)' });
-        }
-
         // Check Replacements Fields (if applicable)
         if (activeAsset.replacement) {
             if (activeAsset.replacement.settlementType !== formData.settlementMethod) {
@@ -335,15 +253,23 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
     const handleSaveClick = () => {
         if (!activeAsset) return;
 
-        if (!canEditDealer && activeAsset.battery.dealerId !== formData.dealerId) {
-            alert(dealerEditLockReason);
-            setFormData(prev => ({ ...prev, dealerId: activeAsset.battery.dealerId || '' }));
+        if (!formData.sentToShopDate) {
+            alert('Sent to shop date is required.');
             return;
         }
 
-        if (soldDateChanged && !formData.soldDate) {
-            alert('Sale/Warranty date is required.');
+        // ✅ CRITICAL VALIDATION: Dispatch date cannot be before Manufacture Date
+        if (activeAsset.battery.manufactureDate && formData.sentToShopDate < activeAsset.battery.manufactureDate) {
+            alert(`This battery was manufactured on ${formatDate(activeAsset.battery.manufactureDate)} and you are trying to re-assign the date before it is manufactured. This is not allowed. If you really want to change the date, you have to delete this record and reassign it in the batch processing option which will batch process that.`);
             return;
+        }
+
+        // ✅ LOGIC CHECK: Warn user if sale date will be adjusted forward
+        if (activeAsset.battery.actualSaleDate && activeAsset.battery.actualSaleDate < formData.sentToShopDate) {
+            const confirmed = window.confirm(
+                `The new Dispatch Date (${formData.sentToShopDate}) is AFTER the recorded Customer Sale Date (${activeAsset.battery.actualSaleDate}). \n\nThe Customer Sale Date will be automatically moved forward to ${formData.sentToShopDate} to maintain consistency. Proceed?`
+            );
+            if (!confirmed) return;
         }
 
         if (activeAsset.replacement) {
@@ -379,18 +305,15 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                 await Database.updateBatteryDetails(
                     batteryId,
                     batteryId, // ID unchanged
-                    canEditDealer ? formData.dealerId : (activeAsset.battery.dealerId || ''),
+                    activeAsset.battery.dealerId || '',
                     formData.model
                 );
             }
 
-            if (soldDateChanged && formData.soldDate && activeAsset?.battery) {
-                await Database.correctSaleDate(
+            if (sentToShopDateChanged && formData.sentToShopDate && activeAsset?.battery) {
+                await Database.updateBatterySentToShopDate(
                     batteryId,
-                    formData.soldDate,
-                    'WARRANTY_CARD',
-                    undefined,
-                    'Manual Correction via Edit Page'
+                    formData.sentToShopDate
                 );
             }
 
@@ -429,8 +352,7 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
             if (pendingChanges.length > 0) {
                 await Database.logActivity('BATTERY_EDIT', `Edited ${batteryId}: ${pendingChanges.map(c => c.field).join(', ')}`, {
                     batteryId,
-                    dealerId: formData.dealerId,
-                    dealerName: dealers.find(d => d.id === formData.dealerId)?.name,
+                    dealerId: activeAsset?.battery?.dealerId,
                     changes: pendingChanges
                 });
             }
@@ -505,9 +427,6 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                             <>
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Origin Source</p>
                                 <p className="text-xl font-black text-slate-700/50 uppercase">Original Sale / Stock</p>
-                                <div className="mt-2 text-[10px] font-bold text-slate-400 uppercase">
-                                    Manufactured: <span className="mono text-slate-600">{formatDate(activeAsset?.battery.manufactureDate)}</span>
-                                </div>
                             </>
                         )}
                         <div className="absolute right-4 bottom-4 opacity-5 pointer-events-none">
@@ -532,130 +451,7 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                 <div className="space-y-8">
 
                     {/* 1. Details Grid */}
-                    {/* 1. Details Grid - EDITED FOR DEALER/ID */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Assigned Dealer</label>
-                            <div ref={dealerDropdownRef} className="relative">
-                                <div className={`rounded-xl border bg-slate-50 transition-all overflow-hidden ${canEditDealer && showDealerDropdown ? 'border-blue-400 ring-4 ring-blue-500/10 bg-white shadow-lg' : 'border-slate-200'} ${canEditDealer ? 'hover:border-slate-300' : 'opacity-75'}`}>
-                                    <div className="flex items-center gap-3 px-4 pt-3">
-                                        <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-blue-600 shrink-0">
-                                            <Store size={16} />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Dealer</p>
-                                            <p className="text-[11px] font-semibold text-slate-500 truncate">
-                                                {selectedDealer ? `${selectedDealer.id} • ${selectedDealer.location}` : 'Search by dealer, city, or id'}
-                                            </p>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            disabled={!canEditDealer}
-                                            onClick={() => {
-                                                if (!canEditDealer) return;
-                                                setShowDealerDropdown(prev => {
-                                                    const next = !prev;
-                                                    if (next) {
-                                                        setDealerQuery('');
-                                                    } else {
-                                                        setDealerQuery(selectedDealer?.name || '');
-                                                    }
-                                                    return next;
-                                                });
-                                            }}
-                                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                            <ChevronDown size={16} className={`transition-transform ${showDealerDropdown ? 'rotate-180' : ''}`} />
-                                        </button>
-                                    </div>
-
-                                    <div className="relative px-4 pb-3 pt-2.5">
-                                        <Search className="absolute left-7 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                                        <input
-                                            value={dealerQuery}
-                                            readOnly={!canEditDealer}
-                                            onFocus={() => canEditDealer && setShowDealerDropdown(true)}
-                                            onChange={(e) => {
-                                                if (!canEditDealer) return;
-                                                setDealerQuery(e.target.value);
-                                                setShowDealerDropdown(true);
-                                            }}
-                                            placeholder={canEditDealer ? "Search dealer..." : "Dealer locked for this battery"}
-                                            className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-9 py-2.5 text-[13px] font-bold uppercase tracking-wide text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 read-only:bg-slate-100 read-only:text-slate-500"
-                                        />
-                                        {selectedDealer && canEditDealer && (
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setFormData({ ...formData, dealerId: '' });
-                                                    setDealerQuery('');
-                                                    setShowDealerDropdown(true);
-                                                }}
-                                                className="absolute right-6 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all"
-                                                title="Clear dealer"
-                                            >
-                                                <X size={12} />
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {showDealerDropdown && (
-                                    <div className="absolute z-50 left-0 right-0 mt-2 rounded-xl border border-slate-200 bg-white shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)] overflow-hidden">
-                                        <div className="max-h-[280px] overflow-y-auto p-2">
-                                            {filteredDealers.length > 0 ? filteredDealers.map((dealer) => (
-                                                <button
-                                                    key={dealer.id}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setFormData({ ...formData, dealerId: dealer.id });
-                                                        setDealerQuery(dealer.name);
-                                                        setShowDealerDropdown(false);
-                                                    }}
-                                                    className={`w-full text-left rounded-lg px-3 py-2.5 transition-all border ${formData.dealerId === dealer.id
-                                                        ? 'bg-blue-50 border-blue-200 shadow-sm'
-                                                        : 'border-transparent hover:bg-slate-50'
-                                                        }`}
-                                                >
-                                                    <div className="flex items-start justify-between gap-3">
-                                                        <div className="min-w-0">
-                                                            <p className="text-[13px] font-black uppercase text-slate-900 truncate">{dealer.name}</p>
-                                                            <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-semibold text-slate-500">
-                                                                <MapPin size={11} className="shrink-0" />
-                                                                <span className="truncate">{dealer.location || 'No location'}</span>
-                                                            </div>
-                                                            <p className="mt-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">{dealer.id}</p>
-                                                        </div>
-                                                        {formData.dealerId === dealer.id && (
-                                                            <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 mt-0.5">
-                                                                <Check size={12} />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </button>
-                                            )) : (
-                                                <div className="px-4 py-8 text-center">
-                                                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">No dealers found</p>
-                                                    <p className="mt-1 text-xs font-medium text-slate-500">Try another dealer name, city, or id.</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            {dealerEditLockReason ? (
-                                <p className="text-[10px] font-bold text-slate-500 px-2">
-                                    <AlertTriangle size={10} className="inline mr-1" />
-                                    {dealerEditLockReason}
-                                </p>
-                            ) : formData.dealerId !== originalDealerId && (
-                                <p className="text-[10px] font-bold text-amber-600 px-2 animate-pulse">
-                                    <AlertTriangle size={10} className="inline mr-1" />
-                                    Changing dealer will update ownership for this unit and its history steps.
-                                </p>
-                            )}
-                        </div>
-
+                    <div className="grid grid-cols-1 gap-8">
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Battery Model</label>
                             <div className="relative">
@@ -671,31 +467,27 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                                 <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
                             </div>
                         </div>
-
                     </div>
 
-                    {/* 2. Sale Date / Warranty Start - CRITICAL */}
-                    <div className="p-6 bg-amber-50 rounded-2xl border-2 border-amber-100 space-y-4 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><Calendar size={100} /></div>
+                    <div className="p-6 bg-blue-50 rounded-2xl border-2 border-blue-100 space-y-4 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><Store size={100} /></div>
 
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-amber-100 rounded-lg text-amber-600"><Calendar size={20} /></div>
-                            <h4 className="text-sm font-black text-amber-900 uppercase tracking-wide">
-                                {activeAsset?.replacement ? 'Warranty Continuation Date' : 'Original Sale Date'}
-                            </h4>
+                            <div className="p-2 bg-blue-100 rounded-lg text-blue-600"><Store size={20} /></div>
+                            <h4 className="text-sm font-black text-blue-900 uppercase tracking-wide">Sent To Shop Date</h4>
                         </div>
 
                         <div className="space-y-2 relative z-10">
-                            <label className="text-[10px] font-bold text-amber-700  ml-1 uppercase tracking-widest">Effective Date</label>
+                            <label className="text-[10px] font-bold text-blue-700 ml-1 uppercase tracking-widest">Dispatch Date</label>
                             <input
                                 type="date"
-                                className="w-full px-6 py-4 bg-white border-2 border-amber-200 rounded-xl outline-none font-black text-xl text-slate-900 focus:border-amber-500 focus:shadow-lg focus:shadow-amber-500/10 transition-all"
-                                value={formData.soldDate}
-                                onChange={(e) => setFormData({ ...formData, soldDate: e.target.value })}
+                                className="w-full px-6 py-4 bg-white border-2 border-blue-200 rounded-xl outline-none font-black text-xl text-slate-900 focus:border-blue-500 focus:shadow-lg focus:shadow-blue-500/10 transition-all"
+                                value={formData.sentToShopDate}
+                                onChange={(e) => setFormData({ ...formData, sentToShopDate: e.target.value })}
                             />
-                            <p className="text-[10px] text-amber-800 font-bold mt-2 flex items-center gap-2">
+                            <p className="text-[10px] text-blue-800 font-bold mt-2 flex items-center gap-2">
                                 <AlertCircle size={12} />
-                                Only changed dates are recalculated for this battery chain.
+                                This is the date the battery was sent to the dealer shop.
                             </p>
                         </div>
                     </div>

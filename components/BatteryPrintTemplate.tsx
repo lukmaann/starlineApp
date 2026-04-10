@@ -38,32 +38,19 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
     const safeDealerName = dealerName || 'Unknown Dealer';
     const safeDealerId = dealerId || 'N/A';
     const safeReportDate = formatDate(date || new Date());
-    const rowsPerPageByType: Record<NonNullable<BatteryPrintTemplateProps['tableType']>, number> = {
-        ACTIVE: 28,
-        EXPIRED: 28,
-        EXCHANGES: 18,
-        RETURNED: 24,
-        BATCH: 30
-    };
-    const rowsPerPage = rowsPerPageByType[tableType];
     const normalizedData = Array.isArray(data) ? data : [];
-    const paginatedRows = normalizedData.length > 0
-        ? Array.from({ length: Math.ceil(normalizedData.length / rowsPerPage) }, (_, index) =>
-            normalizedData.slice(index * rowsPerPage, (index + 1) * rowsPerPage)
-        )
-        : [[]];
-    const totalPages = paginatedRows.length;
     const renderEmptyState = normalizedData.length === 0;
 
     const renderTableHeader = () => {
         if (tableType === 'EXCHANGES') {
             return (
                 <tr>
-                    <th className="py-2 px-2 border border-gray-300 font-extrabold uppercase tracking-wider w-[18%]">Old Unit</th>
-                    <th className="py-2 px-2 border border-gray-300 font-extrabold uppercase tracking-wider text-center w-[18%]">Dates</th>
+                    <th className="py-2 px-2 border border-gray-300 font-extrabold uppercase tracking-wider text-center w-[8%]">No.</th>
+                    <th className="py-2 px-2 border border-gray-300 font-extrabold uppercase tracking-wider w-[16%]">Old Unit</th>
+                    <th className="py-2 px-2 border border-gray-300 font-extrabold uppercase tracking-wider text-center w-[16%]">Dates</th>
                     <th className="py-2 px-2 border border-gray-300 font-extrabold uppercase tracking-wider w-[14%]">Replacement</th>
-                    <th className="py-2 px-2 border border-gray-300 font-extrabold uppercase tracking-wider w-[18%]">New Unit</th>
-                    <th className="py-2 px-2 border border-gray-300 font-extrabold uppercase tracking-wider w-[32%]">Settlement details</th>
+                    <th className="py-2 px-2 border border-gray-300 font-extrabold uppercase tracking-wider w-[16%]">New Unit</th>
+                    <th className="py-2 px-2 border border-gray-300 font-extrabold uppercase tracking-wider w-[30%]">Settlement details</th>
                 </tr>
             );
         }
@@ -71,26 +58,31 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
         if (tableType === 'BATCH') {
             return (
                 <tr>
+                    <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-gray-700 text-center w-[10%]">No.</th>
                     <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-gray-700 w-[35%]">Battery Serial Number</th>
-                    <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-gray-700 w-[30%]">Battery Model</th>
-                    <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-gray-700 text-right w-[35%]">Sent to Dealer</th>
+                    <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-gray-700 w-[25%]">Battery Model</th>
+                    <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-gray-700 text-right w-[30%]">Sent to Dealer</th>
                 </tr>
             );
         }
 
         return (
             <tr>
-                <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider w-1/3">Serial Number</th>
-                <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider w-1/3">Battery Model</th>
-                <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-right w-1/3">Sold to Dealer</th>
+                <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-center w-[10%]">No.</th>
+                <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider w-[40%]">Serial Number</th>
+                <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider w-[22%]">Battery Model</th>
+                <th className="py-2 px-3 border border-gray-300 font-extrabold uppercase tracking-wider text-right w-[28%]">Sold to Dealer</th>
             </tr>
         );
     };
 
     const renderTableRow = (item: any, idx: number) => {
+        const rowNumber = idx + 1;
+
         if (tableType === 'EXCHANGES') {
             return (
                 <tr key={`${item?.oldBatteryId || 'exchange'}-${idx}`} className="avoid-break">
+                    <td className="py-1.5 px-2 border border-gray-300 align-top text-center font-black text-[9px] text-black">{rowNumber}</td>
                     <td className="py-1.5 px-2 border border-gray-300 align-top">
                         <div className="font-bold text-black text-[10px] break-all">{item?.oldBatteryId || 'N/A'}</div>
                         <div className="text-[8px] text-gray-600 uppercase font-semibold tracking-wide break-words">{item?.batteryModel || 'Unknown Model'}</div>
@@ -123,6 +115,7 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
         if (tableType === 'BATCH') {
             return (
                 <tr key={`${item?.id || 'batch'}-${idx}`} className="avoid-break">
+                    <td className="py-1.5 px-3 border border-gray-300 text-center font-black text-[9px] text-black">{rowNumber}</td>
                     <td className="py-1.5 px-3 border border-gray-300 font-mono font-bold text-[9px] text-black break-all">{item?.id || 'N/A'}</td>
                     <td className="py-1.5 px-3 border border-gray-300 font-semibold text-gray-900 text-[9px] uppercase break-words">{item?.model || 'Unknown Model'}</td>
                     <td className="py-1.5 px-3 border border-gray-300 font-black text-black text-[9px] text-right">
@@ -134,6 +127,7 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
 
         return (
             <tr key={`${item?.id || 'default'}-${idx}`} className="avoid-break">
+                <td className="py-1.5 px-3 border border-gray-300 align-top text-center font-black text-[10px] text-black">{rowNumber}</td>
                 <td className="py-1.5 px-3 border border-gray-300 align-top font-bold text-black mono text-[10px] break-all">{item?.id || 'N/A'}</td>
                 <td className="py-1.5 px-3 border border-gray-300 align-top font-semibold text-gray-700 break-words">{item?.model || 'Unknown Model'}</td>
                 <td className="py-1.5 px-3 border border-gray-300 align-top font-medium text-black text-right">
@@ -144,13 +138,17 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
     };
 
     return (
-        <div id="battery-printable" className="w-full max-w-[210mm] mx-auto bg-white p-8 font-sans text-black">
+        <div id="battery-printable" className="w-full max-w-[190mm] mx-auto bg-white px-[12mm] py-[10mm] font-sans text-black">
             <style>{`
         @media print {
-          @page { size: auto; margin: 0; }
+          @page { size: A4 portrait; margin: 10mm 12mm; }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+          }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .no-print { display: none !important; }
-          .page-break { page-break-before: always; }
           .avoid-break { page-break-inside: avoid; }
           #battery-printable {
             width: 100% !important;
@@ -159,15 +157,6 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
             overflow: visible !important;
             margin: 0 auto !important;
             padding: 0 !important;
-          }
-          .print-page {
-            min-height: calc(297mm - 35mm);
-            display: flex;
-            flex-direction: column;
-          }
-          .print-page + .print-page {
-            page-break-before: always;
-            break-before: page;
           }
           table {
             width: 100% !important;
@@ -188,83 +177,61 @@ const BatteryPrintTemplate: React.FC<BatteryPrintTemplateProps> = ({
           }
         }
       `}</style>
-
-            {paginatedRows.map((rows, pageIndex) => {
-                const isLastPage = pageIndex === totalPages - 1;
-
-                return (
-                    <section key={`page-${pageIndex}`} className="print-page">
-                        <div className="border-b border-gray-300 pb-6 mb-6">
-                            <div className="mb-4">
-                                <h1 className="text-4xl font-black uppercase tracking-tight mb-1 break-words">{safeDealerName}</h1>
-                                <div className="text-[9px] font-bold text-gray-600 uppercase tracking-wide mb-2">Dealer ID: {safeDealerId}</div>
-                                <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                                    {(reportType === 'batch' && !dateLabel) ? 'Batch Assignment Receipt' : reportTitle}
-                                </div>
-                            </div>
-                            <div className="flex justify-between items-end gap-4">
-                                <div>
-                                    <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">
-                                        {dateLabel || (reportType === 'batch' ? 'Processed Date' : 'Report Date')}
-                                    </div>
-                                    <div className="text-sm font-bold">{safeReportDate}</div>
-                                </div>
-                                {dateRange && (
-                                    <div className="text-center">
-                                        <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date Range</div>
-                                        <div className="text-[10px] font-bold uppercase break-words">{dateRange}</div>
-                                    </div>
-                                )}
-                                <div className="text-right">
-                                    <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total Units</div>
-                                    <div className="text-xl font-black text-slate-900">{normalizedData.length}</div>
-                                </div>
-                            </div>
+            <div className="border-b border-gray-300 pb-6 mb-6">
+                <div className="mb-4">
+                    <h1 className="text-4xl font-black uppercase tracking-tight mb-1 break-words">{safeDealerName}</h1>
+                    <div className="text-[9px] font-bold text-gray-600 uppercase tracking-wide mb-2">Dealer ID: {safeDealerId}</div>
+                    <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                        {(reportType === 'batch' && !dateLabel) ? 'Batch Assignment Receipt' : reportTitle}
+                    </div>
+                </div>
+                <div className="flex justify-between items-end gap-4">
+                    <div>
+                        <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">
+                            {dateLabel || (reportType === 'batch' ? 'Processed Date' : 'Report Date')}
                         </div>
+                        <div className="text-sm font-bold">{safeReportDate}</div>
+                    </div>
+                    {dateRange && (
+                        <div className="text-center">
+                            <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date Range</div>
+                            <div className="text-[10px] font-bold uppercase break-words">{dateRange}</div>
+                        </div>
+                    )}
+                    <div className="text-right">
+                        <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total Units</div>
+                        <div className="text-xl font-black text-slate-900">{normalizedData.length}</div>
+                    </div>
+                </div>
+            </div>
 
-                        <table className="w-full text-left text-[10px] text-black border-collapse border border-gray-300 mb-8">
-                            <thead className="bg-gray-100">
-                                {renderTableHeader()}
-                            </thead>
-                            <tbody>
-                                {renderEmptyState ? (
-                                    <tr>
-                                        <td
-                                            colSpan={tableType === 'EXCHANGES' ? 5 : 3}
-                                            className="py-8 px-4 border border-gray-300 text-center font-bold uppercase tracking-widest text-gray-500"
-                                        >
-                                            No records available for this report
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    rows.map((item, idx) => renderTableRow(item, pageIndex * rowsPerPage + idx))
-                                )}
-                            </tbody>
-                        </table>
+            <table className="w-full text-left text-[10px] text-black border-collapse border border-gray-300 mb-8">
+                <thead className="bg-gray-100">
+                    {renderTableHeader()}
+                </thead>
+                <tbody>
+                    {renderEmptyState ? (
+                        <tr>
+                            <td
+                                colSpan={tableType === 'EXCHANGES' ? 6 : 4}
+                                className="py-8 px-4 border border-gray-300 text-center font-bold uppercase tracking-widest text-gray-500"
+                            >
+                                No records available for this report
+                            </td>
+                        </tr>
+                    ) : (
+                        normalizedData.map((item, idx) => renderTableRow(item, idx))
+                    )}
+                </tbody>
+            </table>
 
-                        {reportType === 'batch' ? (
-                            isLastPage ? (
-                                <div className="mt-auto flex justify-between items-end border-t border-gray-300 pt-6 gap-6">
-                                    <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-gray-400">
-                                        Computer generated batch receipt
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-[10px] font-bold text-gray-700 uppercase tracking-widest mb-12">Factory Stamp and Signature</div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="mt-auto pt-6 border-t border-gray-200 flex justify-between items-center text-[8px] font-bold uppercase tracking-[0.18em] text-gray-400">
-                                    <span>Starline Enterprise</span>
-                                </div>
-                            )
-                        ) : (
-                            <div className="mt-auto pt-2 border-t-2 border-black flex justify-between items-end text-[8px] font-bold uppercase text-gray-400">
-                                <span>Computer Generated Record</span>
-                            </div>
-                        )}
-                    </section>
-                );
-            })}
+            {reportType === 'batch' && (
+                <div className="pt-6">
+                    <div className="text-right">
+                        <div className="text-[10px] font-bold text-gray-700 uppercase tracking-widest mb-12">Factory Stamp and Signature</div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
