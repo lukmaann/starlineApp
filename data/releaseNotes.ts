@@ -9,6 +9,18 @@ export interface ReleaseEntry {
 
 export const releaseNotes: ReleaseEntry[] = [
   {
+    version: 'v1.0.7',
+    date: '2026-04-10',
+    title: 'Unified Warranty & Lifespan Logic',
+    summary: 'This release synchronizes the warranty calculation logic across the entire enterprise network, ensuring customer-retailer transparency.',
+    fixes: [
+      'Unified Lifespan Priority: Handover/Sale date now correctly takes precedence over dispatch dates for all 18/24-month calculations.',
+      'Total Sync: The Scanner screen and the official Battery Reports now use the exact same calculation engine.',
+      'Audit Consistency: The replacement issuance flow has been hardened to preserve original sale dates across the entire unit lifecycle.'
+    ],
+    areas: ['Warranty', 'Scanner', 'Reports', 'Database']
+  },
+  {
     version: 'v1.0.6',
     date: '2026-04-08',
     title: 'Print & Inventory Management Refinement',

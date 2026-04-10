@@ -1,6 +1,6 @@
 {
   "name": "starline-enterprise-registry",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Professional hardware-driven warranty management system for Starline Batteries.",
   "main": "main.js",
   "scripts": {
