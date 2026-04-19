@@ -132,10 +132,8 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab, userRo
       </button>
 
         <div className={`pt-7 pb-2 transition-all duration-300 ${isCollapsed ? 'px-3' : 'px-5'}`}>
-        <button
-          onClick={() => setActiveTab('release-notes')}
-          className={`flex items-center mb-7 h-8 w-full rounded-xl transition-all duration-300 hover:bg-slate-50 ${isCollapsed ? 'justify-center px-0' : 'space-x-2.5 px-2'}`}
-          title="Open Release Notes"
+        <div
+          className={`flex items-center mb-7 h-8 w-full rounded-xl transition-all duration-300 ${isCollapsed ? 'justify-center px-0' : 'space-x-2.5 px-2'}`}
         >
           <div className="bg-slate-900 p-1.5 rounded-md text-white shadow-sm shrink-0 flex items-center justify-center">
             <Zap size={16} fill="currentColor" className={isCollapsed ? "opacity-90" : ""} />
@@ -146,7 +144,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab, userRo
               <p className="text-[9px] font-medium text-slate-500 tracking-wider mt-0.5 uppercase">Enterprise</p>
             </div>
           )}
-        </button>
+        </div>
 
         <div className="space-y-0.5 mt-4">
           {!isCollapsed && (

@@ -694,9 +694,22 @@ ipcMain.handle('db-update-battery-details', (event, currentId, newId, dealerId, 
         if (check) throw new Error(`Battery ID ${newId} already exists.`);
       }
 
+      let nextModelValue = model;
+      if (model) {
+        const matchedModel = db.prepare(
+          `SELECT id FROM models WHERE name = ? OR id = ? LIMIT 1`
+        ).get(model, model);
+        nextModelValue = matchedModel?.id || model;
+      }
+
       // 2. Update Batteries Table
       if (model) {
-        db.prepare(`UPDATE batteries SET id = ?, dealerId = ?, model = ? WHERE id = ?`).run(newId, dealerId, model, currentId);
+        db.prepare(`UPDATE batteries SET id = ?, dealerId = ?, model = ? WHERE id = ?`).run(
+          newId,
+          dealerId,
+          nextModelValue,
+          currentId
+        );
       } else {
         db.prepare(`UPDATE batteries SET id = ?, dealerId = ? WHERE id = ?`).run(newId, dealerId, currentId);
       }

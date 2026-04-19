@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Database } from '../db';
 import { scheduleUndoableAction } from '../utils/undoToast';
-import { Battery, BatteryStatus, Replacement, Sale, WarrantyCardStatus } from '../types';
+import { Battery, BatteryModel, BatteryStatus, Replacement, Sale, WarrantyCardStatus } from '../types';
 import { getLocalDate, formatDate } from '../utils';
 import {
     Save, ShieldCheck, X, User, Phone,
@@ -19,8 +20,8 @@ const DeleteConfirmation: React.FC<{
     onConfirm: () => void;
     onCancel: () => void;
     isLoading: boolean;
-}> = ({ onConfirm, onCancel, isLoading }) => (
-    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+}> = ({ onConfirm, onCancel, isLoading }) => createPortal(
+    <div className="fixed inset-0 z-[160] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in scale-95 duration-200">
             <div className="p-6 bg-rose-50 border-b border-rose-100 flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
@@ -72,7 +73,8 @@ const DeleteConfirmation: React.FC<{
                 </div>
             </div>
         </div>
-    </div>
+    </div>,
+    document.body
 );
 
 const EditConfirmation: React.FC<{
@@ -80,58 +82,79 @@ const EditConfirmation: React.FC<{
     onConfirm: () => void;
     onCancel: () => void;
     isSaving: boolean;
-}> = ({ changes, onConfirm, onCancel, isSaving }) => (
-    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in scale-95 duration-200">
-            <div className="p-6 bg-indigo-50 border-b border-indigo-100 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-                    <Save size={24} />
-                </div>
-                <div>
-                    <h3 className="text-lg font-black text-indigo-900 uppercase tracking-tight">Confirm Changes</h3>
-                    <p className="text-xs font-bold text-indigo-600 uppercase">Review your edits before saving</p>
-                </div>
-            </div>
-
-            <div className="p-6 space-y-4">
-                {changes.length === 0 ? (
-                    <p className="text-sm text-slate-500 font-medium italic">No changes detected.</p>
-                ) : (
-                    <div className="space-y-2">
-                        {changes.map((change, idx) => (
-                            <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
-                                <span className="block font-bold text-slate-400 uppercase tracking-wider mb-1">{change.field}</span>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-rose-500 line-through decoration-2 decoration-rose-500/30">{change.old || '(empty)'}</span>
-                                    <span className="text-slate-300">→</span>
-                                    <span className="text-emerald-600 font-bold bg-emerald-50 px-1 rounded">{change.new}</span>
-                                </div>
-                            </div>
-                        ))}
+}> = ({ changes, onConfirm, onCancel, isSaving }) => createPortal(
+    <div className="fixed inset-0 z-[170] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+        <div className="w-full max-w-md animate-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-xl p-8 shadow-2xl relative border border-slate-200">
+                <div className="flex justify-between items-start mb-6">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-600 text-white rounded flex items-center justify-center">
+                            <Save size={18} />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900">Confirm Changes</h3>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                                Review before saving
+                            </p>
+                        </div>
                     </div>
-                )}
-
-                <div className="flex gap-3 pt-2">
                     <button
                         onClick={onCancel}
                         disabled={isSaving}
-                        className="flex-1 py-3 bg-white border-2 border-slate-200 text-slate-600 font-bold uppercase text-xs rounded-xl hover:bg-slate-50 transition-colors"
+                        className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded transition-all disabled:opacity-50"
+                        aria-label="Close confirmation dialog"
                     >
-                        Back
+                        <X size={20} />
                     </button>
-                    <button
-                        onClick={onConfirm}
-                        disabled={isSaving}
-                        className="flex-1 py-3 bg-indigo-600 text-white font-bold uppercase text-xs rounded-xl hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
-                    >
-                        {isSaving ? <Loader2 size={16} className="animate-spin" /> : <>
-                            <Save size={16} /> Confirm Update
-                        </>}
-                    </button>
+                </div>
+
+                <div className="space-y-3">
+                    {changes.length === 0 ? (
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg py-3 px-4 text-sm font-medium italic text-slate-500">
+                            No changes detected.
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                        {changes.map((change, idx) => (
+                            <div key={idx} className="bg-slate-50 border border-slate-200 rounded-lg py-3 px-4">
+                                <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">{change.field}</span>
+                                <div className="mt-2 flex items-center gap-2 text-sm">
+                                    <span className="font-semibold text-rose-500 line-through decoration-2 decoration-rose-500/30">
+                                        {change.old || '(empty)'}
+                                    </span>
+                                    <span className="text-slate-300">→</span>
+                                    <span className="rounded-md bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-600">
+                                        {change.new}
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
+                        </div>
+                    )}
+
+                    <div className="flex gap-3 pt-2">
+                        <button
+                            onClick={onCancel}
+                            disabled={isSaving}
+                            className="flex-1 py-3 px-4 rounded-lg font-bold text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors tracking-wide disabled:opacity-50"
+                        >
+                            Back
+                        </button>
+                        <button
+                            onClick={onConfirm}
+                            disabled={isSaving}
+                            className="flex-1 py-3 px-4 rounded-lg font-bold text-sm bg-slate-900 text-white hover:bg-blue-600 shadow-md shadow-blue-200 transition-colors tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {isSaving ? <Loader2 size={16} className="animate-spin text-white/70" /> : <>
+                                <Save size={16} /> Confirm Update
+                            </>}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    </div>,
+    document.body
 );
 
 const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate }) => {
@@ -150,7 +173,7 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
     const [showEditConfirm, setShowEditConfirm] = useState(false);
     const [pendingChanges, setPendingChanges] = useState<{ field: string, old: string, new: string }[]>([]);
 
-    const [models, setModels] = useState<any[]>([]);
+    const [models, setModels] = useState<BatteryModel[]>([]);
 
     const [formData, setFormData] = useState({
         // customerName: '', // REPLACED BY DEALER SELECT
@@ -174,7 +197,7 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
                 const [data, , allModels] = await Promise.all([
                     Database.searchBattery(batteryId),
                     Database.getAll<{ id: string, name: string, location: string }>('dealers'),
-                    Database.getAll<{ id: string, name: string }>('models')
+                    Database.getAll<BatteryModel>('models')
                 ]);
                 setModels(allModels);
 
@@ -210,6 +233,8 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
     }, [batteryId]);
     const originalSentToShopDate = activeAsset?.battery.activationDate || activeAsset?.battery.manufactureDate || '';
     const sentToShopDateChanged = originalSentToShopDate !== formData.sentToShopDate;
+    const selectedModel = models.find((model) => model.name === formData.model);
+    const derivedCapacity = selectedModel?.defaultCapacity || activeAsset?.battery.capacity || '';
 
     const getChanges = () => {
         const changes: { field: string, old: string, new: string }[] = [];
@@ -222,6 +247,10 @@ const BatteryEdit: React.FC<BatteryEditProps> = ({ batteryId, onClose, onUpdate 
         // Check Model
         if (activeAsset.battery.model !== formData.model) {
             changes.push({ field: 'Battery Model', old: activeAsset.battery.model || 'Unknown', new: formData.model });
+        }
+
+        if ((activeAsset.battery.capacity || '') !== derivedCapacity) {
+            changes.push({ field: 'Battery Capacity', old: activeAsset.battery.capacity || '(empty)', new: derivedCapacity || '(empty)' });
         }
 
         // Check Sale Date

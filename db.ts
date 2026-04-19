@@ -220,7 +220,16 @@ export class Database {
   }
 
   static async getBattery(id: string): Promise<Battery | undefined> {
-    const results = await this.query<Battery>('SELECT * FROM batteries WHERE id = ?', [id]);
+    const results = await this.query<Battery>(
+      `SELECT 
+         b.*,
+         COALESCE(m.name, b.model) AS model,
+         COALESCE(m.defaultCapacity, b.capacity) AS capacity
+       FROM batteries b
+       LEFT JOIN models m ON b.model = m.id OR b.model = m.name
+       WHERE b.id = ?`,
+      [id]
+    );
     return results[0];
   }
 

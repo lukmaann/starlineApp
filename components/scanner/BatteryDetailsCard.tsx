@@ -113,36 +113,55 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
         <div className="animate-in slide-in-from-bottom-4 duration-500 space-y-6">
             {activeAsset.battery.status === BatteryStatus.RETURNED_PENDING && (
                 <div
-                    className="relative overflow-hidden rounded-2xl border border-orange-200 bg-[linear-gradient(135deg,rgba(255,247,237,1)_0%,rgba(255,237,213,0.92)_100%)] p-6 shadow-[0_18px_40px_-28px_rgba(234,88,12,0.45)]"
+                    className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_16px_40px_-26px_rgba(15,23,42,0.22)]"
                 >
-                    <div className="absolute inset-y-0 left-0 w-1.5 bg-orange-500" />
-                    <div className="flex flex-col gap-4 pl-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-start gap-4">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-orange-700 shadow-sm">
+                    <div className="border-b border-slate-200 bg-[linear-gradient(180deg,_#fff7ed_0%,_#ffffff_100%)] px-6 py-5">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-start gap-4">
+                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 shadow-sm">
                                 <RefreshCw size={22} />
+                                </div>
+                                <div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <p className="text-sm font-black tracking-tight text-slate-900">Exchange already in progress</p>
+                                        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700">
+                                            Pending
+                                        </span>
+                                    </div>
+                                    <p className="mt-1 text-sm text-slate-500">
+                                        This battery is already inside an active exchange workflow. Resume that process to continue.
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-[11px] font-black uppercase tracking-[0.28em] text-orange-600">Exchange Pending</p>
-                                <h2 className="mt-1 text-xl font-black tracking-tight text-slate-900">This battery already has an open exchange</h2>
-                                <p className="mt-2 text-sm font-medium text-slate-600">
-                                    Continue the in-progress warranty exchange instead of starting a new inspection.
-                                </p>
-                            </div>
+                            <button
+                                onClick={() => {
+                                    if (AuthSession.isValid()) {
+                                        setIsReplacing(true);
+                                        setReplacementStep(1);
+                                    } else {
+                                        setPendingAction('EXCHANGE');
+                                        setIsLocked(true);
+                                    }
+                                }}
+                                className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition-all hover:bg-amber-600 active:scale-95"
+                            >
+                                Resume exchange
+                            </button>
                         </div>
-                        <button
-                            onClick={() => {
-                                if (AuthSession.isValid()) {
-                                    setIsReplacing(true);
-                                    setReplacementStep(1);
-                                } else {
-                                    setPendingAction('EXCHANGE');
-                                    setIsLocked(true);
-                                }
-                            }}
-                            className="inline-flex items-center justify-center rounded-xl bg-orange-600 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-orange-200 transition-all hover:bg-orange-700 active:scale-95"
-                        >
-                            Resume Exchange
-                        </button>
+                    </div>
+                    <div className="grid gap-4 px-6 py-5 md:grid-cols-3">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Current state</p>
+                            <p className="mt-1 text-sm font-black text-slate-900">Exchange pending</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Next step</p>
+                            <p className="mt-1 text-sm font-black text-slate-900">Resume exchange flow</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Inspection</p>
+                            <p className="mt-1 text-sm font-black text-slate-900">Not needed again</p>
+                        </div>
                     </div>
                 </div>
             )}
@@ -294,23 +313,26 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                                 </Sheet>
                                 </div>
                                 {pendingSettlement && activeAsset.battery.status !== BatteryStatus.RETURNED_PENDING && (
-                                    <div className="w-full rounded-2xl border border-slate-200 bg-slate-50/90 p-3.5 shadow-sm">
+                                    <div className="w-full rounded-2xl border border-amber-200 bg-amber-50/80 p-3.5 shadow-sm">
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                             <div className="flex items-center gap-3 min-w-0">
-                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
                                                     <Landmark size={16} />
                                                 </div>
                                                 <div className="min-w-0">
+                                                    <p className="text-[11px] font-semibold text-amber-700">
+                                                        Settlement pending
+                                                    </p>
                                                     <p className="truncate text-sm font-semibold text-slate-900">
-                                                        {pendingSettlement.oldBatteryId} still needs dealer settlement
+                                                        Complete dealer settlement for {pendingSettlement.oldBatteryId}
                                                     </p>
                                                 </div>
                                             </div>
                                             <button
                                                 onClick={onSettleHere}
-                                                className="inline-flex shrink-0 items-center justify-center rounded-xl bg-slate-900 px-3.5 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white transition-all hover:bg-blue-600 active:scale-95"
+                                                className="inline-flex shrink-0 items-center justify-center rounded-xl bg-slate-900 px-3.5 py-2 text-sm font-semibold text-white transition-all hover:bg-amber-600 active:scale-95"
                                             >
-                                                Settle Here
+                                                Complete settlement
                                             </button>
                                         </div>
                                     </div>
@@ -452,33 +474,87 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                 ) : !isExpired && canInspectBattery ? (
                     <div className="space-y-4">
                         {/* Battery Inspection Section */}
-                        <div className="bg-white border-2 border-slate-200 rounded-2xl p-6">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    <div className={`p-3 rounded-xl ${activeAsset.battery.inspectionStatus === 'FAULTY' ? 'bg-rose-100 text-rose-600' :
-                                        activeAsset.battery.inspectionStatus === 'GOOD' ? 'bg-emerald-100 text-emerald-600' :
-                                            activeAsset.battery.inspectionStatus === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-600 animate-pulse' :
-                                                'bg-blue-100 text-blue-600'
-                                        }`}>
-                                        <Activity size={24} />
+                        <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_16px_40px_-26px_rgba(15,23,42,0.25)]">
+                            <div className="border-b border-slate-200 bg-[linear-gradient(180deg,_#f8fafc_0%,_#ffffff_100%)] px-6 py-5">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`p-3 rounded-2xl ${activeAsset.battery.inspectionStatus === 'FAULTY' ? 'bg-rose-100 text-rose-600' :
+                                            activeAsset.battery.inspectionStatus === 'GOOD' ? 'bg-emerald-100 text-emerald-600' :
+                                                activeAsset.battery.inspectionStatus === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-600 animate-pulse' :
+                                                    'bg-blue-100 text-blue-600'
+                                            }`}>
+                                            <Activity size={24} />
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="font-black text-slate-900 text-base tracking-tight">Technical Inspection</h4>
+                                                <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ${
+                                                    activeAsset.battery.inspectionStatus === 'FAULTY'
+                                                        ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                                        : activeAsset.battery.inspectionStatus === 'GOOD'
+                                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                            : activeAsset.battery.inspectionStatus === 'IN_PROGRESS'
+                                                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                }`}>
+                                                    {activeAsset.battery.inspectionStatus === 'FAULTY'
+                                                        ? 'Fault verified'
+                                                        : activeAsset.battery.inspectionStatus === 'GOOD'
+                                                            ? 'Healthy'
+                                                            : activeAsset.battery.inspectionStatus === 'IN_PROGRESS'
+                                                                ? 'Session active'
+                                                                : 'Pending'}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-slate-500 mt-1">
+                                                {activeAsset.battery.inspectionStatus === 'FAULTY' ? 'This unit failed inspection and is ready for exchange handling.' :
+                                                    activeAsset.battery.inspectionStatus === 'GOOD' ? `This unit passed inspection and was returned on ${formatDate(activeAsset.battery.inspectionReturnDate)}` :
+                                                        activeAsset.battery.inspectionStatus === 'IN_PROGRESS' ? `Inspection session opened on ${formatDate(activeAsset.battery.inspectionStartDate)}` :
+                                                            'Inspect this battery before processing an exchange.'}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h4 className="font-bold text-slate-900 text-sm uppercase">Technical Inspection</h4>
-                                        <p className="text-xs text-slate-500 mt-0.5">
-                                            {activeAsset.battery.inspectionStatus === 'FAULTY' ? 'Unit verified as faulty.' :
-                                                activeAsset.battery.inspectionStatus === 'GOOD' ? `Unit verified as healthy. Returned on ${formatDate(activeAsset.battery.inspectionReturnDate)}` :
-                                                    activeAsset.battery.inspectionStatus === 'IN_PROGRESS' ? `Assessing unit... Started on ${formatDate(activeAsset.battery.inspectionStartDate)}` :
-                                                        'Inspection required before exchange.'}
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setIsInspecting(true)}
-                                    className={`px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition-all shadow-lg active:scale-95 ${activeAsset.battery.inspectionStatus === 'IN_PROGRESS' ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                    <button
+                                        onClick={() => setIsInspecting(true)}
+                                        className={`px-6 py-3 rounded-xl font-bold text-sm transition-all shadow-lg active:scale-95 ${
+                                            activeAsset.battery.inspectionStatus === 'IN_PROGRESS'
+                                                ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                                : 'bg-slate-900 hover:bg-blue-600 text-white'
                                         }`}
-                                >
-                                    {activeAsset.battery.inspectionStatus === 'IN_PROGRESS' ? 'Resume Status' : activeAsset.battery.inspectionStatus ? 'Re-Inspect' : 'Inspect Unit'}
-                                </button>
+                                    >
+                                        {activeAsset.battery.inspectionStatus === 'IN_PROGRESS' ? 'Resume Verdict' : activeAsset.battery.inspectionStatus ? 'Open Inspection' : 'Start Inspection'}
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="grid gap-4 px-6 py-5 md:grid-cols-3">
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Status</p>
+                                    <p className="mt-1 text-sm font-black text-slate-900">
+                                        {activeAsset.battery.inspectionStatus === 'FAULTY'
+                                            ? 'Faulty battery'
+                                            : activeAsset.battery.inspectionStatus === 'GOOD'
+                                                ? 'Healthy battery'
+                                                : activeAsset.battery.inspectionStatus === 'IN_PROGRESS'
+                                                    ? 'Session started'
+                                                    : 'Awaiting inspection'}
+                                    </p>
+                                </div>
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Started</p>
+                                    <p className="mt-1 text-sm font-black text-slate-900">
+                                        {activeAsset.battery.inspectionStartDate ? formatDate(activeAsset.battery.inspectionStartDate) : 'Not started'}
+                                    </p>
+                                </div>
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Outcome</p>
+                                    <p className="mt-1 text-sm font-black text-slate-900">
+                                        {activeAsset.battery.inspectionStatus === 'GOOD'
+                                            ? 'Returned to dealer'
+                                            : activeAsset.battery.inspectionStatus === 'FAULTY'
+                                                ? 'Ready for exchange'
+                                                : 'Pending final verdict'}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>

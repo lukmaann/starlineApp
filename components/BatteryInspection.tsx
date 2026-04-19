@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     ShieldCheck,
     ShieldAlert,
@@ -20,16 +20,18 @@ interface BatteryInspectionProps {
     battery: Battery;
     onClose: () => void;
     onComplete: () => void;
+    onRefresh?: () => void;
     onStartExchange?: (reason: string) => void;
     userRole?: string;
 }
 
-type InspectionPhase = 'START' | 'STARTED' | 'VERDICT';
+type InspectionPhase = 'START' | 'VERDICT';
 
 export const BatteryInspection: React.FC<BatteryInspectionProps> = ({
     battery,
     onClose,
     onComplete,
+    onRefresh,
     onStartExchange,
     userRole,
 }) => {
@@ -37,9 +39,7 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({
     const initialPhase: InspectionPhase =
         !battery.inspectionStatus || battery.inspectionStatus === 'PENDING'
             ? 'START'
-            : battery.inspectionStatus === 'IN_PROGRESS'
-                ? 'VERDICT'
-                : 'VERDICT';
+            : 'VERDICT';
 
     const [phase, setPhase] = useState<InspectionPhase>(initialPhase);
     const [inspectionStatus, setInspectionStatus] = useState<string>(battery.inspectionStatus || 'PENDING');
@@ -59,6 +59,42 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({
     );
 
     const isCompleted = inspectionStatus === 'GOOD' || inspectionStatus === 'FAULTY';
+    const statusTone =
+        inspectionStatus === 'FAULTY'
+            ? 'border-rose-200 bg-rose-50 text-rose-700'
+            : inspectionStatus === 'GOOD'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : inspectionStatus === 'IN_PROGRESS'
+                    ? 'border-amber-200 bg-amber-50 text-amber-700'
+                    : 'border-blue-200 bg-blue-50 text-blue-700';
+    const statusLabel =
+        inspectionStatus === 'FAULTY'
+            ? 'Fault verified'
+            : inspectionStatus === 'GOOD'
+                ? 'Healthy'
+                : inspectionStatus === 'IN_PROGRESS'
+                    ? 'Session active'
+                    : 'Pending';
+
+    useEffect(() => {
+        const nextPhase: InspectionPhase =
+            !battery.inspectionStatus || battery.inspectionStatus === 'PENDING' ? 'START' : 'VERDICT';
+
+        setPhase(nextPhase);
+        setInspectionStatus(battery.inspectionStatus || 'PENDING');
+        setInspectionStartDate(battery.inspectionStartDate);
+        setResult(
+            battery.inspectionStatus === 'GOOD' ? 'GOOD' : battery.inspectionStatus === 'FAULTY' ? 'FAULTY' : null
+        );
+        setFailureReason(battery.inspectionReason || 'DEAD CELL');
+        setReturnDate(battery.inspectionReturnDate || getLocalDate());
+    }, [
+        battery.id,
+        battery.inspectionStatus,
+        battery.inspectionStartDate,
+        battery.inspectionReturnDate,
+        battery.inspectionReason
+    ]);
 
     const handleStart = async () => {
         setIsStarting(true);
@@ -67,7 +103,8 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({
             const startedAt = getLocalDate();
             setInspectionStatus('IN_PROGRESS');
             setInspectionStartDate(startedAt);
-            setPhase('STARTED');
+            setPhase('VERDICT');
+            onRefresh?.();
             notify('Inspection started', 'success');
         } catch (err) {
             console.error('Failed to start:', err);
@@ -145,22 +182,38 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({
     };
 
     return (
-        <div className="w-full overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_18px_50px_-24px_rgba(15,23,42,0.28)] animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="w-full overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_60px_-28px_rgba(15,23,42,0.3)] animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="border-b border-slate-200 bg-[linear-gradient(180deg,_#f8fafc_0%,_#ffffff_100%)] px-5 py-5 md:px-6">
                 <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-3">
-                        <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-600/20">
-                            <ShieldCheck size={18} />
+                    <div className="flex items-start gap-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-lg shadow-slate-900/15">
+                            <ShieldCheck size={20} />
                         </div>
                         <div>
-                            <h3 className="text-lg font-black text-slate-900 tracking-tight">Technical Inspection</h3>
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em]">
-                                <span className="text-indigo-600">Serial: {battery.id}</span>
-                                {inspectionStartDate && (
-                                    <span className="text-slate-400 border-l border-slate-200 pl-2">
-                                        Started: {formatDate(inspectionStartDate)}
-                                    </span>
-                                )}
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="text-xl font-black text-slate-900 tracking-tight">Technical Inspection</h3>
+                                <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold ${statusTone}`}>
+                                    {statusLabel}
+                                </span>
+                            </div>
+                            <p className="mt-1 text-sm text-slate-500">
+                                Review the unit, record the verdict, and complete the inspection log.
+                            </p>
+                            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Serial</p>
+                                    <p className="mt-1 text-sm font-black text-slate-900">{battery.id}</p>
+                                </div>
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Model</p>
+                                    <p className="mt-1 text-sm font-black text-slate-900">{battery.model}</p>
+                                </div>
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Started</p>
+                                    <p className="mt-1 text-sm font-black text-slate-900">
+                                        {inspectionStartDate ? formatDate(inspectionStartDate) : 'Not started'}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -183,21 +236,39 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({
             </div>
 
             <div className="p-5 md:p-6 bg-slate-50/70">
+                <div className="mb-5 grid gap-3 md:grid-cols-3">
+                    <div className={`rounded-2xl border px-4 py-4 ${phase === 'START' ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-white'}`}>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Step 1</p>
+                        <p className="mt-2 text-sm font-black text-slate-900">Open inspection</p>
+                        <p className="mt-1 text-xs text-slate-500">Create or resume the current inspection session.</p>
+                    </div>
+                    <div className={`rounded-2xl border px-4 py-4 ${phase !== 'START' && !result ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'}`}>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Step 2</p>
+                        <p className="mt-2 text-sm font-black text-slate-900">Record verdict</p>
+                        <p className="mt-1 text-xs text-slate-500">Mark the battery as healthy or faulty.</p>
+                    </div>
+                    <div className={`rounded-2xl border px-4 py-4 ${result ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Step 3</p>
+                        <p className="mt-2 text-sm font-black text-slate-900">Finalize action</p>
+                        <p className="mt-1 text-xs text-slate-500">Return the battery or move it into exchange.</p>
+                    </div>
+                </div>
+
                 {phase === 'START' && (
-                    <div className="rounded-[20px] border border-slate-200 bg-white p-6 text-center">
-                        <div className="mx-auto w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <div className="rounded-[24px] border border-slate-200 bg-white p-7 text-center">
+                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
                             <ShieldCheck size={28} />
                         </div>
-                        <h4 className="mt-4 text-xl font-black text-slate-900">Ready To Start Inspection</h4>
+                        <h4 className="mt-4 text-xl font-black text-slate-900">Ready to start inspection</h4>
                         <p className="mt-2 max-w-md mx-auto text-sm text-slate-500">
-                            Start the inspection first. After that, move to the next step and record the final verdict.
+                            Open a formal inspection session for this battery, then continue to the final assessment stage.
                         </p>
 
                         {isAdmin ? (
                             <button
                                 onClick={handleStart}
                                 disabled={isStarting}
-                                className="mt-6 w-full max-w-[240px] px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 active:scale-95 transition-all inline-flex items-center justify-center gap-3 disabled:opacity-50"
+                                className="mt-6 w-full max-w-[260px] px-8 py-3.5 bg-slate-900 hover:bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-slate-900/15 active:scale-95 transition-all inline-flex items-center justify-center gap-3 disabled:opacity-50"
                             >
                                 {isStarting ? <Loader2 size={18} className="animate-spin" /> : (
                                     <>
@@ -214,44 +285,25 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({
                     </div>
                 )}
 
-                {phase === 'STARTED' && (
-                    <div className="rounded-[20px] border border-emerald-200 bg-white p-6 text-center animate-in fade-in duration-200">
-                        <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                            <CheckCircle2 size={28} />
-                        </div>
-                        <h4 className="mt-4 text-xl font-black text-slate-900">Inspection Started</h4>
-                        <p className="mt-2 text-sm text-slate-500">
-                            The inspection session is now active. You can close this window and come back later, or continue now.
-                        </p>
-                        <div className="mt-3 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">
-                            Started on {inspectionStartDate ? formatDate(inspectionStartDate) : formatDate(getLocalDate())}
-                        </div>
-
-                        <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-                            <button
-                                onClick={onClose}
-                                className="px-6 py-3 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all"
-                            >
-                                Close For Now
-                            </button>
-                            <button
-                                onClick={() => setPhase('VERDICT')}
-                                className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm transition-all inline-flex items-center justify-center gap-2"
-                            >
-                                Next
-                                <ArrowRight size={16} />
-                            </button>
-                        </div>
-                    </div>
-                )}
-
                 {phase === 'VERDICT' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-5">
-                        <div className="rounded-[20px] border border-slate-200 bg-white p-5 space-y-5">
+                    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+                        <div className="rounded-[24px] border border-slate-200 bg-white p-6 space-y-5">
                             <div>
-                                <h4 className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">Select Final Verdict</h4>
-                                <p className="mt-1 text-xs text-slate-500">Choose the inspection result and complete the next step.</p>
+                                <h4 className="text-base font-black tracking-tight text-slate-900">Final assessment</h4>
+                                <p className="mt-1 text-sm text-slate-500">Choose the inspection result and then complete the matching next step.</p>
                             </div>
+
+                            {inspectionStatus === 'IN_PROGRESS' && (
+                                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Session active</p>
+                                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                                        Inspection was already started on {inspectionStartDate ? formatDate(inspectionStartDate) : formatDate(getLocalDate())}.
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-600">
+                                        Record the final verdict below to complete this session.
+                                    </p>
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {isAdmin && (
@@ -265,8 +317,8 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({
                                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${result === 'FAULTY' ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
                                             <ShieldAlert size={24} />
                                         </div>
-                                        <p className={`mt-4 text-base font-black ${result === 'FAULTY' ? 'text-rose-700' : 'text-slate-900'}`}>Faulty</p>
-                                        <p className="mt-1 text-[11px] font-medium text-slate-500">Battery failed inspection and should move to exchange.</p>
+                                        <p className={`mt-4 text-base font-black ${result === 'FAULTY' ? 'text-rose-700' : 'text-slate-900'}`}>Faulty battery</p>
+                                        <p className="mt-1 text-[11px] font-medium text-slate-500">Use this when the unit fails inspection and must move into exchange handling.</p>
                                     </button>
                                 )}
 
@@ -286,21 +338,21 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({
                                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${result === 'GOOD' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
                                         <ShieldCheck size={24} />
                                     </div>
-                                    <p className={`mt-4 text-base font-black ${result === 'GOOD' ? 'text-emerald-700' : 'text-slate-900'}`}>Healthy</p>
-                                    <p className="mt-1 text-[11px] font-medium text-slate-500">Battery passed inspection and can be returned.</p>
+                                    <p className={`mt-4 text-base font-black ${result === 'GOOD' ? 'text-emerald-700' : 'text-slate-900'}`}>Healthy battery</p>
+                                    <p className="mt-1 text-[11px] font-medium text-slate-500">Use this when the unit passes inspection and should be returned to the dealer.</p>
                                 </button>
                             </div>
                         </div>
 
-                        <div className="rounded-[20px] border border-slate-200 bg-white p-5 space-y-4">
+                        <div className="rounded-[24px] border border-slate-200 bg-white p-6 space-y-4">
                             {!result && (
-                                <div className="min-h-[220px] flex items-center justify-center text-center">
+                                <div className="min-h-[240px] flex items-center justify-center text-center">
                                     <div>
-                                        <div className="mx-auto w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center">
+                                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
                                             <RefreshCw size={22} />
                                         </div>
-                                        <p className="mt-4 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Waiting For Verdict</p>
-                                        <p className="mt-2 text-sm text-slate-500">Select `Healthy` or `Faulty` to continue.</p>
+                                        <p className="mt-4 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Awaiting assessment</p>
+                                        <p className="mt-2 text-sm text-slate-500">Select a verdict on the left to unlock the next action.</p>
                                     </div>
                                 </div>
                             )}
@@ -308,8 +360,8 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({
                             {result === 'GOOD' && (
                                 <div className="space-y-4">
                                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                                        <p className="text-sm font-black text-emerald-900 uppercase tracking-[0.14em]">Healthy Battery</p>
-                                        <p className="mt-1 text-xs text-emerald-700">Set the return date and finalize the inspection.</p>
+                                        <p className="text-sm font-black text-emerald-900 uppercase tracking-[0.14em]">Return to dealer</p>
+                                        <p className="mt-1 text-xs text-emerald-700">Set the return date and complete the inspection record.</p>
                                     </div>
                                     <div>
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.18em] block mb-2">Return Date</label>
@@ -329,8 +381,8 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({
                             {result === 'FAULTY' && (
                                 <div className="space-y-4">
                                     <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
-                                        <p className="text-sm font-black text-rose-900 uppercase tracking-[0.14em]">Faulty Battery</p>
-                                        <p className="mt-1 text-xs text-rose-700">Select the failure reason and continue to exchange.</p>
+                                        <p className="text-sm font-black text-rose-900 uppercase tracking-[0.14em]">Move to exchange</p>
+                                        <p className="mt-1 text-xs text-rose-700">Select the failure reason and hand this unit into the exchange workflow.</p>
                                     </div>
                                     <div>
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.18em] block mb-2">Failure Reason</label>
@@ -378,7 +430,7 @@ export const BatteryInspection: React.FC<BatteryInspectionProps> = ({
                                     <button
                                         onClick={handleSave}
                                         disabled={!result || isSaving}
-                                        className="flex-1 font-black py-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-all text-sm uppercase tracking-[0.18em] flex items-center justify-center gap-3 shadow-lg active:scale-[0.98] disabled:opacity-30"
+                                        className="flex-1 font-black py-4 rounded-xl bg-slate-900 hover:bg-blue-600 text-white transition-all text-sm uppercase tracking-[0.18em] flex items-center justify-center gap-3 shadow-lg active:scale-[0.98] disabled:opacity-30"
                                     >
                                         {isSaving ? <Loader2 className="animate-spin" size={18} /> : (
                                             <>

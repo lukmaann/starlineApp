@@ -11,7 +11,6 @@ import DatabaseSelector from './pages/DatabaseSelector';
 import DatabaseManagement from './pages/DatabaseManagement';
 import Batches from './pages/Batches';
 import ManufacturingHub from './factory_operations/ManufacturingHub';
-import ReleaseNotes from './pages/ReleaseNotes';
 import { Database } from './db';
 import { Download, Database as DatabaseIcon, Clock, Zap, Battery, BatteryCharging, Activity, Cpu, Wifi, Lock, KeyRound, Loader2, CheckCircle2, Sparkles, RefreshCw, X } from 'lucide-react';
 import { Toaster } from './components/ui/sonner';
@@ -480,9 +479,6 @@ const App: React.FC = () => {
       case 'backup':
         return isAdmin ? <Backup /> : <Scanner initialSearch={null} onSearchHandled={() => { }} initialState={null} onStateChange={() => { }} active={true} onOpenDealers={openDealerDetail} onOpenDealerProfile={openDealerProfile} />;
 
-      case 'release-notes':
-        return <ReleaseNotes />;
-
       default:
         return null;
     }
@@ -506,8 +502,6 @@ const App: React.FC = () => {
         return 'Database Management';
       case 'backup':
         return 'Backup';
-      case 'release-notes':
-        return 'Release Notes';
       default:
         return tab;
     }
@@ -589,13 +583,7 @@ const App: React.FC = () => {
               onForward={goForward}
               onClear={clearHistory}
             />
-            <button
-              type="button"
-              onClick={() => navigate('release-notes')}
-              className="hover:text-slate-600 transition-colors"
-            >
-              Starline
-            </button>
+            <span className="text-slate-600">Starline</span>
             <span>/</span>
             <span className="text-slate-900 font-bold">{getTabLabel(activeTab)}</span>
           </div>
@@ -911,10 +899,7 @@ const App: React.FC = () => {
       <Dialog 
         open={showKeepAliveAuth || isSessionExpiredLock} 
         onOpenChange={(open) => {
-          if (!open && isSessionExpiredLock) {
-             handleLogoutClick();
-             return;
-          }
+          if (!open && isSessionExpiredLock) return;
           setShowKeepAliveAuth(open);
           if (!open) {
             setKeepAlivePassword('');
@@ -923,7 +908,13 @@ const App: React.FC = () => {
         }}
       >
         <DialogContent 
-           className="sm:max-w-md p-6 border-0 bg-white rounded-2xl shadow-xl data-[state=open]:slide-in-from-top-[50%] data-[state=closed]:slide-out-to-top-[50%]"
+           className={`sm:max-w-md p-6 border-0 bg-white rounded-2xl shadow-xl data-[state=open]:slide-in-from-top-[50%] data-[state=closed]:slide-out-to-top-[50%] ${isSessionExpiredLock ? '[&>button]:hidden' : ''}`}
+           onPointerDownOutside={(event) => {
+             if (isSessionExpiredLock) event.preventDefault();
+           }}
+           onEscapeKeyDown={(event) => {
+             if (isSessionExpiredLock) event.preventDefault();
+           }}
         >
           {isSessionExpiredLock && (
             <div className="absolute -top-4 -right-4 bg-rose-500 text-white rounded-full p-3 shadow-lg flex items-center gap-2 pr-5 animate-in zoom-in-50">
@@ -936,7 +927,7 @@ const App: React.FC = () => {
             </div>
             <DialogTitle className="text-xl font-bold text-slate-900 tracking-tight">{isSessionExpiredLock ? 'Session Expired' : 'Verify Access'}</DialogTitle>
             <p className="text-sm text-slate-500 max-w-[280px]">
-              Please enter your password for <b className="text-slate-700">{user?.username}</b> to {isSessionExpiredLock ? 'resume' : 'extend'} your session. Or <button type="button" onClick={handleLogoutClick} className="text-blue-600 font-bold hover:underline ml-1">Log Out</button>.
+              Please enter your password for <b className="text-slate-700">{user?.username}</b> to {isSessionExpiredLock ? 'resume' : 'extend'} your session.
             </p>
 
             <form onSubmit={handleKeepAliveAttempt} className="w-full mt-4 space-y-4">
@@ -958,19 +949,29 @@ const App: React.FC = () => {
               </div>
 
               <div className="flex gap-3 w-full pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setShowKeepAliveAuth(false); setKeepAlivePassword(''); setKeepAliveError(''); }}
-                  className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors tracking-wide"
-                >
-                  Cancel
-                </button>
+                {isSessionExpiredLock ? (
+                  <button
+                    type="button"
+                    onClick={handleLogoutClick}
+                    className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors tracking-wide"
+                  >
+                    Log out
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setShowKeepAliveAuth(false); setKeepAlivePassword(''); setKeepAliveError(''); }}
+                    className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors tracking-wide"
+                  >
+                    Cancel
+                  </button>
+                )}
                 <button
                   type="submit"
                   disabled={isKeepAliveLoading || !keepAlivePassword}
                   className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-200 transition-colors tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {isKeepAliveLoading ? <Loader2 size={16} className="animate-spin text-white/50" /> : 'Verify'}
+                  {isKeepAliveLoading ? <Loader2 size={16} className="animate-spin text-white/50" /> : isSessionExpiredLock ? 'Enter password' : 'Verify'}
                 </button>
               </div>
             </form>
