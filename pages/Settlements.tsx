@@ -14,7 +14,7 @@ import { Database } from '../db';
 import { formatDate } from '../utils';
 import { AuthSession } from '../utils/AuthSession';
 import { toast } from 'sonner';
-import { SettlementModal, SettlementTarget } from '../components/SettlementModal';
+import { SettlementWizard, SettlementTarget } from '../components/SettlementWizard';
 
 interface SettlementRecord {
     id: string;
@@ -328,7 +328,7 @@ const Settlements: React.FC<SettlementsProps> = ({ onNavigateToHub }) => {
                 </div>
             </div>
 
-            <SettlementModal
+            <SettlementWizard
                 isOpen={!!resolvingRecord}
                 target={resolvingRecord}
                 onClose={() => setResolvingRecord(null)}

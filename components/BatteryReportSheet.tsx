@@ -407,7 +407,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                         }
                         
                         /* HIDE EVERYTHING ELSE */
-                        body > *:not(#print-portal-root) {
+                        body > *:not(#print-portal-root):not(#batch-print-portal-root) {
                             display: none !important;
                         }
 

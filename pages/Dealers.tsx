@@ -25,7 +25,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
-import { SettlementModal, SettlementTarget } from '../components/SettlementModal';
+import { SettlementWizard, SettlementTarget } from '../components/SettlementWizard';
 import BatteryPrintTemplate from '../components/BatteryPrintTemplate';
 import { DealerWizard } from '../components/DealerWizard';
 import DealerAnalytics from '../components/DealerAnalytics';
@@ -601,8 +601,8 @@ const DealersContent: React.FC<DealersProps> = ({ onNavigateToHub, initialState,
           </style>
 
 
-          {/* Settlement Modal Overlay */}
-          <SettlementModal
+          {/* Settlement Wizard Overlay */}
+          <SettlementWizard
             isOpen={!!resolvingRecord}
             target={resolvingRecord}
             onClose={() => setResolvingRecord(null)}

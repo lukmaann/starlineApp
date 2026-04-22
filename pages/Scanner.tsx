@@ -26,7 +26,7 @@ import { ProgressFlow } from '../components/ProgressFlow';
 import { SuccessFlow } from '../components/SuccessFlow';
 import { BatteryInspection } from '../components/BatteryInspection';
 import { notify } from '../utils/notifications';
-import { SettlementModal, type SettlementTarget } from '../components/SettlementModal';
+import { SettlementWizard, type SettlementTarget } from '../components/SettlementWizard';
 
 // Scanner Sub-components
 import { ScannerHeader } from '../components/scanner/ScannerHeader';
@@ -988,7 +988,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       <style>
         {`
         @media print {
-          body > *:not(#batch-print-portal-root) {
+          body > *:not(#batch-print-portal-root):not(#print-portal-root) {
             display: none !important;
           }
 
@@ -1264,7 +1264,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
             getStatusBadge={getStatusBadge}
           />
 
-          <SettlementModal
+          <SettlementWizard
             isOpen={!!resolvingSettlement}
             target={resolvingSettlement}
             onClose={() => setResolvingSettlement(null)}

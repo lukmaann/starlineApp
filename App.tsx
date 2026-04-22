@@ -194,11 +194,11 @@ const App: React.FC = () => {
       showToast(message, type || 'success');
     };
 
-    const handleDbSynced = () => showToast('Database Synced');
+
     const handleSessionExpired = () => setIsSessionExpiredLock(true);
 
     window.addEventListener('app-notify' as any, handleNotify);
-    window.addEventListener('db-synced' as any, handleDbSynced);
+
     window.addEventListener('session-expired' as any, handleSessionExpired);
 
     const handleAppRefresh = () => {
@@ -229,7 +229,7 @@ const App: React.FC = () => {
 
     return () => {
       window.removeEventListener('app-notify' as any, handleNotify);
-      window.removeEventListener('db-synced' as any, handleDbSynced);
+
       window.removeEventListener('session-expired' as any, handleSessionExpired);
       window.removeEventListener('app-refresh' as any, handleAppRefresh);
       window.removeEventListener('updater-status', handleUpdaterStatus as EventListener);
