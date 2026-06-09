@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     ShieldAlert, Calendar, Edit, FileText,
-    Activity, RefreshCw, Store, ChevronRight, MapPin, Landmark, Copy, ArrowRightLeft
+    Activity, RefreshCw, Store, ChevronRight, MapPin, Landmark, Copy, ArrowRightLeft, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '../../utils';
@@ -34,6 +34,7 @@ interface BatteryDetailsCardProps {
     pendingSettlement?: Replacement | null;
     onSettleHere?: () => void;
     onMoveDealer?: () => void;
+    onDeleteBattery?: () => void;
 }
 
 export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
@@ -57,7 +58,8 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
     onOpenDealers,
     pendingSettlement,
     onSettleHere,
-    onMoveDealer
+    onMoveDealer,
+    onDeleteBattery
 }) => {
     const isExp = isExpired;
     const isAdmin = userRole === 'ADMIN';
@@ -454,6 +456,33 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                                         <ChevronRight size={16} />
                                     </div>
                                 )}
+                            </div>
+                        </button>
+                    )}
+                    {isAdmin && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                onDeleteBattery?.();
+                            }}
+                            className="w-full rounded-2xl border px-5 py-4 text-left transition-all border-rose-200 bg-rose-50 hover:border-rose-300 hover:shadow-lg hover:shadow-rose-100/70"
+                        >
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-100 text-rose-700">
+                                        <Trash2 size={18} />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-slate-800">Delete Battery</p>
+                                        <p className="text-xs text-slate-500">
+                                            Permanently remove this record and its data.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1 text-sm font-semibold text-rose-700">
+                                    <span>Delete</span>
+                                    <ChevronRight size={16} />
+                                </div>
                             </div>
                         </button>
                     )}

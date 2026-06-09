@@ -12,7 +12,7 @@ import {
   User, ChevronRight, Layers, FileText, Smartphone, Copy,
   Printer, Download, FileSpreadsheet, FileJson, StickyNote,
   ArrowDownCircle, HelpCircle, ArrowRightLeft, AlertOctagon,
-  ShieldQuestion, CheckCircle2, FileCheck, ClipboardList, Activity, ChevronDown, Edit
+  ShieldQuestion, CheckCircle2, FileCheck, ClipboardList, Activity, ChevronDown, Edit, Trash2
 } from 'lucide-react';
 import { formatDate, getLocalDate } from '../utils';
 import { StatusDisplay } from '../components/StatusDisplay';
@@ -104,6 +104,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   const [showReturnDatePicker, setShowReturnDatePicker] = useState(false);
   const [showMoveDealer, setShowMoveDealer] = useState(false);
   const [moveDealerData, setMoveDealerData] = useState({ dealerId: '', sentToShopDate: getLocalDate() });
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
 
   // Warranty Date Correction State
   const [showDateCorrection, setShowDateCorrection] = useState(false);
@@ -689,6 +691,20 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     }
   };
 
+  const handleDeleteBattery = async () => {
+    if (!activeAsset?.battery) return;
+    try {
+      await Database.deleteBatteryRecord(activeAsset.battery.id);
+      notify('Battery deleted successfully', 'success');
+      setShowDeleteConfirm(false);
+      setDeleteConfirmInput('');
+      handleClear();
+    } catch (e: any) {
+      console.error(e);
+      notify('Failed to delete battery: ' + e.message, 'error');
+    }
+  };
+
   const executeReplacement = async () => {
     if (!activeAsset) return;
     setIsActionLoading(true);
@@ -1156,6 +1172,79 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
             document.body
           )}
 
+          {isAdmin && showDeleteConfirm && createPortal(
+            <div
+              className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300"
+              onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteConfirmInput('');
+              }}
+            >
+              <div
+                className="w-full max-w-md animate-in zoom-in-95 duration-300"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="bg-white rounded-xl p-8 shadow-2xl relative border border-slate-200">
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-rose-600 text-white rounded flex items-center justify-center">
+                        <Trash2 size={18} />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900">Delete Battery</h3>
+                        <p className="text-sm text-slate-500 mt-1">
+                          Permanent action
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                          setShowDeleteConfirm(false);
+                          setDeleteConfirmInput('');
+                      }}
+                      className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded transition-all"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 mb-6">
+                      <p className="text-rose-800 text-sm mb-2">
+                        This <span className="font-bold">{activeAsset?.battery.model}</span> battery with serial number <span className="font-mono font-bold">{activeAsset?.battery.id}</span> assigned to <span className="font-bold">{dealers.find(d => d.id === activeAsset?.battery.dealerId)?.name || 'Central'}</span> will be deleted.
+                      </p>
+                      <p className="text-rose-700 text-sm font-semibold mt-3">
+                        Are you sure you want to delete?
+                      </p>
+                  </div>
+
+                  <div className="space-y-5">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-semibold text-slate-700 px-1">Type DELETE to confirm</label>
+                      <input
+                        type="text"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg py-3 px-4 font-mono font-bold text-slate-900 focus:border-rose-500 focus:bg-white transition-all outline-none text-sm uppercase"
+                        placeholder="DELETE"
+                        value={deleteConfirmInput}
+                        onChange={(e) => setDeleteConfirmInput(e.target.value.toUpperCase())}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-5">
+                    <button
+                      onClick={handleDeleteBattery}
+                      disabled={deleteConfirmInput !== 'DELETE'}
+                      className="w-full py-3.5 bg-rose-600 text-white rounded-lg font-semibold text-sm hover:bg-rose-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      Permanently Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
           <WarrantyCorrectionForm
             isExp={isExpired}
             showDateCorrection={showDateCorrection}
@@ -1209,6 +1298,10 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
                 setPendingAction('MOVE');
                 setIsLocked(true);
               }
+            }}
+            onDeleteBattery={() => {
+              if (!activeAsset?.battery) return;
+              setShowDeleteConfirm(true);
             }}
           />
 
