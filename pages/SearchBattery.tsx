@@ -89,6 +89,12 @@ const SearchBattery: React.FC = () => {
         </div>
       </div>
 
+      {error && (
+        <div className="bg-rose-50 border-2 border-rose-100 text-rose-600 p-6 rounded-2xl flex items-center space-x-4 animate-in fade-in slide-in-from-top-4">
+          <ShieldAlert size={24} className="text-rose-500" />
+          <p className="font-black text-sm tracking-widest">{error}</p>
+        </div>
+      )}
 
       {result && (
         <>
