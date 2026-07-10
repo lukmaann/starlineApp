@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.11] - 2026-07-10
+
+### Added
+- **Error Alert on Search Failure**: Displays an error alert when a battery search query fails.
+
+### Changed
+- **Danger Zone Refactoring**: Redesigned settings dashboard's Danger Zone with a cleaner Factory Reset workflow and single record search.
+- **Passcode Theme Update**: Unified passcode screen theme to match the Main Login screen.
+
+## [1.0.10] - 2026-06-09
+
+### Added
+- **Secure Battery Deletion**: Added a secure delete battery button to battery details.
+
 ## [1.0.9] - 2026-04-22
 
 ### Added
