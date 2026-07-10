@@ -5,7 +5,8 @@ import {
   ShieldCheck, ShieldAlert, AlertTriangle, Fingerprint, Layers,
   Box, FileSignature, Settings2, ClipboardCheck, ChevronLeft,
   ChevronRight, ChevronDown, CheckCircle2, Plus, Edit2, Trash2, Info, X, RefreshCw, Activity, Sliders,
-  KeyRound, Tag, Search, Package, Users, UserCheck, Factory, Scale, Receipt, History, Eraser, Building2 as BuildingIcon
+  KeyRound, Tag, Search, Package, Users, UserCheck, Factory, Scale, Receipt, History, Eraser, Building2 as BuildingIcon,
+  Zap, Battery, BatteryCharging, Cpu, Wifi
 } from 'lucide-react';
 import { Database } from '../db';
 import { BatteryModel, Dealer } from '../types';
@@ -367,13 +368,23 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
     const handleUniversalDelete = async () => {
         if (!foundUniversalRecord) return;
         const { type } = foundUniversalRecord;
-        const confirmText = `Are you sure you want to PERMANENTLY DELETE this ${type} record?\n\nThis action is irreversible and will be logged.`;
+        
+        let typeLabel = 'record';
+        if (type === 'BATTERY') typeLabel = 'battery';
+        else if (type === 'DEALER') typeLabel = 'dealer';
+        else if (type === 'WORKER') typeLabel = 'worker';
+        else if (type === 'USER') typeLabel = 'user';
+        else if (type === 'PRODUCTION') typeLabel = 'production run';
+        else if (type === 'PURCHASE') typeLabel = 'purchase log';
+        else if (type === 'EXPENSE') typeLabel = 'expense log';
+
+        const confirmText = `Are you sure you want to delete this ${typeLabel}?`;
         
         if (window.confirm(confirmText)) {
             setIsDeletingUniversal(true);
             try {
                 await Database.deleteUniversalRecord(universalSearchId, type);
-                toast.success(`${type} record deleted successfully`);
+                toast.success(`Deleted ${typeLabel} successfully`);
                 setFoundUniversalRecord(null);
                 setUniversalSearchId('');
                 loadModelData(); // Refresh underlying lists
@@ -403,276 +414,310 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
         }
     };
 
-    if (showDangerZonePage) {
-        if (!isDangerZoneAuthenticated) {
-            return (
-                <div className="h-full flex flex-col items-center justify-center p-6 bg-rose-50/30">
-                    <div className="w-full max-w-sm text-center">
-                        <div className="w-16 h-16 bg-white border border-rose-200 rounded-xl flex items-center justify-center mx-auto mb-6 shadow-sm">
-                            <Lock size={24} className="text-rose-600" />
-                        </div>
-                        <h2 className="text-xl font-bold text-slate-900 mb-1">Danger zone access</h2>
-                        <p className="text-slate-500 text-xs mb-8">Enter access key to continue</p>
+    if (!isDangerZoneAuthenticated) {
+        return (
+            <div
+                className="fixed inset-0 flex flex-col items-center justify-center p-4 antialiased z-50 animate-in fade-in duration-300 overflow-y-auto"
+                style={{
+                    background: 'radial-gradient(ellipse at 60% 20%, #fef2f2 0%, #fff5f5 50%, #fef2f2 100%)',
+                }}
+            >
+                {/* Decorative background icons */}
+                <div className="fixed inset-0 pointer-events-none overflow-hidden">
+                    {/* Dot grid */}
+                    <div
+                        className="absolute inset-0 opacity-[0.03]"
+                        style={{
+                            backgroundImage: 'linear-gradient(#f43f5e 1px, transparent 1px), linear-gradient(90deg, #f43f5e 1px, transparent 1px)',
+                            backgroundSize: '40px 40px',
+                        }}
+                    />
+                    {/* Scattered icons */}
+                    <Zap size={180} className="absolute text-rose-455 opacity-[0.07]" style={{ top: '-4%', left: '-3%', transform: 'rotate(-15deg)' }} />
+                    <Zap size={100} className="absolute text-rose-455 opacity-[0.06]" style={{ top: '18%', right: '6%', transform: 'rotate(20deg)' }} />
+                    <Zap size={70} className="absolute text-rose-500 opacity-[0.08]" style={{ bottom: '22%', left: '8%', transform: 'rotate(-8deg)' }} />
+                    <Zap size={50} className="absolute text-rose-500 opacity-[0.05]" style={{ top: '55%', right: '22%', transform: 'rotate(30deg)' }} />
 
-                        <form onSubmit={handleDangerZoneUnlock} className="space-y-4">
-                            <input
-                                type="password"
-                                autoFocus
-                                placeholder="Access key"
-                                className="w-full px-4 py-3.5 bg-white border border-rose-200 rounded-lg text-sm outline-none focus:border-rose-500"
-                                value={dangerZonePassword}
-                                onChange={e => { setDangerZonePassword(e.target.value); setDangerZoneAuthError(''); }}
-                            />
-                            {dangerZoneAuthError && <p className="text-rose-600 text-[10px] font-bold">{dangerZoneAuthError}</p>}
+                    <BatteryCharging size={140} className="absolute text-rose-300 opacity-[0.06]" style={{ bottom: '-2%', right: '-2%', transform: 'rotate(12deg)' }} />
+                    <BatteryCharging size={80} className="absolute text-rose-400 opacity-[0.05]" style={{ top: '40%', left: '3%', transform: 'rotate(-20deg)' }} />
+                    <Battery size={90} className="absolute text-rose-400 opacity-[0.05]" style={{ top: '70%', right: '5%', transform: 'rotate(-10deg)' }} />
+                    <Battery size={55} className="absolute text-rose-400 opacity-[0.04]" style={{ top: '12%', left: '25%', transform: 'rotate(15deg)' }} />
+
+                    <Activity size={120} className="absolute text-rose-505 opacity-[0.05]" style={{ bottom: '12%', left: '-1%', transform: 'rotate(0deg)' }} />
+                    <Activity size={65} className="absolute text-rose-400 opacity-[0.05]" style={{ top: '30%', right: '3%', transform: 'rotate(-12deg)' }} />
+
+                    <Cpu size={110} className="absolute text-rose-400 opacity-[0.05]" style={{ top: '6%', right: '15%', transform: 'rotate(10deg)' }} />
+                    <Cpu size={60} className="absolute text-rose-400 opacity-[0.04]" style={{ bottom: '38%', right: '14%', transform: 'rotate(-25deg)' }} />
+
+                    <Wifi size={80} className="absolute text-rose-300 opacity-[0.06]" style={{ bottom: '5%', left: '30%', transform: 'rotate(0deg)' }} />
+                    <Wifi size={50} className="absolute text-rose-400 opacity-[0.04]" style={{ top: '48%', left: '18%', transform: 'rotate(8deg)' }} />
+                </div>
+
+                <div className="relative w-full max-w-[400px] animate-in zoom-in-95 fade-in duration-500">
+
+                    {/* Brand mark */}
+                    <div className="flex flex-col items-center mb-8">
+                        <div
+                            className="w-14 h-14 rounded-[18px] flex items-center justify-center mb-5 shadow-lg shadow-rose-200"
+                            style={{ background: 'linear-gradient(135deg, #1e0a0a 0%, #3b1111 100%)' }}
+                        >
+                            <ShieldAlert size={24} className="text-rose-550" fill="#f43f5e" />
+                        </div>
+                        <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+                            Security Clearance
+                        </h1>
+                        <p className="text-sm text-slate-500 mt-1.5 font-medium">
+                            Enter Access Key for Danger Zone Console
+                        </p>
+                    </div>
+ 
+                    {/* Card */}
+                    <div
+                        className="bg-white rounded-2xl p-8"
+                        style={{ boxShadow: '0 4px 6px -1px rgba(220,38,38,0.05), 0 20px 40px -8px rgba(220,38,38,0.08)' }}
+                    >
+                        {/* Error */}
+                        {dangerZoneAuthError && (
+                            <div className="mb-5 flex items-center gap-2.5 p-3.5 bg-rose-50 border border-rose-100 rounded-xl animate-in slide-in-from-top-2 duration-200">
+                                <ShieldAlert size={14} className="text-rose-500 shrink-0" />
+                                <span className="text-xs text-rose-700 font-semibold leading-snug">{dangerZoneAuthError}</span>
+                            </div>
+                        )}
+ 
+                        <form onSubmit={handleDangerZoneUnlock} className="space-y-5">
+                            <div className="space-y-1.5">
+                                <label className="block text-xs font-semibold text-slate-600">Access Key</label>
+                                <div className="relative">
+                                    <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        required
+                                        type="password"
+                                        autoFocus
+                                        placeholder="Enter administrator key"
+                                        className="w-full pl-10 pr-4 py-3 bg-slate-100/80 rounded-xl text-sm text-slate-900 placeholder-slate-500 outline-none focus:bg-slate-100 focus:ring-2 focus:ring-rose-500/20 transition-all font-medium border-0"
+                                        value={dangerZonePassword}
+                                        onChange={(e) => { setDangerZonePassword(e.target.value); setDangerZoneAuthError(''); }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Submit */}
                             <button
                                 type="submit"
                                 disabled={!dangerZonePassword}
-                                className="w-full py-3.5 bg-rose-600 text-white rounded-lg font-bold text-xs disabled:opacity-50"
+                                className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 group mt-1"
+                                style={{
+                                    background: 'linear-gradient(135deg, #be123c 0%, #e11d48 100%)',
+                                    boxShadow: '0 4px 14px rgba(225,29,72,0.25)',
+                                }}
                             >
-                                Authorize access
+                                <span>Authorize Access</span>
+                                <ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
                             </button>
                         </form>
-                        <button 
-                            onClick={() => setShowDangerZonePage(false)} 
-                            className="mt-6 text-xs text-rose-400 hover:text-rose-700 font-medium"
-                        >
-                            Cancel and return to controls
-                        </button>
-                    </div>
-                </div>
-            );
-        }
-
-        return (
-            <div className="min-h-full bg-rose-50/20 pb-20 text-slate-900">
-                <div className="max-w-[1200px] mx-auto space-y-6 pt-6">
-                    <div className="px-4 py-4 flex items-center justify-between border-b border-rose-100">
-                        <button
-                            onClick={() => {
-                                if (showBulkDeletePage) setShowBulkDeletePage(false);
-                                else setShowDangerZonePage(false);
-                            }}
-                            className="flex items-center gap-2 text-xs font-bold text-rose-700"
-                        >
-                            <ChevronLeft size={14} />
-                            Back
-                        </button>
-                        <div className="flex items-center gap-2 text-rose-600">
-                            <ShieldAlert size={16} />
-                            <h1 className="text-sm font-bold lowercase first-letter:uppercase">Danger zone</h1>
-                        </div>
-                        <div className="w-10" />
                     </div>
 
-                    {showBulkDeletePage ? (
-                        <div className="px-4 space-y-6">
-                            <div className="flex items-center gap-3">
-                                <History className="text-rose-400" size={16} />
-                                <h2 className="text-sm font-bold text-rose-900">Bulk deletion tools</h2>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="bg-white border border-rose-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
-                                    <div>
-                                        <div className="flex items-start justify-between mb-4">
-                                            <h4 className="text-lg font-bold text-slate-900">Factory reset app</h4>
-                                            <span className="px-2 py-0.5 bg-rose-50 text-rose-600 border border-rose-100 rounded text-[9px] font-bold">Full wipe</span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mb-6">Wipes all data: users, dealers, inventory, and history.</p>
-                                    </div>
-                                    {!hasBackedUp ? (
-                                        <button
-                                            onClick={async () => {
-                                                try {
-                                                    const result = await window.electronAPI?.db?.backup();
-                                                    if (result?.success) {
-                                                        setHasBackedUp(true);
-                                                        toast.success('Backup saved');
-                                                    } else throw new Error(result?.error || 'Backup failed');
-                                                } catch (e: any) {
-                                                    toast.error(e.message);
-                                                }
-                                            }}
-                                            className="w-full py-3 bg-amber-50 text-amber-700 rounded-lg font-bold text-xs border border-amber-200"
-                                        >
-                                            Backup required
-                                        </button>
-                                    ) : (
-                                        <button
-                                            onClick={async () => {
-                                                if (window.confirm('Wipe entire database?')) {
-                                                    if (window.confirm('Final warning: all work will be lost.')) {
-                                                        await Database.resetDatabase();
-                                                        window.location.reload();
-                                                    }
-                                                }
-                                            }}
-                                            className="w-full py-3 bg-rose-600 text-white rounded-lg font-bold text-xs"
-                                        >
-                                            Execute wipe
-                                        </button>
-                                    )}
-                                </div>
-
-                                <div className="bg-white border border-rose-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
-                                    <div>
-                                        <div className="flex items-start justify-between mb-4">
-                                            <h4 className="text-lg font-bold text-slate-900">Erase production</h4>
-                                            <span className="px-2 py-0.5 bg-slate-50 text-slate-600 border border-slate-100 rounded text-[9px] font-bold">Logs only</span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mb-6">Clears manufacturing logs. Battery records are kept.</p>
-                                    </div>
-                                    <button
-                                        onClick={async () => {
-                                            if (window.confirm('Clear all production?')) {
-                                                await Database.clearAllProductionLogs();
-                                                toast.success('Logs cleared');
-                                            }
-                                        }}
-                                        className="w-full py-3 bg-slate-900 text-white rounded-lg font-bold text-xs"
-                                    >
-                                        Reset logs
-                                    </button>
-                                </div>
-
-                                <div className="bg-white border border-rose-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
-                                    <div>
-                                        <div className="flex items-start justify-between mb-4">
-                                            <h4 className="text-lg font-bold text-slate-900">Erase expenses</h4>
-                                            <span className="px-2 py-0.5 bg-slate-50 text-slate-600 border border-slate-100 rounded text-[9px] font-bold">Ledger</span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mb-6">Wipes operational expense history for all months.</p>
-                                    </div>
-                                    <button
-                                        onClick={async () => {
-                                            if (window.confirm('Wipe all expenses?')) {
-                                                await Database.clearAllExpenses();
-                                                toast.success('Expenses cleared');
-                                            }
-                                        }}
-                                        className="w-full py-3 bg-slate-900 text-white rounded-lg font-bold text-xs"
-                                    >
-                                        Reset ledger
-                                    </button>
-                                </div>
-
-                                <div className="bg-white border border-rose-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
-                                    <div>
-                                        <div className="flex items-start justify-between mb-4">
-                                            <h4 className="text-lg font-bold text-slate-900">Purge purchases</h4>
-                                            <span className="px-2 py-0.5 bg-amber-50 text-amber-600 border border-amber-100 rounded text-[9px] font-bold">Stock reset</span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mb-6">Clears purchases and sets material stock to zero.</p>
-                                    </div>
-                                    <button
-                                        onClick={async () => {
-                                            if (window.confirm('Clear purchases and reset stock?')) {
-                                                await Database.clearAllPurchases();
-                                                toast.success('Stock reset');
-                                            }
-                                        }}
-                                        className="w-full py-3 bg-slate-900 text-white rounded-lg font-bold text-xs"
-                                    >
-                                        Reset stock
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="px-4 space-y-6">
-                            <div className="bg-white border border-rose-200 rounded-xl p-6">
-                                <h2 className="text-sm font-bold text-rose-900 mb-4 flex items-center gap-2">
-                                    <Search size={16} className="text-rose-400" />
-                                    Search and delete record
-                                </h2>
-                                <div className="flex gap-3">
-                                    <input
-                                        placeholder="Enter record ID..."
-                                        className="flex-1 px-4 py-3 bg-rose-50/50 border border-rose-200 rounded-lg text-sm outline-none focus:border-rose-500"
-                                        value={universalSearchId}
-                                        onChange={e => setUniversalSearchId(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && handleUniversalSearch()}
-                                    />
-                                    <button
-                                        onClick={handleUniversalSearch}
-                                        disabled={isSearchingUniversal || !universalSearchId}
-                                        className="px-6 py-3 bg-rose-600 text-white rounded-lg font-bold text-xs disabled:opacity-50"
-                                    >
-                                        {isSearchingUniversal ? 'Searching...' : 'Find'}
-                                    </button>
-                                </div>
-
-                                {foundUniversalRecord && (
-                                    <div className="mt-8 border-t border-rose-100 pt-8">
-                                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 bg-rose-50 border border-rose-200 rounded-lg flex items-center justify-center text-rose-900">
-                                                    {foundUniversalRecord.type === 'BATTERY' && <Package size={24} />}
-                                                    {foundUniversalRecord.type === 'DEALER' && <BuildingIcon size={24} />}
-                                                    {foundUniversalRecord.type === 'WORKER' && <Users size={24} />}
-                                                    {foundUniversalRecord.type === 'USER' && <UserCheck size={24} />}
-                                                    {foundUniversalRecord.type === 'PRODUCTION' && <Factory size={24} />}
-                                                    {foundUniversalRecord.type === 'PURCHASE' && <Receipt size={24} />}
-                                                    {foundUniversalRecord.type === 'EXPENSE' && <Scale size={24} />}
-                                                </div>
-                                                <div>
-                                                    <span className="text-[10px] font-bold text-rose-500 uppercase">{foundUniversalRecord.type} matched</span>
-                                                    <h3 className="text-lg font-bold text-rose-900">
-                                                        {foundUniversalRecord.type === 'BATTERY' && foundUniversalRecord.data.model}
-                                                        {foundUniversalRecord.type === 'DEALER' && foundUniversalRecord.data.name}
-                                                        {foundUniversalRecord.type === 'WORKER' && foundUniversalRecord.data.full_name}
-                                                        {foundUniversalRecord.type === 'USER' && foundUniversalRecord.data.username}
-                                                        {foundUniversalRecord.type === 'PRODUCTION' && `${foundUniversalRecord.data.model} run`}
-                                                        {foundUniversalRecord.type === 'PURCHASE' && foundUniversalRecord.data.materialName}
-                                                        {foundUniversalRecord.type === 'EXPENSE' && foundUniversalRecord.data.category}
-                                                    </h3>
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={handleUniversalDelete}
-                                                disabled={isDeletingUniversal}
-                                                className="px-8 py-3 bg-rose-600 text-white rounded-lg font-bold text-xs shadow-md shadow-rose-200"
-                                            >
-                                                Delete record
-                                            </button>
-                                        </div>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                                            {/* Simplified metadata grid */}
-                                            <div className="space-y-1">
-                                                <p className="text-[10px] font-bold text-rose-400">Reference ID</p>
-                                                <p className="text-xs font-bold text-rose-900">{universalSearchId}</p>
-                                            </div>
-                                            {foundUniversalRecord.type === 'BATTERY' && (
-                                                <>
-                                                    <div className="space-y-1"><p className="text-[10px] font-bold text-rose-400">Status</p><p className="text-xs font-bold text-rose-900">{foundUniversalRecord.data.status}</p></div>
-                                                    <div className="space-y-1"><p className="text-[10px] font-bold text-rose-400">Date</p><p className="text-xs font-bold text-rose-900">{formatDate(foundUniversalRecord.data.manufactureDate)}</p></div>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="p-6 bg-rose-100/50 border border-rose-200 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div>
-                                    <h3 className="text-sm font-bold text-rose-900">Bulk deletion tools</h3>
-                                    <p className="text-xs text-rose-700">Database resets and ledger purges</p>
-                                </div>
-                                <button
-                                    onClick={() => setShowBulkDeletePage(true)}
-                                    className="px-6 py-3 bg-rose-600 text-white rounded-lg font-bold text-xs"
-                                >
-                                    Open bulk deletion
-                                </button>
-                            </div>
-                        </div>
-                    )}
+                    <button
+                        type="button"
+                        onClick={() => setShowDangerZonePage(false)}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-slate-800 transition-colors mx-auto mt-6"
+                    >
+                        <ChevronLeft size={14} />
+                        Cancel and Return
+                    </button>
                 </div>
             </div>
         );
     }
 
+    return (
+        <div className="min-h-full bg-slate-50/30 pb-20 text-slate-900 animate-in fade-in duration-300">
+            <div className="max-w-6xl mx-auto space-y-8 pt-6 px-4">
+                
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-slate-200 pb-5">
+                    <button
+                        onClick={() => {
+                            setShowDangerZonePage(false);
+                        }}
+                        className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-black uppercase tracking-widest text-slate-600 shadow-sm transition-all hover:bg-slate-50 active:scale-95"
+                    >
+                        <ChevronLeft size={14} />
+                        Exit Danger Zone
+                    </button>
+                    <div className="flex items-center gap-2.5 text-rose-600">
+                        <ShieldAlert size={18} strokeWidth={2.5} />
+                        <h1 className="text-sm font-black uppercase tracking-tight">Danger Zone Console</h1>
+                    </div>
+                    <div className="w-20" />
+                </div>
 
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    
+                    {/* Left Column: Single Record Purge (Takes 7/12 cols) */}
+                    <div className="lg:col-span-7 space-y-6">
+                        <div className="bg-white border border-slate-200 rounded-[24px] p-6 shadow-sm space-y-6 flex flex-col h-full justify-between">
+                            <div className="space-y-6">
+                                <div className="flex items-center gap-3.5">
+                                    <div className="p-3 bg-slate-50 text-slate-700 border border-slate-100 rounded-xl">
+                                        <Search size={20} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-tight">Single Record Purge</h3>
+                                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest mt-0.5">Delete individual batteries, users, or logs by ID</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="flex gap-2">
+                                        <input
+                                            placeholder="ENTER RECORD ID (E.G. BAT-123)"
+                                            className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-slate-900 focus:ring-4 focus:ring-slate-900/5 transition-all placeholder:text-slate-300 uppercase tracking-wider"
+                                            value={universalSearchId}
+                                            onChange={e => setUniversalSearchId(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleUniversalSearch()}
+                                        />
+                                        <button
+                                            onClick={handleUniversalSearch}
+                                            disabled={isSearchingUniversal || !universalSearchId}
+                                            className="px-6 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-[10px] uppercase tracking-widest disabled:opacity-50 active:scale-95 transition-all shadow-sm"
+                                        >
+                                            {isSearchingUniversal ? '...' : 'Find'}
+                                        </button>
+                                    </div>
+
+                                    {foundUniversalRecord ? (
+                                        <div className="border border-rose-100 bg-rose-50/10 rounded-2xl p-5 space-y-5 animate-in zoom-in-95 duration-200">
+                                            <div className="flex items-start justify-between">
+                                                <div className="flex items-center gap-3.5">
+                                                    <div className="w-12 h-12 bg-white border border-rose-100 rounded-xl flex items-center justify-center text-rose-600 shadow-sm shrink-0">
+                                                        {foundUniversalRecord.type === 'BATTERY' && <Package size={22} />}
+                                                        {foundUniversalRecord.type === 'DEALER' && <BuildingIcon size={22} />}
+                                                        {foundUniversalRecord.type === 'WORKER' && <Users size={22} />}
+                                                        {foundUniversalRecord.type === 'USER' && <UserCheck size={22} />}
+                                                        {foundUniversalRecord.type === 'PRODUCTION' && <Factory size={22} />}
+                                                        {foundUniversalRecord.type === 'PURCHASE' && <Receipt size={22} />}
+                                                        {foundUniversalRecord.type === 'EXPENSE' && <Scale size={22} />}
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-[9px] font-black text-rose-500 uppercase tracking-widest bg-rose-50 border border-rose-100/50 px-2 py-0.5 rounded-full">{foundUniversalRecord.type} Match</span>
+                                                        <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight mt-1 truncate max-w-[200px]">
+                                                            {foundUniversalRecord.type === 'BATTERY' && foundUniversalRecord.data.model}
+                                                            {foundUniversalRecord.type === 'DEALER' && foundUniversalRecord.data.name}
+                                                            {foundUniversalRecord.type === 'WORKER' && foundUniversalRecord.data.full_name}
+                                                            {foundUniversalRecord.type === 'USER' && foundUniversalRecord.data.username}
+                                                            {foundUniversalRecord.type === 'PRODUCTION' && `${foundUniversalRecord.data.model} run`}
+                                                            {foundUniversalRecord.type === 'PURCHASE' && foundUniversalRecord.data.materialName}
+                                                            {foundUniversalRecord.type === 'EXPENSE' && foundUniversalRecord.data.category}
+                                                        </h4>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={handleUniversalDelete}
+                                                    disabled={isDeletingUniversal}
+                                                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest shadow-md shadow-rose-200 active:scale-95 transition-all shrink-0"
+                                                >
+                                                    {foundUniversalRecord.type === 'BATTERY' && 'Delete Battery'}
+                                                    {foundUniversalRecord.type === 'DEALER' && 'Delete Dealer'}
+                                                    {foundUniversalRecord.type === 'WORKER' && 'Delete Worker'}
+                                                    {foundUniversalRecord.type === 'USER' && 'Delete User'}
+                                                    {foundUniversalRecord.type === 'PRODUCTION' && 'Delete Production Run'}
+                                                    {foundUniversalRecord.type === 'PURCHASE' && 'Delete Purchase Log'}
+                                                    {foundUniversalRecord.type === 'EXPENSE' && 'Delete Expense Log'}
+                                                </button>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4 text-left border-t border-slate-100 pt-4">
+                                                <div>
+                                                    <p className="text-[8px] font-bold text-slate-450 uppercase tracking-widest">Database ID</p>
+                                                    <p className="text-xs font-bold text-slate-900 font-mono mt-1 truncate">{universalSearchId}</p>
+                                                </div>
+                                                {foundUniversalRecord.type === 'BATTERY' && (
+                                                    <>
+                                                        <div>
+                                                            <p className="text-[8px] font-bold text-slate-450 uppercase tracking-widest">Battery Status</p>
+                                                            <p className="text-xs font-bold text-slate-900 uppercase mt-1 truncate">{foundUniversalRecord.data.status}</p>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="border border-slate-100 bg-slate-50/50 rounded-2xl p-8 text-center text-slate-400">
+                                            <Search size={24} className="mx-auto text-slate-300 mb-2" />
+                                            <p className="text-xs font-medium">Enter a reference ID above to locate a record across all system tables.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Column: Factory Reset (Takes 5/12 cols) */}
+                    <div className="lg:col-span-5 space-y-6">
+                        <div className="bg-white border border-slate-200 rounded-[24px] p-6 shadow-sm space-y-6 flex flex-col h-full justify-between">
+                            <div className="space-y-6">
+                                <div className="flex items-center gap-3.5">
+                                    <div className="p-3 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl">
+                                        <AlertTriangle size={20} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-tight">Factory Reset</h3>
+                                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest mt-0.5">Wipe entire database registry</p>
+                                    </div>
+                                </div>
+
+                                <div className="border border-rose-100 bg-rose-50/5 rounded-2xl p-5 space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[9px] font-black uppercase tracking-widest bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">System Wipe</span>
+                                    </div>
+                                    <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                                        This action deletes all user accounts, inventory logs, dealer lists, activity records, and settings. This cannot be undone.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="border-t border-slate-100 pt-6">
+                                {!hasBackedUp ? (
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                const result = await window.electronAPI?.db?.backup();
+                                                if (result?.success) {
+                                                    setHasBackedUp(true);
+                                                    toast.success('Backup saved successfully');
+                                                } else throw new Error(result?.error || 'Backup failed');
+                                            } catch (e: any) {
+                                                toast.error(e.message);
+                                            }
+                                        }}
+                                        className="w-full py-3.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl font-bold text-[10px] uppercase tracking-widest border border-amber-200 transition-all active:scale-95 text-center shadow-sm"
+                                    >
+                                        Backup Required Before Reset
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={async () => {
+                                            if (window.confirm('Wipe entire database?')) {
+                                                if (window.confirm('Final warning: all work will be lost.')) {
+                                                    await Database.resetDatabase();
+                                                    window.location.reload();
+                                                }
+                                            }
+                                        }}
+                                        className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all active:scale-95 text-center shadow-md shadow-rose-500/10"
+                                    >
+                                        Execute Factory Reset
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    );
   }
 
   return (
@@ -683,9 +728,11 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
             {[
               { id: 'models', label: 'Model Registry', icon: Layers },
               { id: 'access', label: 'Access Control', icon: Shield },
+              /*
               { id: 'prices', label: 'Pricing Registry', icon: Tag },
               { id: 'history', label: 'Activity Log', icon: Activity }
-            ].map(tab => (
+              */
+            ].filter(t => t !== undefined).map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setCurrentTab(tab.id as any)}
@@ -1150,97 +1197,108 @@ const Controls: React.FC<ControlsProps> = ({ active }) => {
 
       {/* --- ACCESS CONTROL TAB --- */}
       {currentTab === 'access' && (
-        <div className="mx-auto max-w-5xl space-y-6">
-          <div className="space-y-3">
-            <div className="px-1">
-              <h2 className="text-sm font-semibold text-slate-900">Access management</h2>
-              <p className="mt-1 text-sm text-slate-500">Manage session rules, user accounts, and role-based access in a cleaner layout.</p>
-            </div>
-
-            <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-2">
-              <div className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-                      <Lock size={17} />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900">Session settings</h3>
-                      <p className="mt-1 text-sm text-slate-500">Choose when the app logs out automatically.</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                    <div className="relative">
-                      <select
-                        className="min-w-[220px] appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-medium text-slate-900 outline-none transition-all focus:border-slate-400 focus:bg-white"
-                        value={sessionTimeoutMinutes}
-                        onChange={(e) => setSessionTimeoutMinutes(e.target.value)}
-                      >
-                        {[5, 10, 15, 20, 30, 45, 60, 90, 120].map((minutes) => (
-                          <option key={minutes} value={minutes}>
-                            {minutes} minutes
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown size={16} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                    </div>
-                    <button
-                      onClick={handleSaveSessionTimeout}
-                      disabled={isSavingSessionTimeout}
-                      className="flex h-12 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 text-sm font-medium text-white transition-all hover:bg-black active:scale-95 disabled:opacity-50"
-                    >
-                      {isSavingSessionTimeout ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                      Save
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-                  <Shield size={20} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in slide-in-from-left-4 duration-300">
+          
+          {/* Left Column: Session Settings & Danger Zone */}
+          <div className="space-y-6">
+            
+            {/* Session Settings Card */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+              <div className="flex items-center gap-3.5 mb-6">
+                <div className="bg-slate-50 p-2.5 rounded-xl text-slate-700 border border-slate-100">
+                  <Lock size={18} />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold text-slate-900">User management</h3>
-                  <p className="mt-1 text-sm text-slate-500">View assigned users, update access, and add new user accounts.</p>
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-tight">Auto Logout</h3>
+                  <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest mt-0.5">Session security lock</p>
                 </div>
               </div>
 
-              <button
-                onClick={() => setShowUserManagementPage(true)}
-                className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white transition-all hover:bg-black active:scale-95"
-              >
-                Open user management
-                <ArrowRight size={16} />
-              </button>
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 flex flex-col items-center justify-center">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Inactivity Limit</span>
+                
+                <div className="flex items-center gap-6 my-4">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const curr = parseInt(sessionTimeoutMinutes, 10) || 45;
+                      if (curr > 5) {
+                        const nextVal = String(curr - 5);
+                        setSessionTimeoutMinutes(nextVal);
+                        setIsSavingSessionTimeout(true);
+                        try {
+                          await Database.setConfig('starline_session_timeout_minutes', nextVal);
+                          AuthSession.setSessionTimeoutMinutes(curr - 5);
+                          await Database.logActivity('SESSION_TIMEOUT_UPDATE', `Updated app auto-logout timer to ${curr - 5} minutes`, { minutes: curr - 5 });
+                          toast.success(`Timeout set to ${curr - 5}m`);
+                        } catch (e) {
+                          toast.error('Failed to save timeout');
+                        } finally {
+                          setIsSavingSessionTimeout(false);
+                        }
+                      }
+                    }}
+                    className="w-10 h-10 rounded-full border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 font-bold transition-all shadow-sm active:scale-90"
+                  >
+                    -
+                  </button>
+                  <span className="text-2xl font-black text-slate-900 tracking-tight select-none">
+                    {sessionTimeoutMinutes}m
+                  </span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const curr = parseInt(sessionTimeoutMinutes, 10) || 45;
+                      if (curr < 240) {
+                        const nextVal = String(curr + 5);
+                        setSessionTimeoutMinutes(nextVal);
+                        setIsSavingSessionTimeout(true);
+                        try {
+                          await Database.setConfig('starline_session_timeout_minutes', nextVal);
+                          AuthSession.setSessionTimeoutMinutes(curr + 5);
+                          await Database.logActivity('SESSION_TIMEOUT_UPDATE', `Updated app auto-logout timer to ${curr + 5} minutes`, { minutes: curr + 5 });
+                          toast.success(`Timeout set to ${curr + 5}m`);
+                        } catch (e) {
+                          toast.error('Failed to save timeout');
+                        } finally {
+                          setIsSavingSessionTimeout(false);
+                        }
+                      }
+                    }}
+                    className="w-10 h-10 rounded-full border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 font-bold transition-all shadow-sm active:scale-90"
+                  >
+                    +
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 font-medium text-center">Changes are saved automatically.</p>
+              </div>
             </div>
-          </div>
 
-          <div className="rounded-3xl border border-rose-100 bg-white p-6 shadow-sm">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-700">
-                  <AlertTriangle size={20} />
-                </div>
-                <div>
-                  <h3 className="text-base font-semibold text-slate-900">Danger zone</h3>
-                  <p className="mt-1 text-sm text-slate-500">Battery deletion, dealer removal, worker removal, and factory reset tools.</p>
-                </div>
+            {/* Danger Zone Card */}
+            <div className="bg-rose-50/20 border border-rose-100 rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="text-rose-600" size={18} />
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-tight">Danger Zone</h3>
               </div>
-
+              <p className="text-[10px] text-slate-500 font-medium leading-relaxed uppercase tracking-wider">
+                Administrator console for destructive operations. Purge records or factory reset database.
+              </p>
               <button
                 onClick={() => setShowDangerZonePage(true)}
-                className="flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-sm font-medium text-white transition-all hover:bg-rose-700 active:scale-95"
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 py-3 text-xs font-black uppercase tracking-widest text-white transition-all active:scale-95 shadow-sm"
               >
-                Open danger zone
-                <ArrowRight size={16} />
+                <span>Open Danger Zone</span>
+                <ArrowRight size={12} />
               </button>
             </div>
+
           </div>
+
+          {/* Right Column: User Management Registry */}
+          <div className="lg:col-span-2">
+            <UserManagement />
+          </div>
+
         </div>
       )}
 

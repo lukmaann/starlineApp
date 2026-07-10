@@ -114,7 +114,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab, userRo
     { id: 'dealers', label: 'Dealers', icon: <Users size={17} strokeWidth={activeTab === 'dealers' ? 2 : 1.75} />, roles: ['ADMIN'] },
     { id: 'settlements', label: 'Settlements', icon: <Scale size={17} strokeWidth={activeTab === 'settlements' ? 2 : 1.75} />, roles: ['ADMIN'], badge: counts.settlements },
     { id: 'batches', label: 'Batches', icon: <Layers size={17} strokeWidth={activeTab === 'batches' ? 2 : 1.75} />, roles: ['ADMIN'], badge: counts.batches },
-    { id: 'manufacturing', label: 'Factory Operations', icon: <Factory size={17} strokeWidth={activeTab === 'manufacturing' ? 2 : 1.75} />, roles: ['ADMIN'] },
+    // { id: 'manufacturing', label: 'Factory Operations', icon: <Factory size={17} strokeWidth={activeTab === 'manufacturing' ? 2 : 1.75} />, roles: ['ADMIN'] },
   ];
 
   const visibleMenuItems = menuItems.filter(item => item.roles.includes(userRole || ''));
