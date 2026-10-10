@@ -233,6 +233,30 @@ export class Database {
     return results[0];
   }
 
+  static async getReplacementCandidate(id: string): Promise<{ battery?: Battery; sale?: Sale }> {
+    const [batteries, sales] = await Promise.all([
+      this.query<Battery>(
+        `SELECT b.*, COALESCE(m.name, b.model) AS model,
+                COALESCE(m.defaultCapacity, b.capacity) AS capacity
+         FROM batteries b
+         LEFT JOIN models m ON b.model = m.id OR b.model = m.name
+         WHERE UPPER(TRIM(b.id)) = UPPER(TRIM(?))
+         LIMIT 1`,
+        [id]
+      ),
+      this.query<Sale>(
+        `SELECT * FROM sales
+         WHERE UPPER(TRIM(batteryId)) = UPPER(TRIM(?))
+           AND COALESCE(UPPER(TRIM(customerPhone)), '') != 'STOCK'
+         ORDER BY saleDate DESC
+         LIMIT 1`,
+        [id]
+      )
+    ]);
+
+    return { battery: batteries[0], sale: sales[0] };
+  }
+
   static async searchBattery(term: string): Promise<{
     battery: Battery;
     sale?: Sale;
@@ -1219,6 +1243,17 @@ export class Database {
     try {
       await this.run('BEGIN TRANSACTION');
 
+      if (rep.oldBatteryId === rep.newBatteryId) {
+        throw new Error('The replacement battery must have a different serial number.');
+      }
+      const oldBatt = await this.getBattery(rep.oldBatteryId);
+      const newBatt = await this.getBattery(rep.newBatteryId);
+      if (!oldBatt) throw new Error(`Old battery ${rep.oldBatteryId} was not found in the registry.`);
+      if (!newBatt) throw new Error(`Replacement battery ${rep.newBatteryId} was not found in the registry.`);
+      if (oldBatt.status === BatteryStatus.RETURNED) {
+        throw new Error(`Battery ${rep.oldBatteryId} has already been replaced.`);
+      }
+
       // 1. Insert Replacement Record
       await this.run(
         `INSERT INTO replacements(
@@ -1263,7 +1298,6 @@ export class Database {
       // If correctedOriginalSaleDate is provided, we also fix the old battery's records for historical accuracy
       if (meta?.correctedOriginalSaleDate) {
         // Fetch battery to get warranty months for recalculation
-        const oldBatt = await this.getBattery(rep.oldBatteryId);
         const months = oldBatt?.warrantyMonths || 24;
         const newExpiry = new Date(meta.correctedOriginalSaleDate);
         newExpiry.setMonth(newExpiry.getMonth() + months);
@@ -1293,18 +1327,25 @@ export class Database {
       dealerId = ?,
       customerName = ?,
       customerPhone = ?,
-      warrantyExpiry = ?
+      warrantyExpiry = ?,
+      replacementCount = ?,
+      originalBatteryId = ?
         WHERE id = ? `,
         [
           rep.oldBatteryId, activationDate, rep.dealerId || 'CENTRAL',
           meta?.customerName || null, meta?.customerPhone || null, meta?.warrantyExpiry || null,
+          (oldBatt.replacementCount || 0) + 1, oldBatt.originalBatteryId || oldBatt.id,
           rep.newBatteryId
         ]
       );
 
       await this.run('COMMIT');
     } catch (error) {
-      await this.run('ROLLBACK');
+      try {
+        await this.run('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Transaction rollback failed: addReplacement', rollbackError);
+      }
       console.error('Transaction Failed: addReplacement', error);
       throw error; // Re-throw to alert UI
     }

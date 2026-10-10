@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.12] - 2026-10-10
+
+### Added
+- **Replacement Validation**: Blocks replacement attempts when the old battery is missing, already exchanged, sold under a different dealer, or when the proposed replacement battery is sold, already exchanged, or assigned to another dealer.
+- **Replacement Regression Coverage**: Added isolated tests for replacement eligibility and registry conflict cases.
+
+### Changed
+- **Replacement Experience**: Simplified the replacement workflow, protocol, authorization, and scanner header while keeping the batch scanning design intact.
+- **Replacement Persistence**: Added transaction guards to prevent invalid or repeated replacements from being recorded.
+
 ## [1.0.11] - 2026-07-10
 
 ### Added

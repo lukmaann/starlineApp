@@ -1,11 +1,20 @@
 import React from 'react';
 import { Barcode, Search, CheckCircle2, Loader2, X, LayoutGrid, PackagePlus, MapPin, Phone, ShieldCheck, BatteryCharging, CalendarDays, Activity, TrendingUp, ShieldAlert, Percent } from 'lucide-react';
 import { Database } from '../../db';
+import { formatDate } from '../../utils';
 import { Dealer, BatteryModel } from '../../types';
 
 interface ScannerHeaderProps {
-    batchMode: boolean;
-    setBatchMode: (mode: boolean) => void;
+    scanMode: 'TRACE' | 'BATCH' | 'REPLACEMENT';
+    replacementNewSerial?: string;
+    setReplacementNewSerial?: (val: string) => void;
+    handleStartReplacement?: () => void;
+    replacementOldAsset?: any;
+    isReplacementSearching?: boolean;
+    replacementOldSerial?: string;
+    setReplacementOldSerial?: (val: string) => void;
+    onOldBatteryBlur?: () => void;
+    setScanMode: (mode: 'TRACE' | 'BATCH' | 'REPLACEMENT') => void;
     lastScanned: string | null;
     stagedCount: number;
     dealers: Dealer[];
@@ -28,8 +37,16 @@ interface ScannerHeaderProps {
 }
 
 export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
-    batchMode,
-    setBatchMode,
+    scanMode,
+    replacementNewSerial = "",
+    setReplacementNewSerial = () => {},
+    handleStartReplacement = () => {},
+    replacementOldAsset = null,
+    isReplacementSearching = false,
+    replacementOldSerial = '',
+    setReplacementOldSerial = () => {},
+    onOldBatteryBlur = () => {},
+    setScanMode,
     lastScanned,
     stagedCount,
     dealers,
@@ -46,6 +63,11 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
     userRole,
     onOpenDealerProfile
 }) => {
+
+    const isBatch = scanMode === 'BATCH';
+    const isReplacement = scanMode === 'REPLACEMENT';
+    const isDarkTheme = isBatch || isReplacement;
+
     const [showBatchConfigAlert, setShowBatchConfigAlert] = React.useState(false);
     const [dealerAnalytics, setDealerAnalytics] = React.useState<{
         activeUnitCount: number;
@@ -57,11 +79,21 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
     const selectedDealer = dealers.find((dealer) => dealer.id === batchConfig.dealerId) || null;
     const selectedModel = models.find((model) => model.id === batchConfig.modelId) || null;
     const batchConfigReady = !!batchConfig.dealerId && !!batchConfig.modelId;
-    const dealerFieldError = batchMode && showBatchConfigAlert && !batchConfig.dealerId;
-    const modelFieldError = batchMode && showBatchConfigAlert && !batchConfig.modelId;
+    const tabClass = (mode: 'TRACE' | 'BATCH' | 'REPLACEMENT') => isBatch
+        ? `px-4 py-2 rounded-lg font-bold text-xs tracking-[0.08em] transition-all ${scanMode === mode ? (mode === 'BATCH' ? 'bg-white text-indigo-900 shadow-sm' : 'bg-white text-slate-900 shadow-sm') : 'text-white/75 hover:text-white'}`
+        : `px-4 py-2 rounded-lg font-semibold text-sm transition-all ${scanMode === mode ? (mode === 'REPLACEMENT' ? 'bg-white text-amber-900 shadow-sm' : 'bg-white text-slate-900 shadow-sm') : isReplacement ? 'text-white/80 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`;
+
+    const oldDealer = replacementOldAsset ? (dealers.find(d => d.id === replacementOldAsset.battery?.dealerId)?.name || 'Unknown') : 'Unknown';
+    const rawSaleDate = replacementOldAsset ? (replacementOldAsset.battery?.actualSaleDate ||
+        replacementOldAsset.lineageSales?.find((s: any) => s.batteryId === replacementOldAsset.battery?.id && s.customerPhone !== 'STOCK')?.saleDate ||
+        replacementOldAsset.sale?.saleDate) : null;
+    const oldSaleDate = rawSaleDate ? formatDate(rawSaleDate) : 'Not Sold';
+
+    const dealerFieldError = isBatch && showBatchConfigAlert && !batchConfig.dealerId;
+    const modelFieldError = isBatch && showBatchConfigAlert && !batchConfig.modelId;
 
     const triggerBatchConfigAlert = () => {
-        if (!batchMode || batchConfigReady) return;
+        if (!isBatch || batchConfigReady) return;
         setShowBatchConfigAlert(true);
     };
 
@@ -104,52 +136,60 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
     }, [isAdmin, selectedDealer]);
 
     React.useEffect(() => {
-        if (!batchMode || !batchConfigReady) return;
+        if (!isBatch || !batchConfigReady) return;
         const timer = window.setTimeout(() => {
             inputRef.current?.focus();
         }, 0);
         return () => window.clearTimeout(timer);
-    }, [batchMode, batchConfigReady, inputRef]);
+    }, [isDarkTheme, batchConfigReady, inputRef]);
 
     return (
-        <div className={`transition-all duration-300 ${batchMode ? 'bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.18),_transparent_28%),linear-gradient(135deg,_#312e81_0%,_#1e1b4b_60%,_#111827_100%)] border-indigo-700/70 shadow-indigo-950/20' : 'bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.08),_transparent_32%),linear-gradient(180deg,_#ffffff_0%,_#f8fafc_100%)] border-slate-200 shadow-slate-200/50'} border rounded-2xl p-8 shadow-sm no-print`}>
+        <div className={`transition-all duration-300 border rounded-2xl shadow-sm no-print ${isBatch
+            ? 'bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.18),_transparent_28%),linear-gradient(135deg,_#312e81_0%,_#1e1b4b_60%,_#111827_100%)] border-indigo-700/70 shadow-indigo-950/20 p-8'
+            : isReplacement
+                ? 'bg-gradient-to-r from-amber-800 via-amber-700 to-orange-800 border-amber-700 shadow-amber-950/15 p-6 sm:p-7 text-white'
+                : 'bg-white border-slate-200 p-6 sm:p-7 text-slate-900'}`}>
             <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="flex items-start gap-4">
-                        <div className={`rounded-2xl p-4 ${batchMode ? 'bg-white/10 text-white ring-1 ring-white/10' : 'bg-slate-900 text-white shadow-lg shadow-slate-900/10 ring-1 ring-slate-900/5'}`}>
-                            {batchMode ? <LayoutGrid size={30} /> : <Barcode size={30} />}
+                        <div className={`rounded-2xl p-4 ${isBatch ? 'bg-white/10 text-white ring-1 ring-white/10' : isReplacement ? 'bg-white/15 text-white ring-1 ring-white/15' : 'bg-slate-900 text-white shadow-lg shadow-slate-900/10 ring-1 ring-slate-900/5'}`}>
+                            {isBatch ? <LayoutGrid size={30} /> : isReplacement ? <PackagePlus size={30} /> : <Barcode size={30} />}
                         </div>
                         <div className="space-y-3">
-                            <div className={`inline-flex rounded-xl p-1 ${batchMode ? 'bg-white/10 ring-1 ring-white/10' : 'bg-slate-100 ring-1 ring-slate-200'}`}>
+                            <div className={`inline-flex rounded-xl p-1 ${isDarkTheme ? 'bg-white/10 ring-1 ring-white/10' : 'bg-slate-100 ring-1 ring-slate-200'}`}>
                                 <button
-                                    onClick={() => setBatchMode(false)}
-                                    className={`px-4 py-2 rounded-lg font-bold text-xs tracking-[0.08em] transition-all ${!batchMode ? 'bg-white text-slate-900 shadow-sm' : 'text-white/75 hover:text-white'}`}
+                                    onClick={() => setScanMode('TRACE')}
+                                    className={tabClass('TRACE')}
                                 >
                                     Trace
                                 </button>
                                 <button
-                                    onClick={() => setBatchMode(true)}
-                                    className={`px-4 py-2 rounded-lg font-bold text-xs tracking-[0.08em] transition-all ${batchMode ? 'bg-white text-indigo-900 shadow-sm' : batchMode ? 'text-white/75 hover:text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                                    onClick={() => setScanMode('BATCH')}
+                                    className={tabClass('BATCH')}
                                 >
                                     Batch
                                 </button>
+                                <button
+                                    onClick={() => setScanMode('REPLACEMENT')}
+                                    className={tabClass('REPLACEMENT')}
+                                >
+                                    Replacement
+                                </button>
                             </div>
                             <div>
-                                <h2 className={`text-xl font-black tracking-tight ${batchMode ? 'text-white' : 'text-slate-900'}`}>
-                                    {batchMode ? 'Batch Scan' : 'Trace Battery'}
+                                <h2 className={`text-xl ${isBatch ? 'font-black' : 'font-bold'} tracking-tight ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                                    {scanMode === 'BATCH' ? 'Batch Scan' : scanMode === 'REPLACEMENT' ? 'Replacement' : 'Trace Battery'}
                                 </h2>
-                                {!batchMode && (
-                                    <p className="mt-1 text-sm font-medium text-slate-500">
-                                        Search any serial number to open battery status, history, and warranty details.
-                                    </p>
-                                )}
+                                {!isBatch && <p className={`mt-1 max-w-2xl text-sm ${isReplacement ? 'text-amber-50' : 'text-slate-500'}`}>
+                                    {scanMode === 'TRACE' ? 'Search a serial number to view battery status, history, and warranty details.' : 'Enter the old and new serial numbers to start a battery replacement.'}
+                                </p>}
                             </div>
                         </div>
                     </div>
 
                 </div>
 
-                {batchMode && (
+                {isBatch && (
                     <div className="grid gap-4 animate-in fade-in slide-in-from-top-2 md:grid-cols-3">
                         <div className={`rounded-2xl border bg-white/10 p-4 ${dealerFieldError ? 'border-rose-400 bg-rose-500/10' : 'border-white/10'}`}>
                             <div className="mb-3 flex items-center justify-between gap-2">
@@ -157,7 +197,7 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
                                 {batchConfig.dealerId && <CheckCircle2 size={14} className="text-emerald-300" />}
                             </div>
                             <select
-                                className={`w-full rounded-xl border px-4 py-3 font-bold text-sm text-white outline-none transition-all ${dealerFieldError ? 'border-rose-400 bg-rose-950/30 focus:border-rose-300 focus:ring-2 focus:ring-rose-400/50' : batchConfig.dealerId ? 'border-emerald-400/40 bg-indigo-950/60 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-400/40' : 'border-indigo-400/20 bg-indigo-950/60 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-400/60'}`}
+                                className={`w-full rounded-xl border px-4 py-3 font-bold text-sm text-white outline-none transition-all ${dealerFieldError ? 'border-rose-400 bg-rose-950/30 focus:border-indigo-300 focus:ring-2 focus:ring-rose-400/50' : batchConfig.dealerId ? 'border-emerald-400/40 bg-indigo-950/60 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-400/40' : 'border-indigo-400/20 bg-indigo-950/60 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-400/60'}`}
                                 value={batchConfig.dealerId}
                                 onChange={e => {
                                     setBatchConfig({ ...batchConfig, dealerId: e.target.value });
@@ -174,7 +214,7 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
                                 {batchConfig.modelId && <CheckCircle2 size={14} className="text-emerald-300" />}
                             </div>
                             <select
-                                className={`w-full rounded-xl border px-4 py-3 font-bold text-sm text-white outline-none transition-all ${modelFieldError ? 'border-rose-400 bg-rose-950/30 focus:border-rose-300 focus:ring-2 focus:ring-rose-400/50' : batchConfig.modelId ? 'border-emerald-400/40 bg-indigo-950/60 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-400/40' : 'border-indigo-400/20 bg-indigo-950/60 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-400/60'}`}
+                                className={`w-full rounded-xl border px-4 py-3 font-bold text-sm text-white outline-none transition-all ${modelFieldError ? 'border-rose-400 bg-rose-950/30 focus:border-indigo-300 focus:ring-2 focus:ring-rose-400/50' : batchConfig.modelId ? 'border-emerald-400/40 bg-indigo-950/60 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-400/40' : 'border-indigo-400/20 bg-indigo-950/60 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-400/60'}`}
                                 value={batchConfig.modelId}
                                 onChange={e => {
                                     setBatchConfig({ ...batchConfig, modelId: e.target.value });
@@ -197,8 +237,39 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
                     </div>
                 )}
 
-                <div className={`rounded-2xl border ${batchMode ? 'border-white/10 bg-indigo-950/45 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]' : 'border-slate-200 bg-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]'} p-4 md:p-5`}>
-                    {batchMode && (
+
+                {isReplacement && replacementOldAsset && (
+                    <div className="grid gap-4 animate-in fade-in slide-in-from-top-2 md:grid-cols-3">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <div className="mb-3 flex items-center justify-between gap-2">
+                                <p className="text-xs font-semibold text-slate-500">Dealer</p>
+                                <CheckCircle2 size={15} className="text-emerald-600" />
+                            </div>
+                            <div className="rounded-lg border border-slate-200 bg-white px-3 py-3">
+                                <p className="font-semibold text-sm text-slate-900 truncate">{oldDealer}</p>
+                            </div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <div className="mb-3 flex items-center justify-between gap-2">
+                                <p className="text-xs font-semibold text-slate-500">Model</p>
+                            </div>
+                            <div className="rounded-lg border border-slate-200 bg-white px-3 py-3">
+                                <p className="font-semibold text-sm text-slate-900 truncate">{replacementOldAsset.battery?.model || 'Unknown'}</p>
+                            </div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <p className="mb-3 text-xs font-semibold text-slate-500">Original sale date</p>
+                            <div className="w-full rounded-lg border border-slate-200 bg-white px-3 py-3 font-semibold text-sm text-slate-900 truncate">
+                                {oldSaleDate}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div className={`rounded-2xl border p-4 md:p-5 ${isBatch
+                    ? 'border-white/10 bg-indigo-950/45 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
+                    : isReplacement ? 'border-amber-200 bg-white/95' : 'border-slate-200 bg-slate-50'}`}>
+                    {isBatch && (
                         <div className="mb-4 flex justify-end">
                             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[10px] font-black tracking-[0.16em] text-indigo-100 ring-1 ring-white/10">
                                 <CalendarDays size={12} />
@@ -208,42 +279,81 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
                     )}
                     <div className="flex flex-col gap-4 md:flex-row md:items-center">
                         <div className="shrink-0 flex gap-2">
-                            <div className={`${batchMode ? 'bg-white/10 text-white ring-1 ring-white/10' : 'bg-blue-50 text-blue-700 ring-1 ring-blue-100'} p-4 rounded-2xl`}>
-                                {batchMode ? <PackagePlus size={32} /> : <Barcode size={32} />}
+                            <div className={isBatch
+                                ? 'rounded-2xl bg-white/10 p-4 text-white ring-1 ring-white/10'
+                                : isReplacement
+                                    ? 'rounded-xl bg-amber-100 p-3 text-amber-900 ring-1 ring-amber-200'
+                                    : 'rounded-xl bg-white p-3 text-slate-600 ring-1 ring-slate-200'}>
+                                {isBatch ? <PackagePlus size={32} /> : isReplacement ? <PackagePlus size={32} /> : <Barcode size={32} />}
                             </div>
                         </div>
-                        <div className="flex-1 w-full relative">
-                            <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${batchMode ? 'text-indigo-300' : 'text-slate-400'}`} size={20} />
-                            <input
-                                ref={inputRef}
-                                disabled={isProcessing}
-                                readOnly={batchMode && !batchConfigReady}
-                                placeholder={batchMode ? (batchConfigReady ? "Scan serial..." : "Select dealer and model...") : "Enter serial..."}
-                                className={`w-full rounded-xl border pl-12 pr-6 py-4 outline-none font-bold text-lg transition-all tracking-[0.08em] mono ${batchMode ? `${batchConfigReady ? 'border-indigo-400/20 bg-indigo-950/80 text-white placeholder:text-indigo-400 focus:border-indigo-300 focus:bg-indigo-950' : 'border-amber-300/30 bg-indigo-950/55 text-indigo-100 placeholder:text-indigo-300/80 cursor-not-allowed'}` : 'bg-white border-slate-200 text-slate-900 shadow-sm focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-400/5'}`}
-                                value={scanBuffer}
-                                onChange={(e) => {
-                                    if (batchMode && !batchConfigReady) return;
-                                    setScanBuffer(e.target.value);
-                                }}
-                                onFocus={triggerBatchConfigAlert}
-                                onClick={triggerBatchConfigAlert}
-                                onKeyDown={(e) => e.key === 'Enter' && handleSearch(scanBuffer)}
-                            />
-                            {isProcessing && <Loader2 className={`absolute right-4 top-1/2 -translate-y-1/2 animate-spin ${batchMode ? 'text-white' : 'text-blue-600'}`} size={20} />}
-                        </div>
+                        {isReplacement ? (
+                            <div className="flex-1 w-full grid md:grid-cols-2 gap-4">
+                                <div className="relative">
+                                    {isReplacementSearching
+                                        ? <Loader2 className="absolute left-4 top-1/2 -translate-y-1/2 animate-spin text-blue-600" size={19} />
+                                        : <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />}
+                                    <input
+                                        ref={inputRef}
+                                        disabled={isProcessing}
+                                        placeholder="Old Battery Serial..."
+                                        className="w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 py-3.5 outline-none text-sm font-semibold tracking-wide text-slate-900 transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 placeholder:text-slate-400"
+                                        value={replacementOldSerial}
+                                        onChange={(e) => setReplacementOldSerial(e.target.value)}
+                                        onBlur={onOldBatteryBlur}
+                                        onKeyDown={(e) => e.key === 'Enter' && onOldBatteryBlur()}
+                                    />
+                                </div>
+                                <div className="relative">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                                    <input
+                                        disabled={isProcessing}
+                                        placeholder="New Battery Serial..."
+                                        className="w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 py-3.5 outline-none text-sm font-semibold tracking-wide text-slate-900 transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 placeholder:text-slate-400"
+                                        value={replacementNewSerial}
+                                        onChange={(e) => setReplacementNewSerial(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleStartReplacement()}
+                                    />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex-1 w-full relative">
+                                <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${isDarkTheme ? 'text-slate-400' : 'text-slate-400'}`} size={20} />
+                                <input
+                                    ref={inputRef}
+                                    disabled={isProcessing}
+                                    readOnly={isBatch && !batchConfigReady}
+                                    placeholder={isBatch ? (batchConfigReady ? "Scan serial..." : "Select dealer and model...") : "Enter serial..."}
+                                    className={`w-full rounded-xl border pl-12 pr-6 py-4 outline-none font-bold text-lg transition-all tracking-[0.08em] mono ${isDarkTheme ? `${batchConfigReady || !isBatch ? 'border-white/10 bg-indigo-950/80 text-white placeholder:text-indigo-400 focus:border-indigo-300 focus:bg-indigo-950' : 'border-indigo-300/30 bg-indigo-950/55 text-indigo-100 placeholder:text-slate-400/80 cursor-not-allowed'}` : 'bg-white border-slate-200 text-slate-900 shadow-sm focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-400/5'}`}
+                                    value={scanBuffer}
+                                    onChange={(e) => {
+                                        if (isBatch && !batchConfigReady) return;
+                                        setScanBuffer(e.target.value);
+                                    }}
+                                    onFocus={triggerBatchConfigAlert}
+                                    onClick={triggerBatchConfigAlert}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSearch(scanBuffer)}
+                                />
+                                {isProcessing && <Loader2 className={`absolute right-4 top-1/2 -translate-y-1/2 animate-spin ${isDarkTheme ? 'text-white' : 'text-blue-600'}`} size={20} />}
+                            </div>
+                        )}
                         <div className="flex w-full gap-3 md:w-auto">
                             <button
-                                onClick={() => handleSearch(scanBuffer)}
-                                disabled={isProcessing || !scanBuffer || (batchMode && (!batchConfig.dealerId || !batchConfig.modelId))}
-                                className={`flex-1 px-8 py-4 rounded-xl font-bold text-sm transition-all shadow-lg active:scale-95 disabled:opacity-30 tracking-[0.08em] md:flex-none ${batchMode ? 'bg-white text-indigo-900 hover:bg-indigo-50' : 'bg-slate-900 text-white hover:bg-black shadow-slate-900/15'}`}
+                                onClick={isReplacement ? handleStartReplacement : () => handleSearch(scanBuffer)}
+                                disabled={isProcessing || (isReplacement
+                                    ? (!replacementOldSerial.trim() || !replacementNewSerial.trim())
+                                    : (!scanBuffer || (isBatch && (!batchConfig.dealerId || !batchConfig.modelId))))}
+                                className={isBatch
+                                    ? 'flex-1 rounded-xl bg-white px-8 py-4 text-sm font-bold tracking-[0.08em] text-indigo-900 shadow-lg transition-all hover:bg-indigo-50 active:scale-95 disabled:opacity-30 md:flex-none'
+                                    : `inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold shadow-sm transition-all active:scale-[0.99] disabled:opacity-50 md:flex-none ${isReplacement ? 'bg-amber-900 text-white hover:bg-amber-950' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
                             >
-                                {batchMode ? 'Stage' : 'Trace'}
+                                {isBatch ? 'Stage' : isProcessing ? <><Loader2 className="animate-spin" size={16} />{isReplacement ? 'Checking…' : 'Searching…'}</> : isReplacement ? 'Start exchange' : 'Trace'}
                             </button>
 
-                            {(activeAsset || scanBuffer) && (
+                            {(isReplacement ? (replacementOldSerial || replacementNewSerial) : (activeAsset || scanBuffer)) && (
                                 <button
                                     onClick={handleClear}
-                                    className={`p-4 rounded-xl transition-all active:scale-95 ${batchMode ? 'bg-white/10 text-indigo-100 hover:bg-rose-400/20 hover:text-white' : 'bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600'}`}
+                                    className={`p-4 rounded-xl transition-all active:scale-95 ${isBatch ? 'bg-white/10 text-indigo-100 hover:bg-rose-400/20 hover:text-white' : isReplacement ? 'bg-amber-100 text-amber-900 hover:bg-amber-200' : 'bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600'}`}
                                     title="Clear Search"
                                 >
                                     <X size={20} />
@@ -252,14 +362,14 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
                         </div>
                     </div>
 
-                    {batchMode && (
+                    {isBatch && (
                         <div className="mt-4 space-y-3">
                             {showBatchConfigAlert && !batchConfigReady && (
                                 <div className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-sm font-bold text-rose-100">
                                     Select dealer and model first.
                                 </div>
                             )}
-                            {(selectedDealer || selectedModel || batchMode) && (
+                            {(selectedDealer || selectedModel || isBatch) && (
                                 <div className="grid gap-2.5 md:grid-cols-3">
                                     {selectedDealer && (
                                         isAdmin ? (

@@ -25,8 +25,7 @@ interface BatteryDetailsCardProps {
     handleSearch: (id: string) => void;
     handlePrintReport: () => void;
     setIsInspecting: (inspecting: boolean) => void;
-    setIsReplacing: (replacing: boolean) => void;
-    setReplacementStep: (step: number) => void;
+    onOpenReplacement: () => void;
     showDateCorrection: boolean;
     setShowDateCorrection: (show: boolean) => void;
     userRole?: string;
@@ -50,8 +49,7 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
     handleSearch,
     handlePrintReport,
     setIsInspecting,
-    setIsReplacing,
-    setReplacementStep,
+    onOpenReplacement,
     showDateCorrection,
     setShowDateCorrection,
     userRole,
@@ -138,8 +136,7 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                             <button
                                 onClick={() => {
                                     if (AuthSession.isValid()) {
-                                        setIsReplacing(true);
-                                        setReplacementStep(1);
+                                        onOpenReplacement();
                                     } else {
                                         setPendingAction('EXCHANGE');
                                         setIsLocked(true);
@@ -160,7 +157,7 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Next step</p>
                             <p className="mt-1 text-sm font-black text-slate-900">Resume exchange flow</p>
                         </div>
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 hidden">
                             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Inspection</p>
                             <p className="mt-1 text-sm font-black text-slate-900">Not needed again</p>
                         </div>
@@ -501,7 +498,7 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                         <Activity size={32} className="opacity-40" />
                     </div>
                 ) : !isExpired && canInspectBattery ? (
-                    <div className="space-y-4">
+                    <div className="space-y-4 hidden">
                         {/* Battery Inspection Section */}
                         <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_16px_40px_-26px_rgba(15,23,42,0.25)]">
                             <div className="border-b border-slate-200 bg-[linear-gradient(180deg,_#f8fafc_0%,_#ffffff_100%)] px-6 py-5">

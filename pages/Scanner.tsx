@@ -21,6 +21,7 @@ import BatteryReportSheet from '../components/BatteryReportSheet';
 import BatteryEdit from '../components/BatteryEdit';
 import { BatteryStatus, type Battery, type Dealer, WarrantyCardStatus, type Sale, Replacement, BatteryModel, WarrantyStatus } from '../types';
 import { AuthSession } from '../utils/AuthSession';
+import { validateReplacementStart } from '../utils/replacementValidation';
 import BatteryPrintTemplate from '../components/BatteryPrintTemplate';
 import { ProgressFlow } from '../components/ProgressFlow';
 import { SuccessFlow } from '../components/SuccessFlow';
@@ -50,7 +51,6 @@ interface ScannerProps {
 
 const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, initialState, onStateChange, active, onOpenDealers, onOpenDealerProfile }) => {
   const inputRef = useRef<HTMLInputElement>(null);
-  const replacementInputRef = useRef<HTMLInputElement>(null);
   const batchIntervalRef = useRef<any>(null);
   const isBatchProcessingRef = useRef(false);
   const inspectionRef = useRef<HTMLDivElement>(null);
@@ -68,7 +68,18 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   const [showEdit, setShowEdit] = useState(false);
 
   // Batch Assignment Mode State
-  const [batchMode, setBatchMode] = useState(false);
+  const [scanMode, setScanMode] = useState<'TRACE'|'BATCH'|'REPLACEMENT'>('TRACE');
+  const isBatch = scanMode === 'BATCH';
+  const [replacementOldSerial, setReplacementOldSerial] = useState('');
+  const [replacementNewSerial, setReplacementNewSerial] = useState('');
+  const [replacementOldAsset, setReplacementOldAsset] = useState<any>(null);
+  const [replacementAsset, setReplacementAsset] = useState<any>(null);
+  const [replacementSoldConflict, setReplacementSoldConflict] = useState<{ batteryId: string; dealerName: string; customerName?: string } | null>(null);
+  const [replacementDealerMismatch, setReplacementDealerMismatch] = useState<{ batteryId: string; saleDealerName: string; registryDealerName: string } | null>(null);
+  const [replacementStockDealerConflict, setReplacementStockDealerConflict] = useState<{ batteryId: string; stockDealerName: string; expectedDealerName: string } | null>(null);
+  const [replacementAlreadyExchanged, setReplacementAlreadyExchanged] = useState<{ batteryId: string; linkedBatteryId?: string } | null>(null);
+  const [replacementExpiredWarning, setReplacementExpiredWarning] = useState<{ batteryId: string; expiryDate: string } | null>(null);
+  const [isReplacementSearching, setIsReplacementSearching] = useState(false);
   const [batchConfig, setBatchConfig] = useState({ dealerId: '', modelId: '', date: getLocalDate() });
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [stagedItems, setStagedItems] = useState<any[]>([]);
@@ -139,6 +150,9 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     }
   }, [isInspecting]);
 
+
+
+
   const loadData = async () => {
     const [d, m, p] = await Promise.all([
       Database.getAll<Dealer>('dealers'),
@@ -157,7 +171,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     if (initialState) {
       if (initialState.scanBuffer) setScanBuffer(initialState.scanBuffer);
       if (initialState.activeAsset) setActiveAsset(initialState.activeAsset);
-      if (initialState.batchMode) setBatchMode(initialState.batchMode);
+      if (initialState.isBatch) setScanMode(initialState.isBatch);
       if (initialState.stagedItems) setStagedItems(initialState.stagedItems);
       if (initialState.batchConfig) setBatchConfig(initialState.batchConfig);
       if (initialState.showAddStock) setShowAddStock(initialState.showAddStock);
@@ -190,7 +204,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       const id = localStorage.getItem('deep_link_inspection_id');
       if (id && active) {
         localStorage.removeItem('deep_link_inspection_id');
-        setBatchMode(false);
+        setScanMode('TRACE');
         setScanBuffer(id);
         handleSearch(id);
       }
@@ -221,7 +235,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       const stateToSave = {
         scanBuffer,
         activeAsset,
-        batchMode,
+        isBatch,
         stagedItems,
         batchConfig,
         showAddStock,
@@ -229,11 +243,11 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       };
       onStateChange(stateToSave);
     }
-  }, [scanBuffer, activeAsset, batchMode, stagedItems, batchConfig, showAddStock, missingSerial]);
+  }, [scanBuffer, activeAsset, isBatch, stagedItems, batchConfig, showAddStock, missingSerial]);
 
   useEffect(() => {
     if (initialSearch) {
-      setBatchMode(false);
+      setScanMode('TRACE');
       handleSearch(initialSearch);
       if (onSearchHandled) onSearchHandled();
     }
@@ -264,14 +278,33 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   }, []);
 
   useEffect(() => {
-    if (isReplacing && activeAsset?.battery?.dealerId) {
-      setReplacementData(prev => ({ ...prev, dealerId: activeAsset.battery.dealerId }));
-      setTimeout(() => replacementInputRef.current?.focus(), 150);
+    if (isReplacing && replacementAsset?.battery?.dealerId) {
+      setReplacementData(prev => ({ ...prev, dealerId: replacementAsset.battery.dealerId }));
     }
-  }, [isReplacing, activeAsset]);
+  }, [isReplacing, replacementAsset]);
 
   const focusMainInput = () => {
     setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const prepareReplacementTab = (asset: any, reason?: string) => {
+    if (!asset?.battery) return;
+    setReplacementAsset(asset);
+    setReplacementOldAsset(asset);
+    setReplacementOldSerial(asset.battery.id);
+    setReplacementNewSerial('');
+    setScanMode('REPLACEMENT');
+    setIsReplacing(false);
+    setIsConfirmingReplacement(false);
+    setReplacementStep(1);
+    setReplacementData(prev => ({
+      ...prev,
+      newBatteryId: '',
+      dealerId: asset.battery.dealerId || prev.dealerId,
+      reason: reason || prev.reason,
+      soldDate: asset.battery.actualSaleDate || asset.originalSale?.saleDate || asset.sale?.saleDate || asset.battery.activationDate || '',
+      warrantyCardStatus: asset.battery.warrantyCardStatus || 'RECEIVED'
+    }));
   };
 
   // Session Lock State
@@ -295,15 +328,136 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     }
   };
 
+
+
+  const handleOldBatteryBlur = () => {
+    const cleanId = replacementOldSerial.toUpperCase().trim();
+    if (cleanId.length < 3) {
+      setReplacementOldAsset(null);
+      return;
+    }
+
+    setIsReplacementSearching(true);
+
+    // Enforce minimum 1-second loading delay as requested
+    setTimeout(async () => {
+      try {
+        const data = await Database.searchBattery(cleanId);
+        if (data && data.battery) {
+          setReplacementOldAsset(data);
+        } else {
+          setReplacementOldAsset(null);
+          notify('Battery not found', 'error');
+        }
+      } catch (e) {
+        setReplacementOldAsset(null);
+      } finally {
+        setIsReplacementSearching(false);
+      }
+    }, 1000);
+  };
+
+  const handleStartReplacement = async () => {
+    const cleanOld = replacementOldSerial.toUpperCase().trim();
+    const cleanNew = replacementNewSerial.toUpperCase().trim();
+
+    if (!cleanOld || !cleanNew) {
+      notify('Both old and new serials are required.', 'error');
+      return;
+    }
+
+    setIsProcessing(true);
+    setReplacementAsset(null);
+    setIsReplacing(false);
+    setIsConfirmingReplacement(false);
+
+    try {
+      const data = await Database.searchBattery(cleanOld);
+      if (data && data.battery) {
+        const oldBatteryRecord = await Database.getReplacementCandidate(cleanOld);
+        const priorExchange = data.replacements?.find((replacement: Replacement) => replacement.oldBatteryId === data.battery.id);
+        const candidate = await Database.getReplacementCandidate(cleanNew);
+        const validation = validateReplacementStart({
+          oldBattery: data.battery,
+          oldSale: oldBatteryRecord.sale,
+          oldHasExchange: !!priorExchange,
+          newBattery: candidate.battery,
+          newSale: candidate.sale
+        });
+
+        if (validation.allowed === false) {
+          if (validation.reason === 'OLD_ALREADY_EXCHANGED' || validation.reason === 'NEW_ALREADY_EXCHANGED') {
+            setReplacementAlreadyExchanged({
+              batteryId: validation.batteryId,
+              linkedBatteryId: validation.linkedBatteryId
+            });
+          } else if (validation.reason === 'OLD_DEALER_MISMATCH') {
+            const soldDealerId = validation.recordedDealerId || '';
+            const registryDealerId = validation.expectedDealerId || '';
+            setReplacementDealerMismatch({
+              batteryId: validation.batteryId,
+              saleDealerName: dealers.find(dealer => dealer.id === soldDealerId)?.name || soldDealerId,
+              registryDealerName: dealers.find(dealer => dealer.id === registryDealerId)?.name || registryDealerId
+            });
+          } else if (validation.reason === 'NEW_ALREADY_SOLD') {
+            const dealerId = validation.recordedDealerId;
+            setReplacementSoldConflict({
+              batteryId: validation.batteryId,
+              dealerName: dealers.find(dealer => dealer.id === dealerId)?.name || 'the recorded dealer',
+              customerName: validation.customerName
+            });
+          } else {
+            const stockDealerId = validation.recordedDealerId || '';
+            const expectedDealerId = validation.expectedDealerId || '';
+            setReplacementStockDealerConflict({
+              batteryId: validation.batteryId,
+              stockDealerName: dealers.find(dealer => dealer.id === stockDealerId)?.name || stockDealerId,
+              expectedDealerName: dealers.find(dealer => dealer.id === expectedDealerId)?.name || expectedDealerId
+            });
+          }
+          return;
+        }
+
+        setReplacementAsset(data);
+        setReplacementData(prev => ({
+          ...prev,
+          newBatteryId: cleanNew,
+          soldDate: data.battery.actualSaleDate || '',
+          warrantyCardStatus: data.battery.warrantyCardStatus || 'RECEIVED'
+        }));
+        setIsReplacing(true);
+        const warranty = WarrantyCalculator.calculate(data.battery);
+        if (warranty.status === WarrantyStatus.EXPIRED) {
+          setReplacementExpiredWarning({
+            batteryId: data.battery.id,
+            expiryDate: warranty.effectiveExpiryDate
+          });
+        } else {
+          notify('Old battery validated. Proceeding to exchange...', 'success');
+        }
+      } else {
+        notify('Old battery not found in registry', 'error');
+      }
+    } catch (e) {
+      notify('Validation Interrupted', 'error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleSearch = async (id: string, isAutoScan = false) => {
+
     if (!id) return;
     const cleanId = id.toUpperCase().trim();
 
     // BATCH MODE LOGIC
-    if (batchMode && batchConfig.dealerId && batchConfig.modelId) {
+    if (isBatch && batchConfig.dealerId && batchConfig.modelId) {
       if (stagedItems.find(i => i.id === cleanId)) {
         notify(`${cleanId} already staged`, 'error');
         setScanBuffer('');
+    setReplacementOldSerial('');
+    setReplacementNewSerial('');
+    setReplacementOldAsset(null);
         return;
       }
 
@@ -383,9 +537,14 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   const handleClear = () => {
     setScanBuffer('');
     setActiveAsset(null);
+    setReplacementAsset(null);
+    setReplacementOldAsset(null);
+    setReplacementOldSerial('');
+    setReplacementNewSerial('');
     setMissingSerial('');
     setShowAddStock(false);
     setIsReplacing(false);
+    setIsConfirmingReplacement(false);
     setReplacementStep(1);
     setWarrantyCalculation(null);
     if (inputRef.current) {
@@ -494,8 +653,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       } else if (pendingAction === 'MOVE') {
         setShowMoveDealer(true);
       } else {
-        setIsReplacing(true);
-        setReplacementStep(1);
+        prepareReplacementTab(activeAsset);
       }
       setPendingAction(null);
     } else {
@@ -506,7 +664,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
 
   const handleReplacementRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeAsset) return;
+    if (!replacementAsset) return;
 
     if (replacementStep === 1) {
       const newUnitId = replacementData.newBatteryId.toUpperCase().trim();
@@ -515,14 +673,27 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         return;
       }
 
-      if (newUnitId === activeAsset.battery.id) {
+      if (newUnitId === replacementAsset.battery.id) {
         notify('Cannot replace with same unit', 'error');
         return;
       }
 
       // Check if the unit exists
-      const newUnitCheck = await Database.searchBattery(newUnitId);
-      if (newUnitCheck && newUnitCheck.battery) {
+      const newUnitCheck = await Database.getReplacementCandidate(newUnitId);
+      if (newUnitCheck.battery) {
+        const isSoldToCustomer = !!newUnitCheck.sale || (
+          !!newUnitCheck.battery.actualSaleDate && newUnitCheck.battery.customerPhone !== 'STOCK'
+        );
+        if (isSoldToCustomer) {
+          const dealerId = newUnitCheck.sale?.dealerId || newUnitCheck.battery.dealerId;
+          setReplacementSoldConflict({
+            batteryId: newUnitId,
+            dealerName: dealers.find(dealer => dealer.id === dealerId)?.name || 'the recorded dealer',
+            customerName: newUnitCheck.sale?.customerName || newUnitCheck.battery.customerName || undefined
+          });
+          return;
+        }
+
         // Allow if it's in a valid state for assignment (MANUFACTURED or ACTIVE in dealer stock)
         const validStates = [BatteryStatus.MANUFACTURED, BatteryStatus.ACTIVE];
         if (!validStates.includes(newUnitCheck.battery.status)) {
@@ -532,7 +703,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
 
         // ✅ BUG FIX: Cross-Dealer Validation
         // If the unit is already assigned to a dealer (e.g. ACTIVE stock), it MUST belong to the SAME dealer
-        if (newUnitCheck.battery.dealerId && newUnitCheck.battery.dealerId !== activeAsset.battery.dealerId) {
+        if (newUnitCheck.battery.dealerId && newUnitCheck.battery.dealerId !== replacementAsset.battery.dealerId) {
           const ownerName = dealers.find(d => d.id === newUnitCheck.battery.dealerId)?.name || 'Another Dealer';
           notify(`Stock Conflict: Unit belongs to ${ownerName}. Cannot exchange.`, 'error');
           return;
@@ -560,7 +731,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         return;
       }
 
-      if (replId === replacementData.newBatteryId || replId === activeAsset.battery.id) {
+      if (replId === replacementData.newBatteryId || replId === replacementAsset.battery.id) {
         notify('Replenishment unit cannot be same as faulty or customer unit', 'error');
         return;
       }
@@ -595,10 +766,10 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     soldDate.setHours(0, 0, 0, 0);
     today.setHours(0, 0, 0, 0);
 
-    const manufactureDate = new Date(activeAsset.battery.manufactureDate);
+    const manufactureDate = new Date(replacementAsset.battery.manufactureDate);
     manufactureDate.setHours(0, 0, 0, 0);
 
-    const activationDate = activeAsset.battery.activationDate ? new Date(activeAsset.battery.activationDate) : null;
+    const activationDate = replacementAsset.battery.activationDate ? new Date(replacementAsset.battery.activationDate) : null;
     if (activationDate) activationDate.setHours(0, 0, 0, 0);
 
     if (soldDate > today) {
@@ -609,13 +780,13 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     // ✅ Fix: Use ORIGINAL battery manufacture date for validation (Start of Lineage)
     // We collect all known batteries in the lineage + current one, and find the EARLIEST manufacture date.
     // This handles cases where lineage arrays might be unsorted or incomplete.
-    const allKnownBatteries = [activeAsset.battery, ...(activeAsset.lineage || [])];
+    const allKnownBatteries = [replacementAsset.battery, ...(replacementAsset.lineage || [])];
 
     const earliestBattery = allKnownBatteries.reduce((earliest, current) => {
       const eDate = new Date(earliest.manufactureDate);
       const cDate = new Date(current.manufactureDate);
       return cDate < eDate ? current : earliest;
-    }, activeAsset.battery);
+    }, replacementAsset.battery);
 
     const originalManufactureDate = new Date(earliestBattery.manufactureDate);
     originalManufactureDate.setHours(0, 0, 0, 0);
@@ -706,9 +877,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   };
 
   const executeReplacement = async () => {
-    if (!activeAsset) return;
+    if (!replacementAsset) return;
     setIsActionLoading(true);
-    setIsConfirmingReplacement(false);
     const newUnitId = replacementData.newBatteryId.toUpperCase().trim();
 
     try {
@@ -721,14 +891,14 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       if (existingNewUnit) {
         // Update existing unit to link it as a replacement
         await Database.run(
-          `UPDATE batteries SET 
-              replacementCount = ?, 
+          `UPDATE batteries SET
+              replacementCount = ?,
               originalBatteryId = ?,
               status = 'MANUFACTURED' -- Temporarily set to MANUFACTURED so addReplacement logic can activate it correctly
             WHERE id = ?`,
           [
-            (activeAsset.battery.replacementCount || 0) + 1,
-            activeAsset.battery.originalBatteryId || activeAsset.battery.id,
+            (replacementAsset.battery.replacementCount || 0) + 1,
+            replacementAsset.battery.originalBatteryId || replacementAsset.battery.id,
             newUnitId
           ]
         );
@@ -736,14 +906,14 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         // Create new
         await Database.addBattery({
           id: newUnitId,
-          model: activeAsset.battery.model,
-          capacity: activeAsset.battery.capacity,
+          model: replacementAsset.battery.model,
+          capacity: replacementAsset.battery.capacity,
           manufactureDate: getLocalDate(),
           status: BatteryStatus.MANUFACTURED,
-          replacementCount: (activeAsset.battery.replacementCount || 0) + 1, // ✅ Bug #7: Increment count
-          warrantyMonths: activeAsset.battery.warrantyMonths,
-          dealerId: activeAsset.battery.dealerId || 'CENTRAL',
-          originalBatteryId: activeAsset.battery.originalBatteryId || activeAsset.battery.id // ✅ Bug #1: Track original battery
+          replacementCount: (replacementAsset.battery.replacementCount || 0) + 1, // ✅ Bug #7: Increment count
+          warrantyMonths: replacementAsset.battery.warrantyMonths,
+          dealerId: replacementAsset.battery.dealerId || 'CENTRAL',
+          originalBatteryId: replacementAsset.battery.originalBatteryId || replacementAsset.battery.id // ✅ Bug #1: Track original battery
         });
       }
 
@@ -757,28 +927,28 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
           // Existing unit: Mark as Active (Dispatched to Dealer)
           await Database.run(
             `UPDATE batteries SET status = 'ACTIVE', dealerId = ? WHERE id = ?`,
-            [activeAsset.battery.dealerId || 'CENTRAL', replId]
+            [replacementAsset.battery.dealerId || 'CENTRAL', replId]
           );
         } else {
           // New Unit (Not in DB): Create it and mark Active
           await Database.addBattery({
             id: replId,
-            model: activeAsset.battery.model,
-            capacity: activeAsset.battery.capacity,
+            model: replacementAsset.battery.model,
+            capacity: replacementAsset.battery.capacity,
             manufactureDate: getLocalDate(),
             status: BatteryStatus.ACTIVE, // Created and immediately Active (Dispatched)
             replacementCount: 0,
-            warrantyMonths: activeAsset.battery.warrantyMonths,
-            dealerId: activeAsset.battery.dealerId || 'CENTRAL'
+            warrantyMonths: replacementAsset.battery.warrantyMonths,
+            dealerId: replacementAsset.battery.dealerId || 'CENTRAL'
           });
         }
       }
 
       // 2. Execute the official Swap Protocol
       // Calculate new expiry based on soldDate
-      let finalExpiry = activeAsset.sale?.warrantyExpiry || activeAsset.battery.warrantyExpiry;
+      let finalExpiry = replacementAsset.sale?.warrantyExpiry || replacementAsset.battery.warrantyExpiry;
       if (replacementData.soldDate) {
-        const months = activeAsset.battery.warrantyMonths || 24;
+        const months = replacementAsset.battery.warrantyMonths || 24;
         const newExp = new Date(replacementData.soldDate);
         newExp.setMonth(newExp.getMonth() + months);
         finalExpiry = newExp.toISOString().split('T')[0];
@@ -786,7 +956,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
 
       const replacement: Replacement = {
         id: `REP-${Date.now()}`,
-        oldBatteryId: activeAsset.battery.id,
+        oldBatteryId: replacementAsset.battery.id,
         newBatteryId: replacementData.newBatteryId,
         dealerId: replacementData.dealerId,
         replacementDate: replacementData.replacementDate,
@@ -798,14 +968,14 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         settlementType: replacementData.settlementMethod
       };
       await Database.addReplacement(replacement, {
-        customerName: activeAsset.sale?.customerName || null,
-        customerPhone: activeAsset.sale?.customerPhone || null,
+        customerName: replacementAsset.sale?.customerName || null,
+        customerPhone: replacementAsset.sale?.customerPhone || null,
         warrantyExpiry: finalExpiry,
         correctedOriginalSaleDate: replacementData.soldDate
       });
 
-      await Database.logActivity('EXCHANGE_COMPLETED', `Exchanged ${activeAsset.battery.id} with ${replacementData.newBatteryId}`, {
-        oldBatteryId: activeAsset.battery.id,
+      await Database.logActivity('EXCHANGE_COMPLETED', `Exchanged ${replacementAsset.battery.id} with ${replacementData.newBatteryId}`, {
+        oldBatteryId: replacementAsset.battery.id,
         newBatteryId: replacementData.newBatteryId,
         dealerId: replacementData.dealerId,
         dealerName: dealers.find(d => d.id === replacementData.dealerId)?.name || 'N/A',
@@ -828,12 +998,13 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       setIsReplacing(false);
       setReplacementStep(1);
       setIsConfirmingReplacement(false);
-
-      // Reload to show the new state
-      handleSearch(activeAsset.battery.id);
+      setReplacementAsset(null);
+      setReplacementOldAsset(null);
+      setReplacementOldSerial('');
+      setReplacementNewSerial('');
     } catch (e) {
       console.error(e);
-      await Database.logActivity('EXCHANGE_FAILED', `Exchange failed for ${activeAsset.battery.id}`, { error: String(e) });
+      await Database.logActivity('EXCHANGE_FAILED', `Exchange failed for ${replacementAsset.battery.id}`, { error: String(e) });
       notify('Exchange failed during write protocol', 'error');
     } finally {
       setIsActionLoading(false);
@@ -841,7 +1012,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   };
 
   const handleMarkPending = async () => {
-    if (!activeAsset) return;
+    if (!replacementAsset) return;
 
     if (!showReturnDatePicker) {
       setShowReturnDatePicker(true);
@@ -851,15 +1022,15 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     setIsActionLoading(true);
     try {
       await Database.markAsPendingExchange(
-        activeAsset.battery.id,
-        activeAsset.battery.dealerId || 'CENTRAL',
+        replacementAsset.battery.id,
+        replacementAsset.battery.dealerId || 'CENTRAL',
         pendingReturnDate,
         replacementData.warrantyCardStatus,
         replacementData.soldDate
       );
-      await Database.logActivity('RETURN_PENDING', `Marked ${activeAsset.battery.id} as Pending Exchange`, { dealerId: activeAsset.battery.dealerId });
-      notify(`${activeAsset.battery.id} marked as pending exchange`);
-      setActiveAsset(null);
+      await Database.logActivity('RETURN_PENDING', `Marked ${replacementAsset.battery.id} as Pending Exchange`, { dealerId: replacementAsset.battery.dealerId });
+      notify(`${replacementAsset.battery.id} marked as pending exchange`);
+      setReplacementAsset(null);
       setIsReplacing(false);
       setReplacementStep(1);
       setShowReturnDatePicker(false);
@@ -1038,8 +1209,16 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         `}
       </style>
       <ScannerHeader
-        batchMode={batchMode}
-        setBatchMode={setBatchMode}
+        scanMode={scanMode}
+        setScanMode={setScanMode}
+        replacementNewSerial={replacementNewSerial}
+        setReplacementNewSerial={setReplacementNewSerial}
+        handleStartReplacement={handleStartReplacement}
+        replacementOldAsset={replacementOldAsset}
+        isReplacementSearching={isReplacementSearching}
+        replacementOldSerial={replacementOldSerial}
+        setReplacementOldSerial={setReplacementOldSerial}
+        onOldBatteryBlur={handleOldBatteryBlur}
         lastScanned={lastScanned}
         stagedCount={stagedItems.length}
         dealers={dealers}
@@ -1057,7 +1236,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         onOpenDealerProfile={onOpenDealerProfile}
       />
 
-      {batchMode && (
+      {isBatch && (
         <BatchStagingArea
           stagedItems={stagedItems}
           setStagedItems={setStagedItems}
@@ -1072,13 +1251,13 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       {showAddStock && (
         <UnregisteredUnitFound
           missingSerial={missingSerial}
-          setBatchMode={setBatchMode}
+          setBatchMode={() => setScanMode('BATCH')}
           setScanBuffer={setScanBuffer}
           setMissingSerial={setMissingSerial}
         />
       )}
 
-      {!batchMode && activeAsset && (
+      {scanMode === 'TRACE' && activeAsset && (
         <>
           {showEdit && createPortal(
             <div className="fixed inset-0 z-[120] bg-slate-950/40 backdrop-blur-sm p-4 md:p-8 overflow-y-auto">
@@ -1276,8 +1455,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
             handleSearch={handleSearch}
             handlePrintReport={handlePrintReport}
             setIsInspecting={setIsInspecting}
-            setIsReplacing={setIsReplacing}
-            setReplacementStep={setReplacementStep}
+            onOpenReplacement={() => prepareReplacementTab(activeAsset)}
             showDateCorrection={showDateCorrection}
             setShowDateCorrection={setShowDateCorrection}
             userRole={userRole}
@@ -1319,35 +1497,13 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
                 }}
                 onStartExchange={(reason) => {
                   setIsInspecting(false);
-                  setIsReplacing(true);
-                  setReplacementStep(1);
-                  setReplacementData(prev => ({ ...prev, reason }));
+                  prepareReplacementTab(activeAsset, reason);
                 }}
                 userRole={userRole}
               />
             </div>
           )}
 
-
-          <ReplacementFlow
-            isReplacing={isReplacing}
-            setIsReplacing={setIsReplacing}
-            replacementStep={replacementStep}
-            setReplacementStep={setReplacementStep}
-            replacementData={replacementData}
-            setReplacementData={setReplacementData}
-            activeAsset={activeAsset}
-            handleReplacementRequest={handleReplacementRequest}
-            isConfirmingReplacement={isConfirmingReplacement}
-            setIsConfirmingReplacement={setIsConfirmingReplacement}
-            executeReplacement={executeReplacement}
-            isActionLoading={isActionLoading}
-            handleMarkPending={handleMarkPending}
-            showReturnDatePicker={showReturnDatePicker}
-            pendingReturnDate={pendingReturnDate}
-            setPendingReturnDate={setPendingReturnDate}
-            replacementInputRef={replacementInputRef}
-          />
 
           <AuditHistoryTable
             activeAsset={activeAsset}
@@ -1370,6 +1526,173 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
             }}
           />
         </>
+      )}
+
+      <ReplacementFlow
+        isReplacing={isReplacing && scanMode === 'REPLACEMENT'}
+        setIsReplacing={setIsReplacing}
+        replacementStep={replacementStep}
+        setReplacementStep={setReplacementStep}
+        replacementData={replacementData}
+        setReplacementData={setReplacementData}
+        activeAsset={replacementAsset}
+        handleReplacementRequest={handleReplacementRequest}
+        isConfirmingReplacement={isConfirmingReplacement && scanMode === 'REPLACEMENT'}
+        setIsConfirmingReplacement={setIsConfirmingReplacement}
+        executeReplacement={executeReplacement}
+        isActionLoading={isActionLoading}
+        handleMarkPending={handleMarkPending}
+        showReturnDatePicker={showReturnDatePicker}
+        pendingReturnDate={pendingReturnDate}
+        setPendingReturnDate={setPendingReturnDate}
+      />
+
+      {replacementSoldConflict && createPortal(
+        <div
+          className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+          role="presentation"
+          onClick={() => setReplacementSoldConflict(null)}
+        >
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="replacement-sold-title"
+            className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-2xl"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800"><AlertCircle size={22} /></div>
+              <div className="min-w-0">
+                <h2 id="replacement-sold-title" className="text-lg font-bold text-slate-900">Battery already sold</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Battery <span className="font-mono font-semibold text-slate-900">{replacementSoldConflict.batteryId}</span> is already sold to a customer through <span className="font-semibold text-slate-900">{replacementSoldConflict.dealerName}</span>{replacementSoldConflict.customerName ? <> ({replacementSoldConflict.customerName})</> : ''}. It can’t be used for this replacement.
+                </p>
+              </div>
+              <button type="button" onClick={() => setReplacementSoldConflict(null)} aria-label="Close" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={18} /></button>
+            </div>
+            <button type="button" onClick={() => setReplacementSoldConflict(null)} className="mt-6 w-full rounded-xl bg-amber-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-amber-800">Choose another battery</button>
+          </section>
+        </div>,
+        document.body
+      )}
+
+      {replacementDealerMismatch && createPortal(
+        <div className="fixed inset-0 z-[145] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="replacement-dealer-mismatch-title"
+            className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800"><Store size={22} /></div>
+              <div>
+                <h2 id="replacement-dealer-mismatch-title" className="text-lg font-bold text-slate-900">Battery sold under a different dealer</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Battery <span className="font-mono font-semibold text-slate-900">{replacementDealerMismatch.batteryId}</span> has a sale recorded for <span className="font-semibold text-slate-900">{replacementDealerMismatch.saleDealerName}</span>, but the registry assigns it to <span className="font-semibold text-slate-900">{replacementDealerMismatch.registryDealerName}</span>. Exchange stopped. Correct the dealer record before trying again.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplacementDealerMismatch(null)}
+              className="mt-6 w-full rounded-xl bg-amber-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-amber-800"
+            >Close</button>
+          </section>
+        </div>,
+        document.body
+      )}
+
+      {replacementStockDealerConflict && createPortal(
+        <div className="fixed inset-0 z-[145] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="replacement-stock-dealer-title"
+            className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800"><Store size={22} /></div>
+              <div>
+                <h2 id="replacement-stock-dealer-title" className="text-lg font-bold text-slate-900">Battery belongs to another dealer</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Replacement battery <span className="font-mono font-semibold text-slate-900">{replacementStockDealerConflict.batteryId}</span> is assigned to <span className="font-semibold text-slate-900">{replacementStockDealerConflict.stockDealerName}</span>, while the old battery is assigned to <span className="font-semibold text-slate-900">{replacementStockDealerConflict.expectedDealerName}</span>. Exchange stopped.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplacementStockDealerConflict(null)}
+              className="mt-6 w-full rounded-xl bg-amber-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-amber-800"
+            >Choose another battery</button>
+          </section>
+        </div>,
+        document.body
+      )}
+
+      {replacementAlreadyExchanged && createPortal(
+        <div className="fixed inset-0 z-[145] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="replacement-already-exchanged-title"
+            className="w-full max-w-md rounded-2xl border border-rose-200 bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-700"><AlertOctagon size={22} /></div>
+              <div>
+                <h2 id="replacement-already-exchanged-title" className="text-lg font-bold text-slate-900">Battery already exchanged</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Battery <span className="font-mono font-semibold text-slate-900">{replacementAlreadyExchanged.batteryId}</span> is already part of a completed replacement{replacementAlreadyExchanged.linkedBatteryId ? <> linked to <span className="font-mono font-semibold text-slate-900">{replacementAlreadyExchanged.linkedBatteryId}</span></> : ''}. It can’t be used again in this exchange.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplacementAlreadyExchanged(null)}
+              className="mt-6 w-full rounded-xl bg-rose-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-rose-800"
+            >Choose another battery</button>
+          </section>
+        </div>,
+        document.body
+      )}
+
+      {replacementExpiredWarning && createPortal(
+        <div className="fixed inset-0 z-[145] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="replacement-expired-title"
+            className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800"><ShieldAlert size={22} /></div>
+              <div>
+                <h2 id="replacement-expired-title" className="text-lg font-bold text-slate-900">Warranty has expired</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Battery <span className="font-mono font-semibold text-slate-900">{replacementExpiredWarning.batteryId}</span> expired on <span className="font-semibold text-slate-900">{formatDate(replacementExpiredWarning.expiryDate)}</span>. You can continue and record this replacement, or cancel.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setReplacementExpiredWarning(null);
+                  setIsReplacing(false);
+                  setIsConfirmingReplacement(false);
+                }}
+                className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >Cancel replacement</button>
+              <button
+                type="button"
+                onClick={() => setReplacementExpiredWarning(null)}
+                className="rounded-xl bg-amber-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-amber-800"
+              >Continue anyway</button>
+            </div>
+          </section>
+        </div>,
+        document.body
       )}
 
       {/* Footer Info */}
