@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.13] - 2026-10-12
+
+### Changed
+- **Replacement Flow**: Improved the replacement scanner header, old-battery lookup feedback, and compact battery details card.
+- **Battery History Report**: Redesigned the A4 report with one receipt details summary, clearer battery movement history, and no repeated model or capacity in each history row.
+- **Replacement Transactions**: Removed the duplicate failure reason column while retaining the failure reason with battery movement evidence.
+
 ## [1.0.12] - 2026-10-10
 
 ### Added

@@ -304,6 +304,7 @@ export const BatteryDetailsCard: React.FC<BatteryDetailsCardProps> = ({
                                             lineage={activeAsset.lineage}
                                             replacements={activeAsset.replacements}
                                             activityLogs={activeAsset.activityLogs}
+                                            lineageSales={activeAsset.lineageSales}
                                             dealers={dealers}
                                             saleDate={activeAsset.lineageSales?.find((s: any) => s.batteryId === activeAsset.battery.id && s.customerPhone !== 'STOCK')?.saleDate}
                                             onPrint={handlePrintReport}

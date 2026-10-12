@@ -73,6 +73,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   const [replacementOldSerial, setReplacementOldSerial] = useState('');
   const [replacementNewSerial, setReplacementNewSerial] = useState('');
   const [replacementOldAsset, setReplacementOldAsset] = useState<any>(null);
+  const [replacementOldLookupResult, setReplacementOldLookupResult] = useState<'idle' | 'notFound' | 'error'>('idle');
   const [replacementAsset, setReplacementAsset] = useState<any>(null);
   const [replacementSoldConflict, setReplacementSoldConflict] = useState<{ batteryId: string; dealerName: string; customerName?: string } | null>(null);
   const [replacementDealerMismatch, setReplacementDealerMismatch] = useState<{ batteryId: string; saleDealerName: string; registryDealerName: string } | null>(null);
@@ -299,6 +300,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     setReplacementOldAsset(asset);
     setReplacementOldSerial(asset.battery.id);
     setReplacementNewSerial('');
+    setShowAddStock(false);
+    setMissingSerial('');
     setScanMode('REPLACEMENT');
     setIsReplacing(false);
     setIsConfirmingReplacement(false);
@@ -311,6 +314,14 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       soldDate: asset.battery.actualSaleDate || asset.originalSale?.saleDate || asset.sale?.saleDate || asset.battery.activationDate || '',
       warrantyCardStatus: asset.battery.warrantyCardStatus || 'RECEIVED'
     }));
+  };
+
+  const handleScanModeChange = (mode: 'TRACE' | 'BATCH' | 'REPLACEMENT') => {
+    setScanMode(mode);
+    if (mode !== 'TRACE') {
+      setShowAddStock(false);
+      setMissingSerial('');
+    }
   };
 
   // Session Lock State
@@ -340,10 +351,12 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     const cleanId = replacementOldSerial.toUpperCase().trim();
     if (cleanId.length < 3) {
       setReplacementOldAsset(null);
+      setReplacementOldLookupResult('idle');
       return;
     }
 
     setIsReplacementSearching(true);
+    setReplacementOldLookupResult('idle');
 
     // Enforce minimum 1-second loading delay as requested
     setTimeout(async () => {
@@ -351,12 +364,15 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         const data = await Database.searchBattery(cleanId);
         if (data && data.battery) {
           setReplacementOldAsset(data);
+          setReplacementOldLookupResult('idle');
         } else {
           setReplacementOldAsset(null);
+          setReplacementOldLookupResult('notFound');
           notify('Battery not found', 'error');
         }
       } catch (e) {
         setReplacementOldAsset(null);
+        setReplacementOldLookupResult('error');
       } finally {
         setIsReplacementSearching(false);
       }
@@ -1254,14 +1270,19 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       </style>
       <ScannerHeader
         scanMode={scanMode}
-        setScanMode={setScanMode}
+        setScanMode={handleScanModeChange}
         replacementNewSerial={replacementNewSerial}
         setReplacementNewSerial={setReplacementNewSerial}
         handleStartReplacement={handleStartReplacement}
         replacementOldAsset={replacementOldAsset}
+        replacementOldLookupResult={replacementOldLookupResult}
         isReplacementSearching={isReplacementSearching}
         replacementOldSerial={replacementOldSerial}
         setReplacementOldSerial={setReplacementOldSerial}
+        onOldBatteryInput={() => {
+          setReplacementOldAsset(null);
+          setReplacementOldLookupResult('idle');
+        }}
         onOldBatteryBlur={handleOldBatteryBlur}
         lastScanned={lastScanned}
         stagedCount={stagedItems.length}
@@ -1292,7 +1313,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         />
       )}
 
-      {showAddStock && (
+      {scanMode === 'TRACE' && showAddStock && (
         <UnregisteredUnitFound
           missingSerial={missingSerial}
           setBatchMode={() => setScanMode('BATCH')}
@@ -1793,6 +1814,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
             lineage={replacementCompletion.report.lineage || []}
             replacements={replacementCompletion.report.replacements || []}
             activityLogs={replacementCompletion.report.activityLogs || []}
+            lineageSales={replacementCompletion.report.lineageSales || []}
             dealers={dealers}
             saleDate={replacementCompletion.report.originalSale?.saleDate || replacementCompletion.report.battery.actualSaleDate || undefined}
           />

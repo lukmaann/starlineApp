@@ -10,9 +10,11 @@ interface ScannerHeaderProps {
     setReplacementNewSerial?: (val: string) => void;
     handleStartReplacement?: () => void;
     replacementOldAsset?: any;
+    replacementOldLookupResult?: 'idle' | 'notFound' | 'error';
     isReplacementSearching?: boolean;
     replacementOldSerial?: string;
     setReplacementOldSerial?: (val: string) => void;
+    onOldBatteryInput?: () => void;
     onOldBatteryBlur?: () => void;
     setScanMode: (mode: 'TRACE' | 'BATCH' | 'REPLACEMENT') => void;
     lastScanned: string | null;
@@ -42,9 +44,11 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
     setReplacementNewSerial = () => {},
     handleStartReplacement = () => {},
     replacementOldAsset = null,
+    replacementOldLookupResult = 'idle',
     isReplacementSearching = false,
     replacementOldSerial = '',
     setReplacementOldSerial = () => {},
+    onOldBatteryInput = () => {},
     onOldBatteryBlur = () => {},
     setScanMode,
     lastScanned,
@@ -83,14 +87,16 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
         ? `px-4 py-2 rounded-lg font-bold text-xs tracking-[0.08em] transition-all ${scanMode === mode ? (mode === 'BATCH' ? 'bg-white text-indigo-900 shadow-sm' : 'bg-white text-slate-900 shadow-sm') : 'text-white/75 hover:text-white'}`
         : `px-4 py-2 rounded-lg font-semibold text-sm transition-all ${scanMode === mode ? (mode === 'REPLACEMENT' ? 'bg-white text-amber-900 shadow-sm' : 'bg-white text-slate-900 shadow-sm') : isReplacement ? 'text-white/80 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`;
 
-    const oldDealer = replacementOldAsset ? (dealers.find(d => d.id === replacementOldAsset.battery?.dealerId)?.name || 'Unknown') : 'Unknown';
+    const oldDealerId = replacementOldAsset?.battery?.dealerId
+        || replacementOldAsset?.originalSale?.dealerId
+        || replacementOldAsset?.sale?.dealerId;
+    const oldDealer = oldDealerId ? (dealers.find(d => d.id === oldDealerId)?.name || oldDealerId) : 'Unknown dealer';
     const rawSaleDate = replacementOldAsset ? (replacementOldAsset.battery?.actualSaleDate ||
         replacementOldAsset.lineageSales?.find((s: any) => s.batteryId === replacementOldAsset.battery?.id && s.customerPhone !== 'STOCK')?.saleDate ||
         replacementOldAsset.sale?.saleDate ||
         replacementOldAsset.originalSale?.saleDate ||
         replacementOldAsset.battery?.activationDate) : null;
     const oldSaleDate = rawSaleDate ? formatDate(rawSaleDate) : 'Not Sold';
-
     const dealerFieldError = isBatch && showBatchConfigAlert && !batchConfig.dealerId;
     const modelFieldError = isBatch && showBatchConfigAlert && !batchConfig.modelId;
 
@@ -149,7 +155,7 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
         <div className={`transition-all duration-300 border rounded-2xl shadow-sm no-print ${isBatch
             ? 'bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.18),_transparent_28%),linear-gradient(135deg,_#312e81_0%,_#1e1b4b_60%,_#111827_100%)] border-indigo-700/70 shadow-indigo-950/20 p-8'
             : isReplacement
-                ? 'bg-gradient-to-r from-amber-800 via-amber-700 to-orange-800 border-amber-700 shadow-amber-950/15 p-6 sm:p-7 text-white'
+                ? 'bg-gradient-to-r from-amber-800 via-amber-700 to-orange-800 border-amber-700 shadow-amber-950/15 p-5 sm:p-6 text-white'
                 : 'bg-white border-slate-200 p-6 sm:p-7 text-slate-900'}`}>
             <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -180,7 +186,7 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
                             </div>
                             <div>
                                 <h2 className={`text-xl ${isBatch ? 'font-black' : 'font-bold'} tracking-tight ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
-                                    {scanMode === 'BATCH' ? 'Batch Scan' : scanMode === 'REPLACEMENT' ? 'Replacement' : 'Trace Battery'}
+                                    {scanMode === 'BATCH' ? 'Batch Scan' : scanMode === 'REPLACEMENT' ? 'Battery Replacement' : 'Trace Battery'}
                                 </h2>
                                 {!isBatch && <p className={`mt-1 max-w-2xl text-sm ${isReplacement ? 'text-amber-50' : 'text-slate-500'}`}>
                                     {scanMode === 'TRACE' ? 'Search a serial number to view battery status, history, and warranty details.' : 'Enter the old and new serial numbers to start a battery replacement.'}
@@ -240,37 +246,56 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
                 )}
 
 
-                {isReplacement && replacementOldAsset && (
-                    <div className="grid gap-4 animate-in fade-in slide-in-from-top-2 md:grid-cols-3">
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                            <div className="mb-3 flex items-center justify-between gap-2">
-                                <p className="text-xs font-semibold text-slate-500">Dealer</p>
-                                <CheckCircle2 size={15} className="text-emerald-600" />
+                {isReplacement && replacementOldAsset?.battery && (
+                    <div className="animate-in fade-in slide-in-from-top-2">
+                        <article className="w-full overflow-hidden rounded-2xl border border-white/80 bg-white shadow-lg shadow-orange-950/10">
+                            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+                                <div className="flex min-w-0 items-center gap-3">
+                                    <div className="rounded-xl bg-amber-50 p-3 text-amber-600"><BatteryCharging size={20} /></div>
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Old battery</p>
+                                        <p className="truncate font-mono text-base font-bold text-slate-900">{replacementOldAsset.battery.id}</p>
+                                    </div>
+                                </div>
+                                <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-emerald-50 px-4 py-3 text-xs font-bold uppercase text-emerald-700">
+                                    <CheckCircle2 size={17} /> Replacement
+                                </span>
                             </div>
-                            <div className="rounded-lg border border-slate-200 bg-white px-3 py-3">
-                                <p className="font-semibold text-sm text-slate-900 truncate">{oldDealer}</p>
+                            <div className="grid grid-cols-2 gap-2.5 p-3 sm:grid-cols-4 sm:gap-3 sm:p-4">
+                                <div className="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-3">
+                                    <span className="shrink-0 rounded-full bg-sky-100 p-2.5 text-sky-700"><MapPin size={19} /></span>
+                                    <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Dealer</p>
+                                    <p className="mt-0.5 truncate text-sm font-bold text-slate-800" title={oldDealer}>{oldDealer}</p></div>
+                                </div>
+                                <div className="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-3">
+                                    <span className="shrink-0 rounded-full bg-violet-100 p-2.5 text-violet-600"><Activity size={19} /></span>
+                                    <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Model</p>
+                                    <p className="mt-0.5 truncate text-sm font-bold text-slate-800">{replacementOldAsset.battery.model || 'Unknown'}{replacementOldAsset.battery.capacity ? ` · ${replacementOldAsset.battery.capacity}` : ''}</p></div>
+                                </div>
+                                <div className="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-3">
+                                    <span className="shrink-0 rounded-full bg-emerald-100 p-2.5 text-emerald-600"><PackagePlus size={19} /></span>
+                                    <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Sent to dealer</p>
+                                    <p className="mt-0.5 truncate text-sm font-bold text-slate-800">{replacementOldAsset.battery.activationDate ? formatDate(replacementOldAsset.battery.activationDate) : 'Not recorded'}</p></div>
+                                </div>
+                                <div className="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-3">
+                                    <span className="shrink-0 rounded-full bg-orange-100 p-2.5 text-orange-600"><CalendarDays size={19} /></span>
+                                    <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Original sale</p>
+                                    <p className="mt-0.5 truncate text-sm font-bold text-slate-800">{oldSaleDate}</p></div>
+                                </div>
                             </div>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                            <div className="mb-3 flex items-center justify-between gap-2">
-                                <p className="text-xs font-semibold text-slate-500">Model</p>
-                            </div>
-                            <div className="rounded-lg border border-slate-200 bg-white px-3 py-3">
-                                <p className="font-semibold text-sm text-slate-900 truncate">{replacementOldAsset.battery?.model || 'Unknown'}</p>
-                            </div>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                            <p className="mb-3 text-xs font-semibold text-slate-500">Original sale date</p>
-                            <div className="w-full rounded-lg border border-slate-200 bg-white px-3 py-3 font-semibold text-sm text-slate-900 truncate">
-                                {oldSaleDate}
-                            </div>
-                        </div>
+                        </article>
+                    </div>
+                )}
+                {isReplacement && !isReplacementSearching && replacementOldLookupResult !== 'idle' && !replacementOldAsset?.battery && (
+                    <div role="status" className={`flex max-w-3xl items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold animate-in fade-in slide-in-from-top-2 ${replacementOldLookupResult === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+                        <ShieldAlert size={16} />
+                        {replacementOldLookupResult === 'error' ? 'Could not look up this battery. Please try again.' : 'Battery not found. Check the old serial number and try again.'}
                     </div>
                 )}
 
                 <div className={`rounded-2xl border p-4 md:p-5 ${isBatch
                     ? 'border-white/10 bg-indigo-950/45 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
-                    : isReplacement ? 'border-amber-200 bg-white/95' : 'border-slate-200 bg-slate-50'}`}>
+                    : isReplacement ? 'border-white/80 bg-white/95 shadow-sm' : 'border-slate-200 bg-slate-50'}`}>
                     {isBatch && (
                         <div className="mb-4 flex justify-end">
                             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[10px] font-black tracking-[0.16em] text-indigo-100 ring-1 ring-white/10">
@@ -280,7 +305,7 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
                         </div>
                     )}
                     <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                        <div className="shrink-0 flex gap-2">
+                        <div className={`shrink-0 flex gap-2 ${isReplacement ? 'hidden' : ''}`}>
                             <div className={isBatch
                                 ? 'rounded-2xl bg-white/10 p-4 text-white ring-1 ring-white/10'
                                 : isReplacement
@@ -292,28 +317,33 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
                         {isReplacement ? (
                             <div className="flex-1 w-full grid md:grid-cols-2 gap-4">
                                 <div className="relative">
+                                    <label className="mb-2 block text-sm font-semibold text-slate-700">Old Battery Serial Number</label>
                                     {isReplacementSearching
-                                        ? <Loader2 className="absolute left-4 top-1/2 -translate-y-1/2 animate-spin text-blue-600" size={19} />
-                                        : <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />}
+                                        ? <Loader2 className="absolute left-4 top-[3.1rem] -translate-y-1/2 animate-spin text-orange-600" size={19} />
+                                        : <Search className="absolute left-4 top-[3.1rem] -translate-y-1/2 text-slate-400" size={20} />}
                                     <input
                                         ref={inputRef}
                                         disabled={isProcessing}
-                                        placeholder="Old Battery Serial..."
-                                        className="w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 py-3.5 outline-none text-sm font-semibold tracking-wide text-slate-900 transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 placeholder:text-slate-400"
+                                        placeholder="Enter old battery serial number..."
+                                        className="w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 py-3.5 outline-none text-sm font-semibold tracking-wide text-slate-900 transition focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 placeholder:text-slate-400"
                                         value={replacementOldSerial}
-                                        onChange={(e) => setReplacementOldSerial(e.target.value)}
+                                        onChange={(e) => {
+                                            onOldBatteryInput();
+                                            setReplacementOldSerial(e.target.value);
+                                        }}
                                         onBlur={onOldBatteryBlur}
                                         onKeyDown={(e) => e.key === 'Enter' && onOldBatteryBlur()}
                                     />
                                 </div>
                                 <div className="relative">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                                    <label className="mb-2 block text-sm font-semibold text-slate-700">New Battery Serial Number</label>
+                                    <Search className="absolute left-4 top-[3.1rem] -translate-y-1/2 text-slate-400" size={20} />
                                     <input
                                         disabled={isProcessing}
-                                        placeholder="New Battery Serial..."
-                                        className="w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 py-3.5 outline-none text-sm font-semibold tracking-wide text-slate-900 transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 placeholder:text-slate-400"
+                                        placeholder="Enter new battery serial number..."
+                                        className="w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 py-3.5 outline-none text-sm font-semibold tracking-wide text-slate-900 transition focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 placeholder:text-slate-400"
                                         value={replacementNewSerial}
-                                        onChange={(e) => setReplacementNewSerial(e.target.value)}
+                                        onChange={(e) => setReplacementNewSerial(e.target.value.toUpperCase())}
                                         onKeyDown={(e) => e.key === 'Enter' && handleStartReplacement()}
                                     />
                                 </div>
@@ -347,9 +377,9 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
                                     : (!scanBuffer || (isBatch && (!batchConfig.dealerId || !batchConfig.modelId))))}
                                 className={isBatch
                                     ? 'flex-1 rounded-xl bg-white px-8 py-4 text-sm font-bold tracking-[0.08em] text-indigo-900 shadow-lg transition-all hover:bg-indigo-50 active:scale-95 disabled:opacity-30 md:flex-none'
-                                    : `inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold shadow-sm transition-all active:scale-[0.99] disabled:opacity-50 md:flex-none ${isReplacement ? 'bg-amber-900 text-white hover:bg-amber-950' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
+                                    : `inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold shadow-sm transition-all active:scale-[0.99] disabled:opacity-50 md:flex-none ${isReplacement ? 'bg-gradient-to-r from-orange-500 to-orange-700 text-white hover:from-orange-600 hover:to-orange-800' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
                             >
-                                {isBatch ? 'Stage' : isProcessing ? <><Loader2 className="animate-spin" size={16} />{isReplacement ? 'Checking…' : 'Searching…'}</> : isReplacement ? 'Start exchange' : 'Trace'}
+                                {isBatch ? 'Stage' : isProcessing ? <><Loader2 className="animate-spin" size={16} />{isReplacement ? 'Checking…' : 'Searching…'}</> : isReplacement ? 'Start Exchange' : 'Trace'}
                             </button>
 
                             {(isReplacement ? (replacementOldSerial || replacementNewSerial) : (activeAsset || scanBuffer)) && (

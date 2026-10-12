@@ -1,11 +1,11 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Battery, Replacement, Dealer, BatteryStatus } from '../types';
+import { Battery, Replacement, Dealer, BatteryStatus, Sale } from '../types';
 import { Database } from '../db';
 import { AuthSession } from '../utils/AuthSession';
 import { WarrantyCalculator } from '../utils/warrantyCalculator';
 import { formatDate } from '../utils';
-import { Printer, Calendar, ShieldCheck, History, Store, User, Zap, AlertTriangle, ArrowRightLeft, CheckCircle2, CreditCard } from 'lucide-react';
+import { Printer, Store, User, Zap, ArrowRightLeft, CheckCircle2, CreditCard } from 'lucide-react';
 import { Button } from './ui/button';
 
 interface BatteryReportSheetProps {
@@ -13,6 +13,7 @@ interface BatteryReportSheetProps {
     lineage: Battery[];
     replacements: Replacement[];
     activityLogs?: any[];
+    lineageSales?: Sale[];
     dealers: Dealer[];
     saleDate?: string;
     onPrint?: () => void;
@@ -23,14 +24,14 @@ const BatteryReportTemplate: React.FC<{
     battery: Battery;
     lineage: Battery[];
     replacements: Replacement[];
-    activityLogs?: any[];
+    lineageSales?: Sale[];
     dealers: Dealer[];
     reportDate: string;
     isExpired: boolean;
     originalBattery: Battery;
     effectiveSaleDate?: string;
     mode: 'view' | 'print';
-}> = ({ battery, lineage, replacements, activityLogs, dealers, reportDate, isExpired, originalBattery, effectiveSaleDate, mode }) => {
+}> = ({ battery, lineage, replacements, lineageSales = [], dealers, reportDate, isExpired, originalBattery, effectiveSaleDate, mode }) => {
     // Centralized Warranty Logic
     const warrantyResult = React.useMemo(() => WarrantyCalculator.calculate(battery), [battery]);
     const lifecycleStartDate = warrantyResult.effectiveStartDate;
@@ -42,6 +43,11 @@ const BatteryReportTemplate: React.FC<{
         ? originalBattery.activationDate 
         : battery.activationDate;
     const showSoldToCustomer = !!battery.activationDate && !!effectiveSaleDate;
+    const shopDealer = dealers.find(d => d.id === (originalBattery?.dealerId || battery.dealerId));
+    const shopName = shopDealer?.name || 'Shop not recorded';
+    const lineageRows = lineage.length ? lineage : [battery];
+    const saleForBattery = (item: Battery) => item.actualSaleDate || lineageSales.find(sale => sale.batteryId === item.id && sale.customerPhone !== 'STOCK')?.saleDate || (item.id === battery.id ? effectiveSaleDate : undefined);
+    const replacementByBattery = new Map(replacements.map(item => [item.oldBatteryId, item]));
 
     // Conditional classes based on mode
     const containerClasses = mode === 'print'
@@ -54,8 +60,117 @@ const BatteryReportTemplate: React.FC<{
 
     const decorClasses = mode === 'print' ? "print-no-decor hidden" : "absolute";
 
+    if (mode === 'print') {
+        return (
+            <article id="report-printable" className="battery-history-print">
+                <style>{`
+                    .battery-history-print { color: #172033; font: 10px/1.4 Arial, Helvetica, sans-serif; display: flex; flex-direction: column; }
+                    .battery-history-print * { box-sizing: border-box; }
+                    .battery-history-print .report-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+                    .battery-history-print .report-table th { background: #eef3f9; color: #53647d; font-size: 8px; font-weight: 700; letter-spacing: .07em; text-align: left; text-transform: uppercase; }
+                    .battery-history-print .report-table th, .battery-history-print .report-table td { border: 1px solid #d8e0eb; padding: 7px 8px; vertical-align: top; overflow-wrap: anywhere; }
+                    .battery-history-print .report-table tbody tr:nth-child(even) { background: #f8fafc; }
+                    .battery-history-print .section-title { color: #172033; font-size: 11px; font-weight: 700; margin: 0 0 7px; }
+                    .battery-history-print .muted { color: #64748b; }
+                    .battery-history-print .avoid-row { break-inside: avoid; page-break-inside: avoid; }
+                    .battery-history-print .report-footer { position: static; margin-top: auto; padding: 5px 0 0; border-top: 1px solid #d8e0eb; background: white; break-inside: avoid; page-break-inside: avoid; }
+                    @media print {
+                        @page { size: A4 portrait; margin: 12mm; }
+                        html, body { width: auto !important; height: auto !important; margin: 0 !important; padding: 0 !important; background: white !important; overflow: visible !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                        #print-portal-root { display: block !important; position: absolute !important; inset: 0 auto auto 0 !important; width: 100% !important; height: auto !important; background: white !important; }
+                        #report-printable { width: 100% !important; min-height: 273mm !important; max-width: none !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
+                        .battery-history-print .report-section { break-inside: auto; page-break-inside: auto; }
+                        .battery-history-print .report-table thead { display: table-header-group; }
+                        .battery-history-print .report-table tr { break-inside: avoid; page-break-inside: avoid; }
+                    }
+                `}</style>
+
+                <header style={{ borderBottom: '1px solid #172033', paddingBottom: '9px', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
+                        <div>
+                            <div style={{ color: '#b45309', fontSize: '9px', fontWeight: 800, letterSpacing: '.2em', textTransform: 'uppercase' }}>Starline Batteries</div>
+                            <h1 style={{ margin: '4px 0 2px', fontSize: '21px', lineHeight: 1.15, letterSpacing: '-.02em' }}>Battery Asset History</h1>
+                            <div className="muted" style={{ fontSize: '8px' }}>Battery asset history report</div>
+                        </div>
+                        <div style={{ minWidth: '145px', textAlign: 'right' }}>
+                            <div className="muted" style={{ fontSize: '8px', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase' }}>Serial number</div>
+                            <div style={{ marginTop: '3px', fontSize: '17px', fontWeight: 800, fontFamily: 'monospace' }}>{battery.id}</div>
+                        </div>
+                    </div>
+                </header>
+
+                <section className="report-section" style={{ marginBottom: '11px' }}>
+                    <h2 className="section-title" style={{ textTransform: 'uppercase', fontSize: '9px', letterSpacing: '.04em' }}>Receipt details</h2>
+                    <table className="report-table">
+                        <thead><tr>
+                            <th style={{ width: '25%' }}>Shop</th>
+                            <th style={{ width: '25%' }}>Processed date</th>
+                            <th style={{ width: '25%' }}>Battery model</th>
+                            <th style={{ width: '25%' }}>Capacity</th>
+                        </tr></thead>
+                        <tbody><tr>
+                            <td>{shopName}{shopDealer?.location ? <div className="muted" style={{ fontSize: '8px' }}>{shopDealer.location}</div> : null}</td>
+                            <td>{formatDate(effectiveSaleDate) || 'Not recorded'}</td>
+                            <td>{battery.model || 'Not recorded'}</td>
+                            <td>{battery.capacity || 'Not recorded'}</td>
+                        </tr></tbody>
+                    </table>
+                </section>
+
+                <section className="report-section" style={{ marginBottom: '11px' }}>
+                    <h2 className="section-title">Battery movement &amp; replacement history</h2>
+                    <table className="report-table">
+                        <thead><tr>
+                            <th style={{ width: '24%' }}>Battery ID</th>
+                            <th style={{ width: '15%' }}>Sent to dealer</th>
+                            <th style={{ width: '15%' }}>Sold to customer</th>
+                            <th style={{ width: '14%' }}>Replaced on</th>
+                            <th style={{ width: '32%' }}>Outcome / evidence</th>
+                        </tr></thead>
+                        <tbody>
+                            {lineageRows.map((unit, index) => {
+                                const exchange = replacementByBattery.get(unit.id);
+                                const isCurrent = unit.id === battery.id;
+                                const failureReason = exchange?.reason ? exchange.reason.toLowerCase() : 'reason not recorded';
+                                const outcome = isCurrent ? 'Current unit' : exchange ? `Failed: ${failureReason}` : String(unit.status || 'History recorded').replaceAll('_', ' ');
+                                return <tr className="avoid-row" key={`${unit.id}-${index}`}>
+                                    <td style={{ fontWeight: 700, fontFamily: 'monospace' }}>{unit.id}{isCurrent ? ' (current)' : ''}</td>
+                                    <td>{formatDate(unit.activationDate)}</td>
+                                    <td>{formatDate(saleForBattery(unit))}</td>
+                                    <td>{exchange ? formatDate(exchange.replacementDate) : '—'}</td>
+                                    <td><div style={{ fontWeight: exchange ? 700 : 500 }}>{outcome}</div>{exchange ? <div className="muted" style={{ marginTop: '2px', fontSize: '8px' }}>Replacement given by {exchange.settlementType === 'DIRECT' ? 'factory' : 'dealer'}</div> : null}{exchange?.problemDescription ? <div className="muted" style={{ marginTop: '2px', fontSize: '8px' }}>Notes: {exchange.problemDescription}</div> : null}</td>
+                                </tr>;
+                            })}
+                        </tbody>
+                    </table>
+                </section>
+
+                <section className="report-section" style={{ marginBottom: '0' }}>
+                    <h2 className="section-title">Replacement transactions</h2>
+                    <table className="report-table">
+                        <thead><tr><th style={{ width: '36%' }}>Battery exchange</th><th style={{ width: '18%' }}>Replaced on</th><th style={{ width: '18%' }}>Given by</th><th style={{ width: '28%' }}>Settlement / evidence</th></tr></thead>
+                        <tbody>
+                            {replacements.length ? replacements.map((rep, index) => {
+                                const givenBy = rep.settlementType === 'DIRECT' ? 'Factory' : 'Dealer';
+                                const settlement = rep.settlementType === 'DIRECT' ? 'Direct factory exchange' : rep.settlementType === 'STOCK' ? `Dealer stock${rep.replenishmentBatteryId ? ` · ${rep.replenishmentBatteryId}` : ''}` : `${rep.paidInAccount ? 'Credit settled' : 'Credit pending'}${rep.settlementDate ? ` · ${formatDate(rep.settlementDate)}` : ''}`;
+                                return <tr className="avoid-row" key={`${rep.id}-${index}`}>
+                                    <td><span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{rep.oldBatteryId}</span><span className="muted"> → </span><span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{rep.newBatteryId}</span></td>
+                                    <td>{formatDate(rep.replacementDate)}</td><td>{givenBy}</td><td>{settlement}</td>
+                                </tr>;
+                            }) : <tr><td colSpan={4} className="muted" style={{ textAlign: 'center' }}>No replacement transactions recorded.</td></tr>}
+                        </tbody>
+                    </table>
+                </section>
+
+                <footer className="report-footer" style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #d8e0eb', marginTop: '10px', paddingTop: '5px', color: '#64748b', fontSize: '7px', letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                    <span>Starline Batteries · Battery Asset History</span><span>Generated {reportDate}</span>
+                </footer>
+            </article>
+        );
+    }
+
     return (
-        <div id={mode === 'print' ? 'report-printable' : undefined} className={containerClasses}>
+        <div className={containerClasses}>
             {/* Header */}
             <div className={headerClasses}>
                 <div className="relative z-10 flex items-start justify-between gap-6">
@@ -153,137 +268,6 @@ const BatteryReportTemplate: React.FC<{
                         </div>
                     )}
 
-                    {/* Technical Inspections (Multiple Sessions) */}
-                    {(() => {
-                        // Group activity logs into assessment sessions
-                        const sessions: any[] = [];
-
-                        if (activityLogs && activityLogs.length > 0) {
-                            const sortedLogs = [...activityLogs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
-                            let currentSession: any = null;
-
-                            sortedLogs.forEach(log => {
-                                let meta: any = {};
-                                try {
-                                    meta = log.metadata ? JSON.parse(log.metadata) : {};
-                                } catch (e) {
-                                    console.error('Failed to parse log metadata:', e);
-                                }
-
-                                if (log.type === 'BATTERY_INSPECTION_START') {
-                                    if (currentSession) sessions.push(currentSession);
-                                    currentSession = {
-                                        batteryId: meta.id,
-                                        startDate: meta.startDate,
-                                        status: 'IN_PROGRESS',
-                                        notes: meta.notes,
-                                        timestamp: log.timestamp
-                                    };
-                                } else if (log.type === 'BATTERY_INSPECTION_COMPLETE') {
-                                    if (currentSession && currentSession.batteryId === meta.id) {
-                                        currentSession.completionDate = meta.completionDate;
-                                        currentSession.status = meta.status;
-                                        currentSession.returnDate = meta.returnDate;
-                                        currentSession.notes = meta.notes;
-                                        sessions.push(currentSession);
-                                        currentSession = null;
-                                    } else {
-                                        // Orphaned completion log
-                                        sessions.push({
-                                            batteryId: meta.id,
-                                            completionDate: meta.completionDate,
-                                            status: meta.status,
-                                            returnDate: meta.returnDate,
-                                            notes: meta.notes,
-                                            timestamp: log.timestamp
-                                        });
-                                    }
-                                }
-                            });
-                            if (currentSession) sessions.push(currentSession);
-                        }
-
-                        // Fallback: If no logs but battery has status, add the current one
-                        if (sessions.length === 0 && battery.inspectionStatus && battery.inspectionStatus !== 'PENDING') {
-                            sessions.push({
-                                batteryId: battery.id,
-                                startDate: battery.inspectionStartDate,
-                                completionDate: battery.inspectionDate,
-                                status: battery.inspectionStatus,
-                                returnDate: battery.inspectionReturnDate,
-                                notes: battery.inspectionNotes
-                            });
-                        }
-
-                        return sessions.map((session, sidx) => (
-                            <div key={sidx} className="relative print-break-avoid break-inside-avoid">
-                                <div className={`absolute -left-[41px] top-1 rounded-full border-4 bg-white p-1 ${session.status === 'FAULTY' ? 'border-rose-200 text-rose-500' :
-                                    session.status === 'GOOD' ? 'border-emerald-200 text-emerald-500' :
-                                        'border-amber-200 text-amber-500 animate-pulse'
-                                    }`}>
-                                    <ShieldCheck size={14} />
-                                </div>
-                                <div className="mb-3 flex items-center justify-between pr-2">
-                                    <h4 className="text-sm font-semibold text-slate-900">
-                                        Technical Assessment {sessions.length > 1 ? `#${sidx + 1}` : ''}
-                                    </h4>
-                                    <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${session.status === 'FAULTY' ? 'border-rose-200 bg-rose-50 text-rose-700' :
-                                        session.status === 'GOOD' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                                            'border-amber-200 bg-amber-50 text-amber-700'
-                                        }`}>
-                                        {session.status === 'IN_PROGRESS' ? 'Checking' : session.status}
-                                    </span>
-                                </div>
-
-                                    <div className={`space-y-3 rounded-xl border bg-white px-4 py-4 ${session.status === 'FAULTY' ? 'border-rose-200' :
-                                    session.status === 'GOOD' ? 'border-emerald-200 bg-emerald-50/30' :
-                                        'border-amber-200'
-                                    }`}>
-                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                        <div>
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Unit serial</p>
-                                            <p className="mt-1.5 font-mono text-xs font-semibold text-slate-800">{session.batteryId}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Outcome</p>
-                                            <p className={`mt-1.5 text-xs font-semibold uppercase tracking-[0.14em] ${session.status === 'FAULTY' ? 'text-rose-600' :
-                                                session.status === 'GOOD' ? 'text-emerald-600' :
-                                                    'text-amber-600'
-                                                }`}>
-                                                {session.status === 'IN_PROGRESS' ? 'Assessing Unit...' : session.status}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Started on</p>
-                                            <p className="mt-1.5 text-xs font-semibold text-slate-800">{formatDate(session.startDate) || 'N/A'}</p>
-                                        </div>
-                                    </div>
-
-                                    {(session.completionDate || session.returnDate) && (
-                                        <div className={`mt-1 flex items-center justify-between border-t pt-3 ${session.status === 'FAULTY' ? 'border-rose-200' : 'border-slate-200'}`}>
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                                                {session.status === 'GOOD' ? 'Returned to Shop' : 'Verification Date'}
-                                            </p>
-                                            <p className="text-xs font-semibold text-slate-800">
-                                                {formatDate(session.status === 'GOOD' ? session.returnDate : session.completionDate)}
-                                            </p>
-                                        </div>
-                                    )}
-
-                                    {session.notes && (
-                                        <div className="mt-2 rounded-lg border border-slate-300 bg-slate-50 p-3">
-                                            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Technician notes</p>
-                                            <p className="text-xs font-medium leading-relaxed text-slate-600">
-                                                {session.notes}
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        ));
-                    })()}
-
                     {/* Step 4: Replacements (if any) */}
                     {replacements.map((rep, idx) => (
                         <div key={rep.id} className="relative print-break-avoid break-inside-avoid">
@@ -374,7 +358,7 @@ const BatteryReportTemplate: React.FC<{
 };
 
 
-const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineage, replacements, activityLogs, dealers, saleDate, onPrint }) => {
+const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineage, replacements, lineageSales, dealers, saleDate, onPrint }) => {
     const isExpired = battery.warrantyExpiry ? new Date() > new Date(battery.warrantyExpiry) : false;
     const isReplacement = !!battery.previousBatteryId;
     const originalBattery = lineage.find(b => b.status === BatteryStatus.MANUFACTURED) || lineage[0];
@@ -402,8 +386,8 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                 {`
                     @media print {
                         @page {
-                            size: auto;
-                            margin: 0;
+                            size: A4 portrait;
+                            margin: 12mm;
                         }
                         
                         /* HIDE EVERYTHING ELSE */
@@ -485,7 +469,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                     battery={battery}
                     lineage={lineage}
                     replacements={sortedReplacements}
-                    activityLogs={activityLogs}
+                    lineageSales={lineageSales}
                     dealers={dealers}
                     reportDate={reportDate}
                     isExpired={isExpired}
@@ -502,7 +486,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                         battery={battery}
                         lineage={lineage}
                         replacements={sortedReplacements}
-                        activityLogs={activityLogs}
+                        lineageSales={lineageSales}
                         dealers={dealers}
                         reportDate={reportDate}
                         isExpired={isExpired}
