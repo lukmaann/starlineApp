@@ -104,7 +104,7 @@ export const ReplacementFlow: React.FC<ReplacementFlowProps> = ({
             <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
                 <p className="text-xs font-semibold text-blue-700">Replacement battery</p>
                 <p className="mt-1 break-all font-mono text-base font-bold text-slate-900">{replacementData.newBatteryId || 'No replacement battery selected'}</p>
-                <p className="mt-1 text-xs text-slate-500">Same model as the old battery</p>
+                <p className="mt-1 text-xs text-slate-500">The replacement keeps its registered model</p>
             </div>
         </div>
     );

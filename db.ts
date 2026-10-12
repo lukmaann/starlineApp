@@ -1324,6 +1324,7 @@ export class Database {
     status = 'REPLACEMENT',
       previousBatteryId = ?,
       activationDate = ?,
+      actualSaleDate = COALESCE(?, actualSaleDate),
       dealerId = ?,
       customerName = ?,
       customerPhone = ?,
@@ -1332,7 +1333,7 @@ export class Database {
       originalBatteryId = ?
         WHERE id = ? `,
         [
-          rep.oldBatteryId, activationDate, rep.dealerId || 'CENTRAL',
+          rep.oldBatteryId, activationDate, meta?.correctedOriginalSaleDate || null, rep.dealerId || 'CENTRAL',
           meta?.customerName || null, meta?.customerPhone || null, meta?.warrantyExpiry || null,
           (oldBatt.replacementCount || 0) + 1, oldBatt.originalBatteryId || oldBatt.id,
           rep.newBatteryId

@@ -86,7 +86,9 @@ export const ScannerHeader: React.FC<ScannerHeaderProps> = ({
     const oldDealer = replacementOldAsset ? (dealers.find(d => d.id === replacementOldAsset.battery?.dealerId)?.name || 'Unknown') : 'Unknown';
     const rawSaleDate = replacementOldAsset ? (replacementOldAsset.battery?.actualSaleDate ||
         replacementOldAsset.lineageSales?.find((s: any) => s.batteryId === replacementOldAsset.battery?.id && s.customerPhone !== 'STOCK')?.saleDate ||
-        replacementOldAsset.sale?.saleDate) : null;
+        replacementOldAsset.sale?.saleDate ||
+        replacementOldAsset.originalSale?.saleDate ||
+        replacementOldAsset.battery?.activationDate) : null;
     const oldSaleDate = rawSaleDate ? formatDate(rawSaleDate) : 'Not Sold';
 
     const dealerFieldError = isBatch && showBatchConfigAlert && !batchConfig.dealerId;

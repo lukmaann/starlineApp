@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { useNavigationHistory } from './hooks/useNavigationHistory';
 import NavigationControls from './components/NavigationControls';
 import { AuthSession } from './utils/AuthSession';
+import { playOutcomeSound } from './utils/notifications';
 import NotificationBell from './components/NotificationBell';
 import ShortcutsModal from './components/ShortcutsModal';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -89,6 +90,7 @@ const App: React.FC = () => {
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     if (type === 'error') {
+      playOutcomeSound('error');
       toast.error(message);
       return;
     }
@@ -98,6 +100,7 @@ const App: React.FC = () => {
       return;
     }
 
+    playOutcomeSound('success');
     toast.success(message);
   };
 

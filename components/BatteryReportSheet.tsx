@@ -374,7 +374,7 @@ const BatteryReportTemplate: React.FC<{
 };
 
 
-const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineage, replacements, dealers, saleDate, onPrint }) => {
+const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineage, replacements, activityLogs, dealers, saleDate, onPrint }) => {
     const isExpired = battery.warrantyExpiry ? new Date() > new Date(battery.warrantyExpiry) : false;
     const isReplacement = !!battery.previousBatteryId;
     const originalBattery = lineage.find(b => b.status === BatteryStatus.MANUFACTURED) || lineage[0];
@@ -485,6 +485,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                     battery={battery}
                     lineage={lineage}
                     replacements={sortedReplacements}
+                    activityLogs={activityLogs}
                     dealers={dealers}
                     reportDate={reportDate}
                     isExpired={isExpired}
@@ -501,6 +502,7 @@ const BatteryReportSheet: React.FC<BatteryReportSheetProps> = ({ battery, lineag
                         battery={battery}
                         lineage={lineage}
                         replacements={sortedReplacements}
+                        activityLogs={activityLogs}
                         dealers={dealers}
                         reportDate={reportDate}
                         isExpired={isExpired}

@@ -132,10 +132,6 @@ const Replacements: React.FC = () => {
       const status = String(stock.status || '').toUpperCase();
       const isManufactured = status === BatteryStatus.MANUFACTURED.toUpperCase();
       const isDealerStock = status === BatteryStatus.ACTIVE && stock.dealerId === dealerId;
-      if (stock.model !== asset.battery.model) {
-        setFormError(`Replacement battery ${newId} must match the old battery model (${asset.battery.model}).`);
-        return;
-      }
       if (!isManufactured && !isDealerStock) {
         setFormError(`Replacement battery ${newId} is ${stock.status}${stock.dealerId && stock.dealerId !== dealerId ? ' and belongs to another dealer' : ''}. Choose unused factory stock or stock assigned to this dealer.`);
         return;
@@ -164,7 +160,6 @@ const Replacements: React.FC = () => {
       if (oldCurrent.status === BatteryStatus.RETURNED) throw new Error('This battery has already been replaced. Search again to see its latest status.');
       if (!newCurrent) throw new Error(`Replacement battery ${newId} is no longer in the registry.`);
       const newStatus = String(newCurrent.status || '').toUpperCase();
-      if (newCurrent.model !== oldCurrent.model) throw new Error(`Replacement battery ${newId} must match the old battery model (${oldCurrent.model}).`);
       if (newStatus !== BatteryStatus.MANUFACTURED.toUpperCase() && !(newStatus === BatteryStatus.ACTIVE && newCurrent.dealerId === dealerId)) {
         throw new Error(`Replacement battery ${newId} is no longer available for this dealer.`);
       }
@@ -257,7 +252,7 @@ const Replacements: React.FC = () => {
               <div><h2 className="font-bold text-slate-900">Replacement details</h2><p className="mt-1 text-sm text-slate-500">The old battery’s model and customer details are carried into the new record.</p></div>
               <div className="grid gap-5 md:grid-cols-2">
                 <div><label className={labelClass} htmlFor="new-battery-id">New battery serial number</label><input id="new-battery-id" required value={newBatteryId} onChange={event => setNewBatteryId(event.target.value.toUpperCase())} placeholder="Scan or type new serial" className={`${inputClass} font-mono uppercase`} /></div>
-                <div><label className={labelClass} htmlFor="servicing-dealer">Servicing dealer</label><select id="servicing-dealer" required value={dealerId} onChange={event => setDealerId(event.target.value)} className={inputClass}><option value="">Choose dealer</option>{dealers.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+                <div><label className={labelClass} htmlFor="servicing-dealer">Inherited dealer</label><input id="servicing-dealer" readOnly value={dealer?.name || dealerId} className={`${inputClass} bg-slate-50`} /><p className="mt-1 text-xs text-slate-500">The replacement stays with the old battery’s dealer.</p></div>
                 <div><label className={labelClass} htmlFor="failure-mode">Reason for replacement</label><select id="failure-mode" value={reason} onChange={event => setReason(event.target.value)} className={inputClass}>{FAILURE_MODES.map(item => <option key={item} value={item}>{item}</option>)}</select></div>
                 <div><label className={labelClass} htmlFor="original-sale-date">Original sale date</label><input id="original-sale-date" required type="date" max={getLocalDate()} value={soldDate} onChange={event => setSoldDate(event.target.value)} className={inputClass} /><p className="mt-1 text-xs text-slate-400">Used to calculate the replacement warranty.</p></div>
                 <div className="md:col-span-2"><label className={labelClass} htmlFor="replacement-notes">Notes <span className="font-normal text-slate-400">(optional)</span></label><textarea id="replacement-notes" rows={3} value={problemDescription} onChange={event => setProblemDescription(event.target.value)} placeholder="Add a short note about the fault" className={`${inputClass} resize-y`} /></div>

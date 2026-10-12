@@ -97,6 +97,12 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   const [isReplacing, setIsReplacing] = useState(false);
   const [replacementStep, setReplacementStep] = useState(1);
   const [isConfirmingReplacement, setIsConfirmingReplacement] = useState(false);
+  const [replacementCompletion, setReplacementCompletion] = useState<{
+    oldBatteryId: string;
+    newBatteryId: string;
+    dealerName: string;
+    report: any;
+  } | null>(null);
   const [pendingAction, setPendingAction] = useState<'EXCHANGE' | 'EDIT' | 'MOVE' | null>(null);
   const [replacementData, setReplacementData] = useState({
     newBatteryId: '',
@@ -300,7 +306,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     setReplacementData(prev => ({
       ...prev,
       newBatteryId: '',
-      dealerId: asset.battery.dealerId || prev.dealerId,
+      dealerId: asset.battery.dealerId || asset.originalSale?.dealerId || asset.sale?.dealerId || prev.dealerId,
       reason: reason || prev.reason,
       soldDate: asset.battery.actualSaleDate || asset.originalSale?.saleDate || asset.sale?.saleDate || asset.battery.activationDate || '',
       warrantyCardStatus: asset.battery.warrantyCardStatus || 'RECEIVED'
@@ -422,7 +428,8 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         setReplacementData(prev => ({
           ...prev,
           newBatteryId: cleanNew,
-          soldDate: data.battery.actualSaleDate || '',
+          dealerId: data.battery.dealerId || data.originalSale?.dealerId || data.sale?.dealerId || prev.dealerId || 'CENTRAL',
+          soldDate: data.battery.actualSaleDate || data.originalSale?.saleDate || data.sale?.saleDate || data.battery.activationDate || '',
           warrantyCardStatus: data.battery.warrantyCardStatus || 'RECEIVED'
         }));
         setIsReplacing(true);
@@ -516,7 +523,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         setActiveAsset(data);
         setReplacementData(prev => ({
           ...prev,
-          soldDate: data.battery.actualSaleDate || '',
+          soldDate: data.battery.actualSaleDate || data.originalSale?.saleDate || data.sale?.saleDate || data.battery.activationDate || '',
           warrantyCardStatus: data.battery.warrantyCardStatus || 'RECEIVED'
         }));
         notify(`${cleanId} traced successfully`);
@@ -555,6 +562,22 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
   const handlePrintReport = () => {
     Database.logActivity('PRINT_REPORT', 'Printed detailed battery report', { source: 'Scanner' });
     window.electronAPI ? window.electronAPI.printOrPdf() : window.print();
+  };
+
+  const handlePrintReplacementReport = () => {
+    if (!replacementCompletion) return;
+    const originalTitle = document.title;
+    document.title = `${replacementCompletion.newBatteryId}_history_report`;
+    void Database.logActivity('PRINT_REPORT', `Printed battery history report for ${replacementCompletion.newBatteryId}`, {
+      batteryId: replacementCompletion.newBatteryId,
+      source: 'Replacement completion'
+    });
+    if (window.electronAPI) {
+      void window.electronAPI.printOrPdf().finally(() => { document.title = originalTitle; });
+    } else {
+      window.print();
+      document.title = originalTitle;
+    }
   };
 
   // Warranty Date Correction Handlers
@@ -880,6 +903,13 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
     if (!replacementAsset) return;
     setIsActionLoading(true);
     const newUnitId = replacementData.newBatteryId.toUpperCase().trim();
+    // The exchange belongs to the dealer recorded on the old battery. Keep this
+    // as the source of truth even if form state was carried over from another flow.
+    const replacementDealerId = replacementAsset.battery.dealerId
+      || replacementAsset.originalSale?.dealerId
+      || replacementAsset.sale?.dealerId
+      || replacementData.dealerId
+      || 'CENTRAL';
 
     try {
       // 1. Create the new battery record first (Fresh Stock)
@@ -912,7 +942,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
           status: BatteryStatus.MANUFACTURED,
           replacementCount: (replacementAsset.battery.replacementCount || 0) + 1, // ✅ Bug #7: Increment count
           warrantyMonths: replacementAsset.battery.warrantyMonths,
-          dealerId: replacementAsset.battery.dealerId || 'CENTRAL',
+          dealerId: replacementDealerId,
           originalBatteryId: replacementAsset.battery.originalBatteryId || replacementAsset.battery.id // ✅ Bug #1: Track original battery
         });
       }
@@ -927,7 +957,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
           // Existing unit: Mark as Active (Dispatched to Dealer)
           await Database.run(
             `UPDATE batteries SET status = 'ACTIVE', dealerId = ? WHERE id = ?`,
-            [replacementAsset.battery.dealerId || 'CENTRAL', replId]
+            [replacementDealerId, replId]
           );
         } else {
           // New Unit (Not in DB): Create it and mark Active
@@ -939,7 +969,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
             status: BatteryStatus.ACTIVE, // Created and immediately Active (Dispatched)
             replacementCount: 0,
             warrantyMonths: replacementAsset.battery.warrantyMonths,
-            dealerId: replacementAsset.battery.dealerId || 'CENTRAL'
+            dealerId: replacementDealerId
           });
         }
       }
@@ -958,7 +988,7 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
         id: `REP-${Date.now()}`,
         oldBatteryId: replacementAsset.battery.id,
         newBatteryId: replacementData.newBatteryId,
-        dealerId: replacementData.dealerId,
+        dealerId: replacementDealerId,
         replacementDate: replacementData.replacementDate,
         reason: replacementData.reason,
         problemDescription: replacementData.problemDescription,
@@ -977,12 +1007,26 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
       await Database.logActivity('EXCHANGE_COMPLETED', `Exchanged ${replacementAsset.battery.id} with ${replacementData.newBatteryId}`, {
         oldBatteryId: replacementAsset.battery.id,
         newBatteryId: replacementData.newBatteryId,
-        dealerId: replacementData.dealerId,
-        dealerName: dealers.find(d => d.id === replacementData.dealerId)?.name || 'N/A',
+        dealerId: replacementDealerId,
+        dealerName: dealers.find(d => d.id === replacementDealerId)?.name || 'N/A',
         type: replacementData.settlementMethod
       });
 
-      notify('Exchange Sequence Complete. New Unit Active.', 'success');
+      let completedReport = null;
+      try {
+        completedReport = await Database.searchBattery(newUnitId);
+      } catch (reportError) {
+        // The exchange has already committed; keep the success state even if
+        // report loading needs to be retried later.
+        console.error('Could not load replacement history report', reportError);
+      }
+      setReplacementCompletion({
+        oldBatteryId: replacementAsset.battery.id,
+        newBatteryId: newUnitId,
+        dealerName: dealers.find(d => d.id === replacementDealerId)?.name || 'N/A',
+        report: completedReport
+      });
+
       setReplacementData({
         newBatteryId: '',
         dealerId: dealers[0]?.id || '',
@@ -1728,6 +1772,32 @@ const TraceHub: React.FC<ScannerProps> = ({ initialSearch, onSearchHandled, init
           window.location.reload();
         }}
       />
+
+      <SuccessFlow
+        isOpen={!!replacementCompletion}
+        title="Replacement Complete"
+        details={[
+          { label: 'Old battery', value: replacementCompletion?.oldBatteryId || '' },
+          { label: 'Replacement battery', value: replacementCompletion?.newBatteryId || '', primary: true },
+          { label: 'Dealer', value: replacementCompletion?.dealerName || '' }
+        ]}
+        onPrint={replacementCompletion?.report ? handlePrintReplacementReport : undefined}
+        printLabel="Print Battery Report"
+        onClose={() => setReplacementCompletion(null)}
+      />
+
+      {replacementCompletion?.report && (
+        <div className="hidden">
+          <BatteryReportSheet
+            battery={replacementCompletion.report.battery}
+            lineage={replacementCompletion.report.lineage || []}
+            replacements={replacementCompletion.report.replacements || []}
+            activityLogs={replacementCompletion.report.activityLogs || []}
+            dealers={dealers}
+            saleDate={replacementCompletion.report.originalSale?.saleDate || replacementCompletion.report.battery.actualSaleDate || undefined}
+          />
+        </div>
+      )}
 
       {/* Hidden Print Portal */}
       {createPortal(
